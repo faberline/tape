@@ -464,6 +464,7 @@ persistent storage, and operator-managed lifecycle. The bounded Kind dogfood
 gate covers one single-node replacement; multi-shard and long-running soak
 remain separate work roots. Deployment versioning policy, CRD upgrade ordering,
 and the journal rollback contract are documented in apps/tape/docs/deployment-handoff.md (section 3e).
+Capacity planning, on-disk layout, per-event storage formulas, and PVC sizing are documented in section 3f.
 Gate Inventory:
 - apps/tape/k8s/operator/{crd,rbac,deployment,service,pdb,kustomization}.yaml
 - apps/tape/k8s/components/operator-monitoring/

@@ -142,6 +142,53 @@ Tape does not define a format-version constant on its durable path. Rollback beh
 
 *Operator Action for Rollback:* Copy the data directory **before** starting an older binary, as top-level field loss happens on the first write. If the older binary fails to start with a `parse ...` error, this is the fail-loud case for a nested record that denies unknown fields; inspect the error context rather than assuming storage corruption. Leave the newer CRD installed when rolling back a binary if CRs use newer fields, and revert only the container image; do not downgrade the CRD schema. These two field placements were measured directly; no broader matrix across released versions exists.
 
+### 3f. Capacity planning & PVC sizing
+
+**Retention Fork (Evaluate First):**
+Before applying any capacity formula, determine whether topic retention is configured.
+* **No Retention Policy (Default):** `RetentionPolicy` map is empty by default (`src/lib.rs:129`). The journal grows without bound, so `N` is total accumulated events over volume lifespan. A PVC sized from steady-state rate will eventually fill.
+* **With Retention Policy:** `N` is the retained event window bounded by `min_offset` / `max_age_seconds` and floored by `protected_consumers` (`src/lib.rs:474`), which prevents pruning past the oldest active consumer checkpoint.
+
+**On-Disk Layout:**
+At rest, `--data-dir` holds two files: `journal-<seq>.snap` (history up to the last snapshot boundary) and `journal.wal` (events appended after that boundary). At `DEFAULT_SNAPSHOT_THRESHOLD = 1024` frames (`src/wal.rs:83`), the store writes a snapshot and truncates the WAL (`src/wal.rs:348`), retaining exactly one snapshot via `prune(1)` (`src/wal.rs:407`). History is stored **once**, not duplicated across snapshot and WAL; assuming double-counting will over-provision by 2×.
+
+**Per-Event Overhead Rates:**
+
+| tier | bytes per event |
+|---|---|
+| `journal.wal` | P + 125 |
+| `journal-<seq>.snap` | P + 71 |
+
+where `P` is raw payload content length in bytes (enclosing JSON string quotes are absorbed into the constants).
+
+**Sizing Formulas:**
+```
+bytes(N, P) ≈ S × (P + 71) + (N − S) × (P + 125)     where S = 1024 × floor(N / 1024)
+```
+* **Safe Upper Bound:** `N × (P + 125)` for any `N`.
+* **Large-N Approximation:** `N × (P + 71)`, with error bounded by `1024 × 54 = 55,296` bytes (54 KiB) regardless of `N`, because the WAL never holds more than 1024 events.
+
+**Worked Example (Large-N Form):**
+For `N = 10,000,000` retained events and raw payload size `P = 1024` bytes:
+
+```
+bytes(10_000_000, 1024) ≈ 10_000_000 × (1024 + 71)
+                        = 10_000_000 × 1095
+                        = 10,950,000,000 bytes   (≈ 10.95 GB)
+```
+
+Adding 20% headroom for snapshot transient writes and growth: `10,950,000,000 × 1.20 = 13,140,000,000` bytes (≈ 13.14 GB PVC provisioned).
+
+**Measurement Basis & Operational Limits:**
+Constants reflect four measured `tape serve --data-dir` runs (`P` of 128, 1024, and 4096 at `N=2000`, plus `P=1024` at `N=6000`). Predictions match within 13 bytes on the three `N=2000` runs and within 0.07% on the `N=6000` run (the snapshot encoding rate drifts upward by roughly 0.8 B/event as decimal offset length grows).
+Unmeasured boundaries requiring headroom:
+1. Transient disk peak while a new snapshot coexists with the old before `prune(1)`.
+2. Multi-topic directory overhead (measured on single-topic runs).
+3. Non-default snapshot thresholds (`open_with_snapshot_threshold`, `src/wal.rs:209`).
+4. Non-JSON string payloads.
+
+See `### Disk-full runbook (#2573)` for remediation if disk capacity is exhausted.
+
 ---
 
 ## 4. Environment variables
