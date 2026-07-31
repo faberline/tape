@@ -204,7 +204,8 @@ pub struct TapeBackupSpec {
 
     /// Name of a Secret holding a bearer token with `admin` on `*`, projected
     /// into the CronJob as `TAPE_BACKUP_TOKEN` (key `token`). Required when
-    /// the instance runs `auth: required`; omit for `auth: disabled`.
+    /// the instance runs `auth: required` (enforced by CEL rule on the spec);
+    /// omit for `auth: disabled`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_token_secret: Option<String>,
 }

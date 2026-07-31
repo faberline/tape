@@ -523,12 +523,10 @@ fn backup_service_account(cx: &RenderCtx) -> Value {
 ///
 /// Auth: when `adminTokenSecret` is set the token is projected as
 /// `TAPE_BACKUP_TOKEN`, the env var `tape backup --token` already falls back
-/// to. `/admin/backup` requires `admin` on `*`, so an instance running
-/// `auth: required` without this field will render a CronJob whose runs fail
-/// 401 — the CR is accepted either way because `auth: disabled` instances
-/// legitimately need no token. Since #2765 made `required` the default, that
-/// combination is now the one a CR reaches by saying nothing, so a `backup`
-/// block with no `adminTokenSecret` is worth a second look.
+/// to. `/admin/backup` requires `admin` on `*`. An instance running
+/// `auth: required` without this field is rejected at `kubectl apply` by the
+/// `BACKUP_NEEDS_ADMIN_TOKEN_RULE` CEL validation rule, as `auth: disabled`
+/// instances legitimately need no token.
 fn backup_cron_job(tape: &Tape, cx: &RenderCtx) -> Option<Value> {
     let backup = tape.spec.backup.as_ref()?;
     let cron_name = backup_child(cx.name);

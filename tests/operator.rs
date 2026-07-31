@@ -1686,4 +1686,78 @@ fn log_format_serde_default_and_validation() {
     }));
     assert!(typo.is_err(), "an unknown logFormat value must be rejected");
 }
+
+/// E1: CRD spec validation rules array contains exactly two rules in stable order:
+/// the one-token-source rule first, and the backup-admin-token rule second.
+#[test]
+fn crd_has_two_spec_validation_rules_in_order() {
+    let yaml = crd_yaml();
+    let doc: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("CRD parses as YAML");
+    let rules = doc["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+        ["x-kubernetes-validations"]
+        .as_sequence()
+        .expect("spec carries validation rules");
+    assert_eq!(
+        rules.len(),
+        2,
+        "spec schema must carry exactly two validation rules"
+    );
+    assert_eq!(
+        rules[0]["rule"],
+        "!(has(self.tokensSecret) && has(self.tokensSecretProviderClass))"
+    );
+    assert_eq!(
+        rules[1]["rule"],
+        "!(has(self.backup) && self.auth == 'required' && !has(self.backup.adminTokenSecret))"
+    );
+}
+
+/// E2 & E3: Backup CEL rule text must match presence-only contract and message must name field.
+#[test]
+fn crd_rejects_backup_without_admin_token_under_auth_required() {
+    let yaml = crd_yaml();
+    let doc: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("CRD parses as YAML");
+    let rules = doc["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+        ["x-kubernetes-validations"]
+        .as_sequence()
+        .expect("spec carries validation rules");
+    let rule = rules
+        .iter()
+        .find(|r| {
+            r["rule"]
+                .as_str()
+                .is_some_and(|s| s.contains("adminTokenSecret"))
+        })
+        .expect("a rule covering backup admin token requirement");
+    assert_eq!(
+        rule["rule"],
+        "!(has(self.backup) && self.auth == 'required' && !has(self.backup.adminTokenSecret))"
+    );
+    assert!(
+        !rule["rule"].as_str().unwrap().contains("null"),
+        "CEL rules on nullable fields take presence tests only; a `!= null` \
+         guard fails compilation at the API server and installs on no cluster"
+    );
+    assert!(
+        rule["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("spec.backup.adminTokenSecret")),
+        "the rejection message must contain the literal 'spec.backup.adminTokenSecret'"
+    );
+}
+
+/// E5: The stale phrase 'the CR is accepted either way' must not appear in render.rs or the generated CRD.
+#[test]
+fn crd_description_has_no_stale_accepted_either_way_phrase() {
+    let render_src = include_str!("../src/operator/render.rs");
+    assert!(
+        !render_src.contains("the CR is accepted either way"),
+        "render.rs must not contain the stale 'the CR is accepted either way' phrase"
+    );
+    let yaml = crd_yaml();
+    assert!(
+        !yaml.contains("the CR is accepted either way"),
+        "the generated CRD must not contain the stale 'the CR is accepted either way' phrase"
+    );
+}
 // HANDWRITE-END
