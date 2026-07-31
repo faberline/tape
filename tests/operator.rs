@@ -983,6 +983,7 @@ fn prometheus_rule_exprs_keep_the_metrics_and_thresholds() {
             vec!["> 0".to_string(), "> 0.85".to_string()],
         ),
         ("TapeNoReadyServingPods", vec!["== 0".to_string()]),
+        ("TapeRaftLeaderAbsent", vec!["== 0".to_string()]),
         ("TapeBackupCronJobFailed", vec![">= 2".to_string()]),
         ("TapePvcNearFull", vec!["< 0.1".to_string()]),
     ]);

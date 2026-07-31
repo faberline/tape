@@ -415,6 +415,16 @@ fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         },
                     },
                     {
+                        "alert": "TapeRaftLeaderAbsent",
+                        "expr": format!("tape_raft_leader_known{{{s}}} == 0"),
+                        "for": "2m",
+                        "labels": alert_labels(cx, "critical"),
+                        "annotations": {
+                            "summary": "tape raft group has no elected leader",
+                            "runbook": RAFT_LEADER_ABSENT_RUNBOOK,
+                        },
+                    },
+                    {
                         "alert": "TapeSubscriptionLagGrowing",
                         "expr": format!("increase(tape_subscription_lag{{{s}}}[15m]) > 0"),
                         "for": "15m",
@@ -518,6 +528,9 @@ const STORAGE_DEGRADED_RUNBOOK: &str = "#2573: The node hit ENOSPC on its journa
 
 /// #2578: No-ready-serving-pods triage.
 const NO_READY_SERVING_PODS_RUNBOOK: &str = "#2578: The StatefulSet reports zero ready replicas — tape is serving nothing, and no other alert covers this. `TapePodRestarting` needs more than 2 restarts in 15m, so a pod that never starts at all (Pending on an unschedulable PVC, an image pull failure, a readiness probe failing against a running process) is invisible to it. Check the pods first: `Pending` means scheduling or storage, so describe the pod and its PVC and read the binding event; `Running` but not ready means the readiness probe is failing, so read the pod log and probe `/readyz` inside the container. A node in ENOSPC degraded mode stays ready on purpose (#2573) — degraded read-only still serves reads — so this alert firing is not the degraded path and `TapeStorageDegraded` is the one to check for that.";
+
+/// #2579: Raft leader absence triage.
+const RAFT_LEADER_ABSENT_RUNBOOK: &str = "#2579: This alert fires when the raft group has no elected leader, so replicated writes (append and checkpoint-put) cannot commit. Pods stay Ready and `/healthz` stays green while it is firing, which is exactly why this alert exists and why `TapeNoReadyServingPods` will not be firing alongside it. Check `/raftz` on each replica first, and confirm that a quorum of the CR's `voterCount` is actually running — a missing quorum is a leadership failure, not a pod health failure. Do not restart the remaining replicas to 'reset' the election: that makes quorum loss worse, not better. The underlying sentinel gauge `tape_raft_leader_known` is intentionally omitted until the first raft poll reports, so a non-raft node never publishes a permanent `0` and this alert stays silent there.";
 
 /// #2578: Backup CronJob failure triage.
 const BACKUP_CRONJOB_FAILED_RUNBOOK: &str = "#2578: Two or more of the retained backup Jobs for this instance have failed. The threshold is 2 on purpose — one failed Job is flake tolerance (a transient object-store error, a node eviction mid-run), two means the schedule is failing on every recent run and the newest backup you can restore from is older than the schedule implies. Read the log of the newest failed Job. The two usual causes are credentials (the admin token the backup runner authenticates with) and the destination (bucket permissions, or a URI that no longer resolves). Confirm the age of the last successful backup before treating this as low priority: this alert says the schedule is broken, not that the data is gone. The CR-level companion is the `BackupSucceeded` condition on the Tape status (#3071), which reports the same CronJob's outcome without Prometheus.";

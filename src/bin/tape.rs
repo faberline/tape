@@ -1130,7 +1130,9 @@ async fn serve_main(args: ServeArgs) -> Result<()> {
             peer_router = Some(raft.router());
             peer_transport = Some(transport);
         }
+        let raft_for_poller = raft.clone();
         state.set_raft(raft);
+        spawn_raft_leader_poller(state.metrics(), raft_for_poller);
     }
 
     // Ensure CR-declared subscriptions after journal/raft is ready but before listener starts.
@@ -1242,6 +1244,47 @@ fn spawn_storage_full_reprobe(
                     );
                 }
             }
+        }
+    });
+}
+
+/// Periodically publish the latest raft-leader observation into the metrics
+/// gauge.
+///
+/// `MetricsProvider::render_metrics` (`src/server.rs:433`) is synchronous and
+/// `TapeRaft::leader` (`src/raft.rs:790`) is asynchronous, so the value cannot
+/// be read at scrape time. It has to be pushed by a background task. This task
+/// is spawned only from the raft branch after `state.set_raft(raft)`; that
+/// load-bearing choice keeps the gauge at `NOT_RAFT`, `render()` omits the
+/// series, and `TapeRaftLeaderAbsent` cannot fire on single-node deployments.
+/// Spawning it unconditionally would make every non-raft tape alert forever.
+/// `TAPE_RAFT_LEADER_POLL_SECS` (default 5) controls the cadence; a
+/// non-positive or unparseable value falls back to the default.
+fn spawn_raft_leader_poller(
+    metrics: std::sync::Arc<tape::metrics::TapeMetrics>,
+    raft: std::sync::Arc<tape::raft::TapeRaft>,
+) {
+    let poll_secs: u64 = std::env::var("TAPE_RAFT_LEADER_POLL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(5);
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(Duration::from_secs(poll_secs));
+        ticker.tick().await; // discard the immediate first fire
+        let mut last_known = None;
+        loop {
+            let known = raft.leader().await.is_some();
+            metrics.set_raft_leader_known(known);
+            if let Some(previous) = last_known {
+                if previous && !known {
+                    tracing::warn!("raft leader lost; no elected leader reported by the raft host");
+                } else if !previous && known {
+                    tracing::info!("raft leader discovered; leader election has produced a leader");
+                }
+            }
+            last_known = Some(known);
+            ticker.tick().await;
         }
     });
 }

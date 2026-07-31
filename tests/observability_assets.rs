@@ -30,6 +30,8 @@ fn alert_rules_only_reference_existing_tape_latency_series() {
         "tape_replay_latency_ms_count",
         // #2573 — the degraded-mode gauge `TapeMetrics::render` publishes.
         "tape_storage_degraded",
+        // #2579 — the raft leader-known gauge `TapeMetrics::render` publishes.
+        "tape_raft_leader_known",
     ] {
         assert!(rule.contains(metric), "missing real Tape metric {metric}");
     }

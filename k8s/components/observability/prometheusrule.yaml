@@ -57,6 +57,14 @@ spec:
           annotations:
             summary: "tape node in ENOSPC degraded read-only mode"
             runbook: "#2573: The node hit ENOSPC on its journal persist path and latched degraded read-only mode — mutating requests answer 507 `storage_full`, reads keep serving. Check `tape_storage_full_errors_total`: a rising counter with the gauge back at 0 means the volume is flapping in and out of full, not that it recovered. Remedy is capacity — free objects via retention or expand the PVC on a resizable StorageClass. No restart is needed: the pod re-probes the store directory every `TAPE_STORAGE_FULL_REPROBE_SECS` (default 30s) and clears the flag itself. If the gauge stays 1 after the volume has room, read the pod log for the re-probe warning — the store directory can be unwritable for reasons other than capacity (read-only remount, permissions). `TapePvcNearFull` is the early warning for this condition and should have fired first — if it did not, find out why before treating a full volume as a surprise."
+        - alert: TapeRaftLeaderAbsent
+          expr: |
+            tape_raft_leader_known{app="tape",role="server"} == 0
+          for: 2m
+          labels: { severity: critical, app: tape, role: server }
+          annotations:
+            summary: "tape raft group has no elected leader"
+            runbook: "#2579: This alert fires when the raft group has no elected leader, so replicated writes (append and checkpoint-put) cannot commit. Pods stay Ready and `/healthz` stays green while it is firing, which is exactly why this alert exists and why `TapeNoReadyServingPods` will not be firing alongside it. Check `/raftz` on each replica first, and confirm that a quorum of the CR's `voterCount` is actually running — a missing quorum is a leadership failure, not a pod health failure. Do not restart the remaining replicas to 'reset' the election: that makes quorum loss worse, not better. The underlying sentinel gauge `tape_raft_leader_known` is intentionally omitted until the first raft poll reports, so a non-raft node never publishes a permanent `0` and this alert stays silent there."
         - alert: TapeSubscriptionLagGrowing
           expr: |
             increase(tape_subscription_lag{app="tape",role="server"}[15m]) > 0
