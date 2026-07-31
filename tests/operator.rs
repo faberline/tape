@@ -867,21 +867,86 @@ fn prometheus_rule_exprs_keep_the_metrics_and_thresholds() {
 
     /// Every literal a comparison operator is tested against.
     ///
+    /// The helper now returns every comparison as `"<op> <literal>"`, not a bare
+    /// number: the operator is part of the emitted value so `> 2` and `>= 2`
+    /// remain distinct, and the two-character forms (`>=`, `<=`, `==`, `!=`)
+    /// are tried before `>` and `<` for the same reason. Returning only the
+    /// literal would make a one-sided operator change between the two files look
+    /// identical and let a real contract drift pass this guard.
+    ///
+    /// Label selectors are stripped first because a `{...}` span contains `=` and
+    /// `=~`, so scanning the raw expr would read a selector as though it were a
+    /// comparison and produce a bogus threshold. The old implementation was
+    /// vacuous for #2578: it split on `'>'` only, so `== 0`, `>= 2`, and `<
+    /// 0.1` each yielded nothing. Both files therefore returned the empty vector
+    /// and the guard compared `[] == []` while the two files could disagree on
+    /// the real firing threshold.
+    ///
     /// Fractional literals count (#3051): `TapeMemoryHeadroomLow` fires at
     /// `> 0.85`, and stopping at the decimal point would reduce it to `0` —
     /// the same value as its divide-by-zero guard — so the two files could
     /// disagree on the actual headroom budget and this guard would pass.
     fn thresholds(expr: &str) -> Vec<String> {
-        expr.split('>')
-            .skip(1)
-            .map(|tail| {
-                tail.trim_start()
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit() || *c == '.')
-                    .collect::<String>()
-            })
-            .filter(|n| !n.is_empty())
-            .collect()
+        let mut out = Vec::new();
+        let mut chars = expr.chars().collect::<Vec<_>>();
+        let mut filtered = Vec::new();
+        let mut depth = 0usize;
+        for ch in chars.drain(..) {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    if depth > 0 {
+                        depth -= 1;
+                    }
+                }
+                _ if depth == 0 => filtered.push(ch),
+                _ => {}
+            }
+        }
+
+        let mut i = 0usize;
+        while i < filtered.len() {
+            let op = if i + 1 < filtered.len() && filtered[i] == '>' && filtered[i + 1] == '=' {
+                Some(">=")
+            } else if i + 1 < filtered.len() && filtered[i] == '<' && filtered[i + 1] == '=' {
+                Some("<=")
+            } else if i + 1 < filtered.len() && filtered[i] == '=' && filtered[i + 1] == '=' {
+                Some("==")
+            } else if i + 1 < filtered.len() && filtered[i] == '!' && filtered[i + 1] == '=' {
+                Some("!=")
+            } else if filtered[i] == '>' {
+                Some(">")
+            } else if filtered[i] == '<' {
+                Some("<")
+            } else {
+                None
+            };
+
+            if let Some(op) = op {
+                let op_len = op.len();
+                let mut j = i + op_len;
+                while j < filtered.len() && filtered[j].is_whitespace() {
+                    j += 1;
+                }
+                let mut literal = String::new();
+                while j < filtered.len() {
+                    let ch = filtered[j];
+                    if ch.is_ascii_digit() || ch == '.' {
+                        literal.push(ch);
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if !literal.is_empty() {
+                    out.push(format!("{op} {literal}"));
+                }
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+        out
     }
 
     fn exprs(doc: &Value) -> BTreeMap<String, String> {
@@ -906,6 +971,26 @@ fn prometheus_rule_exprs_keep_the_metrics_and_thresholds() {
 
     let static_exprs = exprs(&file);
     let rendered_exprs = exprs(of_kind(&objects, "PrometheusRule"));
+
+    let expected_thresholds: BTreeMap<&str, Vec<String>> = BTreeMap::from([
+        ("TapeAppendLatencyHigh", vec!["> 500".to_string()]),
+        ("TapeReplayLatencyHigh", vec!["> 2000".to_string()]),
+        ("TapePodRestarting", vec!["> 2".to_string()]),
+        ("TapeStorageDegraded", vec!["> 0".to_string()]),
+        ("TapeSubscriptionLagGrowing", vec!["> 0".to_string()]),
+        (
+            "TapeMemoryHeadroomLow",
+            vec!["> 0".to_string(), "> 0.85".to_string()],
+        ),
+        ("TapeNoReadyServingPods", vec!["== 0".to_string()]),
+        ("TapeBackupCronJobFailed", vec![">= 2".to_string()]),
+        ("TapePvcNearFull", vec!["< 0.1".to_string()]),
+    ]);
+    let rendered_thresholds: BTreeMap<&str, Vec<String>> = rendered_exprs
+        .iter()
+        .map(|(alert, expr)| (alert.as_str(), thresholds(expr)))
+        .collect();
+    assert_eq!(rendered_thresholds, expected_thresholds);
 
     for (alert, static_expr) in &static_exprs {
         let rendered = rendered_exprs

@@ -52,4 +52,22 @@ fn alert_rules_reference_cadvisor_memory_series() {
         );
     }
 }
+
+/// #2578 — the new alerts read kube-state-metrics and kubelet series, so the
+/// existing `tape_*` inclusion test cannot cover them.
+#[test]
+fn alert_rules_reference_kube_state_and_kubelet_series() {
+    let rule = include_str!("../k8s/components/observability/prometheusrule.yaml");
+    for metric in [
+        "kube_statefulset_status_replicas_ready",
+        "kube_job_status_failed",
+        "kubelet_volume_stats_available_bytes",
+        "kubelet_volume_stats_capacity_bytes",
+    ] {
+        assert!(
+            rule.contains(metric),
+            "the new #2578 alerts must reference {metric}"
+        );
+    }
+}
 // HANDWRITE-END

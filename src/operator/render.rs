@@ -328,7 +328,7 @@ fn container_resources(cpu: &str, memory: &str) -> Value {
     })
 }
 
-/// tape's four SLO alerts (#2575), the operator-rendered twin of
+/// tape's observability alerts (#2575), the operator-rendered twin of
 /// `k8s/components/observability/prometheusrule.yaml`.
 ///
 /// Every alert reads a series tape actually publishes today.
@@ -447,6 +447,51 @@ fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                             "runbook": MEMORY_HEADROOM_RUNBOOK,
                         },
                     },
+                    {
+                        "alert": "TapeNoReadyServingPods",
+                        "expr": format!(
+                            "kube_statefulset_status_replicas_ready{{namespace=\"{}\",statefulset=\"{}\"}} == 0",
+                            cx.ns, cx.name
+                        ),
+                        "for": "2m",
+                        "labels": alert_labels(cx, "critical"),
+                        "annotations": {
+                            "summary": "tape statefulset has zero ready replicas",
+                            "runbook": NO_READY_SERVING_PODS_RUNBOOK,
+                        },
+                    },
+                    {
+                        // #2578. The threshold is 2 on purpose: one failed Job is
+                        // flake tolerance, but a second means the recent schedule is
+                        // failing repeatedly.
+                        "alert": "TapeBackupCronJobFailed",
+                        "expr": format!(
+                            "kube_job_status_failed{{namespace=\"{}\",job_name=~\"^{}-backup-.*\"}} >= 2",
+                            cx.ns, cx.name
+                        ),
+                        "for": "5m",
+                        "labels": alert_labels(cx, "warning"),
+                        "annotations": {
+                            "summary": "tape scheduled backup failing on repeated runs",
+                            "runbook": BACKUP_CRONJOB_FAILED_RUNBOOK,
+                        },
+                    },
+                    {
+                        // #2578. The PVC template is named `data`, not `raft`, so the
+                        // selector must match `^data-<name>-[0-9]+$`.
+                        "alert": "TapePvcNearFull",
+                        "expr": format!(
+                            "kubelet_volume_stats_available_bytes{{namespace=\"{}\",persistentvolumeclaim=~\"^data-{}-[0-9]+$\"}}\n\
+                             / kubelet_volume_stats_capacity_bytes{{namespace=\"{}\",persistentvolumeclaim=~\"^data-{}-[0-9]+$\"}} < 0.1",
+                            cx.ns, cx.name, cx.ns, cx.name
+                        ),
+                        "for": "10m",
+                        "labels": alert_labels(cx, "warning"),
+                        "annotations": {
+                            "summary": "tape data PVC below 10% free",
+                            "runbook": PVC_NEAR_FULL_RUNBOOK,
+                        },
+                    },
                 ],
             }],
         },
@@ -469,7 +514,16 @@ const SUBSCRIPTION_LAG_RUNBOOK: &str = "#2485: Check if the consumer bound to th
 /// recover itself — the runbook's job is to stop a reflexive pod restart and
 /// point at the two things that actually decide the outcome: capacity, and the
 /// flap counter that distinguishes "recovered" from "recovering every 30s".
-const STORAGE_DEGRADED_RUNBOOK: &str = "#2573: The node hit ENOSPC on its journal persist path and latched degraded read-only mode — mutating requests answer 507 `storage_full`, reads keep serving. Check `tape_storage_full_errors_total`: a rising counter with the gauge back at 0 means the volume is flapping in and out of full, not that it recovered. Remedy is capacity — free objects via retention or expand the PVC on a resizable StorageClass. No restart is needed: the pod re-probes the store directory every `TAPE_STORAGE_FULL_REPROBE_SECS` (default 30s) and clears the flag itself. If the gauge stays 1 after the volume has room, read the pod log for the re-probe warning — the store directory can be unwritable for reasons other than capacity (read-only remount, permissions).";
+const STORAGE_DEGRADED_RUNBOOK: &str = "#2573: The node hit ENOSPC on its journal persist path and latched degraded read-only mode — mutating requests answer 507 `storage_full`, reads keep serving. Check `tape_storage_full_errors_total`: a rising counter with the gauge back at 0 means the volume is flapping in and out of full, not that it recovered. Remedy is capacity — free objects via retention or expand the PVC on a resizable StorageClass. No restart is needed: the pod re-probes the store directory every `TAPE_STORAGE_FULL_REPROBE_SECS` (default 30s) and clears the flag itself. If the gauge stays 1 after the volume has room, read the pod log for the re-probe warning — the store directory can be unwritable for reasons other than capacity (read-only remount, permissions). `TapePvcNearFull` is the early warning for this condition and should have fired first — if it did not, find out why before treating a full volume as a surprise.";
+
+/// #2578: No-ready-serving-pods triage.
+const NO_READY_SERVING_PODS_RUNBOOK: &str = "#2578: The StatefulSet reports zero ready replicas — tape is serving nothing, and no other alert covers this. `TapePodRestarting` needs more than 2 restarts in 15m, so a pod that never starts at all (Pending on an unschedulable PVC, an image pull failure, a readiness probe failing against a running process) is invisible to it. Check the pods first: `Pending` means scheduling or storage, so describe the pod and its PVC and read the binding event; `Running` but not ready means the readiness probe is failing, so read the pod log and probe `/readyz` inside the container. A node in ENOSPC degraded mode stays ready on purpose (#2573) — degraded read-only still serves reads — so this alert firing is not the degraded path and `TapeStorageDegraded` is the one to check for that.";
+
+/// #2578: Backup CronJob failure triage.
+const BACKUP_CRONJOB_FAILED_RUNBOOK: &str = "#2578: Two or more of the retained backup Jobs for this instance have failed. The threshold is 2 on purpose — one failed Job is flake tolerance (a transient object-store error, a node eviction mid-run), two means the schedule is failing on every recent run and the newest backup you can restore from is older than the schedule implies. Read the log of the newest failed Job. The two usual causes are credentials (the admin token the backup runner authenticates with) and the destination (bucket permissions, or a URI that no longer resolves). Confirm the age of the last successful backup before treating this as low priority: this alert says the schedule is broken, not that the data is gone. The CR-level companion is the `BackupSucceeded` condition on the Tape status (#3071), which reports the same CronJob's outcome without Prometheus.";
+
+/// #2578: PVC fullness triage.
+const PVC_NEAR_FULL_RUNBOOK: &str = "#2578: The data PVC for this instance is below 10% free. This is the early warning `TapeStorageDegraded` does not give you — that one only fires once writes are already being refused with 507. Act while writes still succeed. Free space by tightening retention: a topic with no retention entry is NEVER pruned and grows without bound, so give every active topic a byte or count bound. Otherwise expand the PVC, which is the only remedy that loses nothing — it requires `allowVolumeExpansion: true` on the StorageClass, so confirm that now rather than during the incident. If `TapeStorageDegraded` is already firing as well, this alert should have fired ten minutes earlier; if it did not, the volume filled faster than the `for: 10m` window and the budget is wrong for this workload.";
 
 /// #3051 / #3052: Memory headroom runbook.
 ///
