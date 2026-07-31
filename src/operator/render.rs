@@ -623,7 +623,7 @@ fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value {
         json!({ "name": "TAPE_RAFT_PORT", "value": RAFT_PORT.to_string() }),
         json!({ "name": "TAPE_DATA_DIR", "value": "/data" }),
         json!({ "name": "TAPE_GRACE_SECS", "value": s.grace_secs.to_string() }),
-        json!({ "name": "TAPE_LOG_FORMAT", "value": "json" }),
+        json!({ "name": "TAPE_LOG_FORMAT", "value": s.log_format.as_env() }),
         json!({ "name": "TAPE_AUTH", "value": s.auth.as_env() }),
     ];
     if let Some(level) = &s.log_level {

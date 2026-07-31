@@ -13,6 +13,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 use service_k8s::{ClusterSpec, ConditionStatus, ManagedService, ReadyFacts};
+use tape::operator::crd::LogFormat;
 use tape::operator::render::{prunes, render};
 use tape::operator::{crd_yaml, AuthMode, Tape, TapeBackupSpec, TapeSpec};
 
@@ -30,6 +31,7 @@ fn spec(replicas: u32) -> TapeSpec {
         storage_class: None,
         grace_secs: 10,
         log_level: None,
+        log_format: LogFormat::default(),
         // Not a literal: the fixture must track the real default, so a future
         // flip of `AuthMode::default()` shows up in every render test at once
         // instead of leaving them asserting a shape no user ever gets (#2765).
@@ -93,6 +95,7 @@ fn crd_flattens_cluster_spec() {
         "storageClass",
         "graceSecs",
         "logLevel",
+        "logFormat",
         "auth",
         "tokensSecret",
         "tokensSecretProviderClass",
@@ -113,6 +116,21 @@ fn crd_flattens_cluster_spec() {
     assert!(
         yaml.contains("minimum"),
         "normalized uints keep a minimum floor"
+    );
+    // #2582 — `logFormat` is a closed enum defaulting to json.
+    assert_eq!(props["logFormat"]["default"], "json");
+    assert_eq!(
+        props["logFormat"]["enum"]
+            .as_sequence()
+            .expect("logFormat carries a closed enum"),
+        &vec![
+            serde_yaml::Value::from("pretty"),
+            serde_yaml::Value::from("json"),
+        ],
+    );
+    assert_eq!(
+        props["logFormat"]["type"], "string",
+        "logFormat enum type is string"
     );
     // #2765 — `auth` is a closed enum defaulting to the required state. As an
     // unconstrained string, every value except the exact literal `"required"`
@@ -1521,5 +1539,151 @@ fn service_account_name_does_not_affect_prunes() {
         vec![("batch/v1", "CronJob", "tape-backup".to_string())],
         "prunes() must only name backup CronJob when backup is None, never a ServiceAccount"
     );
+}
+
+/// #2582 E1 — A `Tape` CR omitting `logFormat` renders `TAPE_LOG_FORMAT=json`
+/// at the exact same position in the env list.
+#[test]
+fn log_format_unset_renders_existing_shape() {
+    let tape = Tape::new("tape", spec(3));
+    let objs = render(&tape);
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    let format_entry = env
+        .iter()
+        .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+        .map(|(_, v)| v["value"].as_str().unwrap());
+    assert_eq!(format_entry, Some("json"));
+
+    let keys: Vec<&str> = env.iter().map(|(k, _)| *k).collect();
+    assert_eq!(
+        keys,
+        vec![
+            "POD_NAME",
+            "POD_NAMESPACE",
+            "SHARD_COUNT",
+            "REPLICAS_PER_SHARD",
+            "VOTER_COUNT",
+            "TAPE_PEER_SERVICE",
+            "TAPE_BIND",
+            "TAPE_RAFT_PORT",
+            "TAPE_DATA_DIR",
+            "TAPE_GRACE_SECS",
+            "TAPE_LOG_FORMAT",
+            "TAPE_AUTH",
+        ]
+    );
+}
+
+/// #2582 E2 — A `Tape` CR with `logFormat: pretty` renders `TAPE_LOG_FORMAT=pretty`.
+#[test]
+fn log_format_configured_pretty_renders_pretty() {
+    let mut configured = spec(3);
+    configured.log_format = LogFormat::Pretty;
+    let tape = Tape::new("tape", configured);
+    let objs = render(&tape);
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    let format_entry = env
+        .iter()
+        .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+        .map(|(_, v)| v["value"].as_str().unwrap());
+    assert_eq!(format_entry, Some("pretty"));
+}
+
+/// #2582 E3 — `TAPE_LOG_FORMAT` and `RUST_LOG` are orthogonal: `TAPE_LOG_FORMAT`
+/// is unconditional, while `RUST_LOG` is present only when `logLevel` is set.
+#[test]
+fn log_format_and_log_level_are_orthogonal() {
+    // 1. Unset logFormat, unset logLevel -> no RUST_LOG
+    let tape1 = Tape::new("tape", spec(3));
+    let objs1 = render(&tape1);
+    let env1 = env_of(of_kind(&objs1, "StatefulSet"));
+    assert!(env1.iter().all(|(k, _)| *k != "RUST_LOG"));
+    assert_eq!(
+        env1.iter()
+            .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+            .unwrap()
+            .1["value"],
+        "json"
+    );
+
+    // 2. Unset logFormat, logLevel: debug -> RUST_LOG=debug
+    let mut spec2 = spec(3);
+    spec2.log_level = Some("debug".into());
+    let objs2 = render(&Tape::new("tape", spec2));
+    let env2 = env_of(of_kind(&objs2, "StatefulSet"));
+    assert_eq!(
+        env2.iter().find(|(k, _)| *k == "RUST_LOG").unwrap().1["value"],
+        "debug"
+    );
+    assert_eq!(
+        env2.iter()
+            .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+            .unwrap()
+            .1["value"],
+        "json"
+    );
+
+    // 3. logFormat: pretty, unset logLevel -> no RUST_LOG
+    let mut spec3 = spec(3);
+    spec3.log_format = LogFormat::Pretty;
+    let objs3 = render(&Tape::new("tape", spec3));
+    let env3 = env_of(of_kind(&objs3, "StatefulSet"));
+    assert!(env3.iter().all(|(k, _)| *k != "RUST_LOG"));
+    assert_eq!(
+        env3.iter()
+            .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+            .unwrap()
+            .1["value"],
+        "pretty"
+    );
+
+    // 4. logFormat: pretty, logLevel: debug -> RUST_LOG=debug
+    let mut spec4 = spec(3);
+    spec4.log_format = LogFormat::Pretty;
+    spec4.log_level = Some("debug".into());
+    let objs4 = render(&Tape::new("tape", spec4));
+    let env4 = env_of(of_kind(&objs4, "StatefulSet"));
+    assert_eq!(
+        env4.iter().find(|(k, _)| *k == "RUST_LOG").unwrap().1["value"],
+        "debug"
+    );
+    assert_eq!(
+        env4.iter()
+            .find(|(k, _)| *k == "TAPE_LOG_FORMAT")
+            .unwrap()
+            .1["value"],
+        "pretty"
+    );
+}
+
+/// #2582 — Serde defaults logFormat to Json and rejects unknown values.
+#[test]
+fn log_format_serde_default_and_validation() {
+    assert_eq!(LogFormat::default(), LogFormat::Json);
+    let parsed: TapeSpec = serde_json::from_value(serde_json::json!({
+        "image": "tape:test",
+        "storage": "10Gi",
+    }))
+    .expect("a spec omitting logFormat parses");
+    assert_eq!(parsed.log_format, LogFormat::Json);
+
+    let pretty_parsed: TapeSpec = serde_json::from_value(serde_json::json!({
+        "image": "tape:test",
+        "storage": "10Gi",
+        "logFormat": "pretty",
+    }))
+    .expect("a spec with logFormat: pretty parses");
+    assert_eq!(pretty_parsed.log_format, LogFormat::Pretty);
+
+    let typo: Result<TapeSpec, _> = serde_json::from_value(serde_json::json!({
+        "image": "tape:test",
+        "storage": "10Gi",
+        "logFormat": "nonsense",
+    }));
+    assert!(typo.is_err(), "an unknown logFormat value must be rejected");
 }
 // HANDWRITE-END

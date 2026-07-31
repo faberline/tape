@@ -1,4 +1,4 @@
-// HANDWRITE-BEGIN gap="missing-generator:logic:bfdc7475" tracker="pending-tracker" reason="TapeSpec CustomResource (group tape.dev, v1alpha1, kind Tape, plural tapes, shortname tp, namespaced, status TapeStatus, printcolumns Phase/Ready/Age): #[serde(flatten)] cluster: service_k8s::ClusterSpec (shardCount defaults 1, pinned by the render -- tape is a single raft group) + storage (default 10Gi) + storageClass + graceSecs (default 10) + logLevel (Option) + auth (closed AuthMode enum disabled|required, defaulting to required) + tokensSecret (Option<String>) + serviceAccountName (Option<String>). TapeStatus { phase, observedGeneration, readyReplicas, desiredReplicas, message, conditions }."
+// HANDWRITE-BEGIN gap="missing-generator:logic:bfdc7475" tracker="pending-tracker" reason="TapeSpec CustomResource (group tape.dev, v1alpha1, kind Tape, plural tapes, shortname tp, namespaced, status TapeStatus, printcolumns Phase/Ready/Age): #[serde(flatten)] cluster: service_k8s::ClusterSpec (shardCount defaults 1, pinned by the render -- tape is a single raft group) + storage (default 10Gi) + storageClass + graceSecs (default 10) + logLevel (Option) + logFormat (closed LogFormat enum pretty|json, defaulting to json) + auth (closed AuthMode enum disabled|required, defaulting to required) + tokensSecret (Option<String>) + serviceAccountName (Option<String>). TapeStatus { phase, observedGeneration, readyReplicas, desiredReplicas, message, conditions }."
 //! The `Tape` custom resource (`tape.dev/v1alpha1`).
 //!
 //! One `Tape` object declares a tape deployment's HA topology. The spec
@@ -63,6 +63,14 @@ pub struct TapeSpec {
     /// Unset means the server default (`info`).
     #[serde(default)]
     pub log_level: Option<String>,
+
+    /// Log output format for the serving container (`TAPE_LOG_FORMAT`).
+    ///
+    /// A closed enum for the same reason `AuthMode` is one: a typo in a
+    /// free-form string would fall back at boot instead of being rejected at
+    /// `kubectl apply` (#2582).
+    #[serde(default)]
+    pub log_format: LogFormat,
 
     /// Request-auth mode for the data plane: `required` (the default — supply
     /// a token registry via `tokensSecret` or `tokensSecretProviderClass`) or
@@ -255,6 +263,33 @@ fn default_storage() -> String {
 }
 fn default_grace_secs() -> u64 {
     10
+}
+
+/// Log output format for the serving container (`TAPE_LOG_FORMAT`).
+///
+/// A closed enum for the same reason `AuthMode` is one: a typo in a
+/// free-form string would fall back at boot instead of being rejected at
+/// `kubectl apply` (#2582).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    /// Human-readable formatter. The escape hatch for reading one pod's logs
+    /// interactively during an incident.
+    Pretty,
+    /// The default in-cluster: the shared `axiom.service.log.v1` collector
+    /// contract expects JSON.
+    #[default]
+    Json,
+}
+
+impl LogFormat {
+    /// The `TAPE_LOG_FORMAT` value the serving binary expects (`pretty` | `json`).
+    pub fn as_env(self) -> &'static str {
+        match self {
+            LogFormat::Pretty => "pretty",
+            LogFormat::Json => "json",
+        }
+    }
 }
 
 /// Whether the data-plane API requires a bearer token.
