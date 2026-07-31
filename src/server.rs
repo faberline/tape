@@ -169,7 +169,7 @@ impl AppState {
         body_limit_bytes: usize,
     ) -> Self {
         let mut state = Self::new(journal, store, body_limit_bytes);
-        state.verifier = Arc::new(auth.verifier());
+        state.verifier = Arc::new(auth.verifier(state.metrics()));
         state
     }
 

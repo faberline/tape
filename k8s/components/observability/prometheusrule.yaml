@@ -57,6 +57,14 @@ spec:
           annotations:
             summary: "tape node in ENOSPC degraded read-only mode"
             runbook: "#2573: The node hit ENOSPC on its journal persist path and latched degraded read-only mode — mutating requests answer 507 `storage_full`, reads keep serving. Check `tape_storage_full_errors_total`: a rising counter with the gauge back at 0 means the volume is flapping in and out of full, not that it recovered. Remedy is capacity — free objects via retention or expand the PVC on a resizable StorageClass. No restart is needed: the pod re-probes the store directory every `TAPE_STORAGE_FULL_REPROBE_SECS` (default 30s) and clears the flag itself. If the gauge stays 1 after the volume has room, read the pod log for the re-probe warning — the store directory can be unwritable for reasons other than capacity (read-only remount, permissions). `TapePvcNearFull` is the early warning for this condition and should have fired first — if it did not, find out why before treating a full volume as a surprise."
+        - alert: TapeAuthRegistryReloadFailing
+          expr: |
+            increase(tape_auth_registry_reload_failures_total{app="tape",role="server"}[15m]) > 0
+          for: 5m
+          labels: { severity: warning, app: tape, role: server }
+          annotations:
+            summary: "tape auth registry reloads failing"
+            runbook: "#2580: This alert fires when a token-registry reload is attempted and rejected, so tape keeps serving the last known-good registry instead of the latest one. That is the fail-safe behaviour the shared verifier already implements: tape did not drop auth, it refused to adopt a registry it could not parse. The security consequence is plain — a credential that an operator believed they revoked is still being accepted. Check the `service_auth.audit` warn event's `failure` field: it gives the machine-stable class (read / parse / invalid), which separates a missing mount from malformed JSON from a semantically empty registry. Do not restart the pod to 'force' a reload: a restart makes tape load the broken registry at startup, and with `auth: required` that is a fail-fast crash loop in `bin/tape.rs` rather than a silent stale-credential problem. The related gauge `tape_auth_registry_reload_success_unixtime` exists for a later staleness alert: it publishes the last successful reload timestamp so an operator can see when reloads stop succeeding."
         - alert: TapeRaftLeaderAbsent
           expr: |
             tape_raft_leader_known{app="tape",role="server"} == 0

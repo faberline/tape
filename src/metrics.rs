@@ -10,7 +10,7 @@
 //! metrics probe.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::{MatchedPath, Request, State};
 use axum::middleware::Next;
@@ -51,6 +51,11 @@ pub struct TapeMetrics {
     /// leader; `1` means the node is in raft mode and the last poll found a
     /// leader (this node or a peer).
     pub raft_leader_known: Gauge,
+    /// Total auth registry reload failures observed while the last known-good
+    /// registry kept serving.
+    pub auth_registry_reload_failures_total: Counter,
+    /// Unix time in seconds of the last successful auth registry reload.
+    pub auth_registry_reload_success_unixtime: Gauge,
 }
 
 /// The gauge starts at the sentinel value, not at `0`.
@@ -71,6 +76,8 @@ impl Default for TapeMetrics {
             storage_degraded: Default::default(),
             storage_full_errors_total: Default::default(),
             raft_leader_known: Default::default(),
+            auth_registry_reload_failures_total: Default::default(),
+            auth_registry_reload_success_unixtime: Default::default(),
         };
         metrics.raft_leader_known.set(NOT_RAFT);
         metrics
@@ -110,6 +117,23 @@ impl TapeMetrics {
     /// Publish the latest raft-leader observation for scrape-time rendering.
     pub fn set_raft_leader_known(&self, known: bool) {
         self.raft_leader_known.set(if known { 1 } else { 0 });
+    }
+
+    /// Record a successful auth registry reload by publishing the current
+    /// unix-second timestamp.
+    pub fn record_auth_registry_reload_success(&self) {
+        self.auth_registry_reload_success_unixtime.set(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .unwrap_or_default(),
+        );
+    }
+
+    /// Record a failed auth registry reload while continuing to serve the
+    /// previously loaded registry.
+    pub fn record_auth_registry_reload_failure(&self) {
+        self.auth_registry_reload_failures_total.incr();
     }
 
     /// Read the latest raft-leader observation published by the poller.
@@ -254,6 +278,18 @@ impl TapeMetrics {
                 "Total genuine ENOSPC hits observed on the journal persist path.",
                 self.storage_full_errors_total.get(),
             ),
+            Sample::new(
+                "tape_auth_registry_reload_failures_total",
+                "counter",
+                "Total auth registry reload failures observed while serving the last known-good registry.",
+                self.auth_registry_reload_failures_total.get(),
+            ),
+            Sample::new(
+                "tape_auth_registry_reload_success_unixtime",
+                "gauge",
+                "Unix time in seconds of the last successful auth registry reload.",
+                self.auth_registry_reload_success_unixtime.get(),
+            ),
         ];
         if self.raft_leader_known.get() != NOT_RAFT {
             samples.push(Sample::new(
@@ -369,6 +405,33 @@ mod tests {
         let degraded = m.render();
         assert!(degraded.contains("tape_storage_degraded 1"));
         assert!(degraded.contains("tape_storage_full_errors_total 1"));
+    }
+
+    #[test]
+    fn render_exposes_auth_registry_reload_series() {
+        let m = TapeMetrics::new();
+        let clean = m.render();
+        assert!(clean.contains("# TYPE tape_auth_registry_reload_failures_total counter"));
+        assert!(clean.contains("tape_auth_registry_reload_failures_total 0"));
+        assert!(clean.contains("# TYPE tape_auth_registry_reload_success_unixtime gauge"));
+        assert!(clean.contains("tape_auth_registry_reload_success_unixtime 0"));
+
+        m.record_auth_registry_reload_failure();
+        let after_fail = m.render();
+        assert!(after_fail.contains("tape_auth_registry_reload_failures_total 1"));
+
+        m.record_auth_registry_reload_success();
+        let after_success = m.render();
+        let line = after_success
+            .lines()
+            .find(|l| l.starts_with("tape_auth_registry_reload_success_unixtime "))
+            .expect("the success gauge must render as its own sample line");
+        let value: u64 = line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|v| v.parse().ok())
+            .expect("the gauge sample must carry a parseable value");
+        assert!(value > 0);
     }
 
     #[test]

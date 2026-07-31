@@ -15,6 +15,7 @@ fn backup_audit_is_redacted_and_kept_off_hot_data_plane_routes() {
     // The service adapter delegates token/authorization audit fields to the
     // shared verifier; it does not parse or log bearer credentials itself.
     assert!(AUTH.contains("TracingAuthEventSink"));
+    assert!(AUTH.contains("self.tracing.record(event);"));
     assert!(!AUTH.contains("tracing::"));
 }
 // HANDWRITE-END

@@ -977,6 +977,7 @@ fn prometheus_rule_exprs_keep_the_metrics_and_thresholds() {
         ("TapeReplayLatencyHigh", vec!["> 2000".to_string()]),
         ("TapePodRestarting", vec!["> 2".to_string()]),
         ("TapeStorageDegraded", vec!["> 0".to_string()]),
+        ("TapeAuthRegistryReloadFailing", vec!["> 0".to_string()]),
         ("TapeSubscriptionLagGrowing", vec!["> 0".to_string()]),
         (
             "TapeMemoryHeadroomLow",

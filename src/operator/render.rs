@@ -415,6 +415,16 @@ fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         },
                     },
                     {
+                        "alert": "TapeAuthRegistryReloadFailing",
+                        "expr": format!("increase(tape_auth_registry_reload_failures_total{{{s}}}[15m]) > 0"),
+                        "for": "5m",
+                        "labels": alert_labels(cx, "warning"),
+                        "annotations": {
+                            "summary": "tape auth registry reloads failing",
+                            "runbook": AUTH_REGISTRY_RELOAD_FAILING_RUNBOOK,
+                        },
+                    },
+                    {
                         "alert": "TapeRaftLeaderAbsent",
                         "expr": format!("tape_raft_leader_known{{{s}}} == 0"),
                         "for": "2m",
@@ -531,6 +541,9 @@ const NO_READY_SERVING_PODS_RUNBOOK: &str = "#2578: The StatefulSet reports zero
 
 /// #2579: Raft leader absence triage.
 const RAFT_LEADER_ABSENT_RUNBOOK: &str = "#2579: This alert fires when the raft group has no elected leader, so replicated writes (append and checkpoint-put) cannot commit. Pods stay Ready and `/healthz` stays green while it is firing, which is exactly why this alert exists and why `TapeNoReadyServingPods` will not be firing alongside it. Check `/raftz` on each replica first, and confirm that a quorum of the CR's `voterCount` is actually running — a missing quorum is a leadership failure, not a pod health failure. Do not restart the remaining replicas to 'reset' the election: that makes quorum loss worse, not better. The underlying sentinel gauge `tape_raft_leader_known` is intentionally omitted until the first raft poll reports, so a non-raft node never publishes a permanent `0` and this alert stays silent there.";
+
+/// #2580: Auth registry reload failure triage.
+const AUTH_REGISTRY_RELOAD_FAILING_RUNBOOK: &str = "#2580: This alert fires when a token-registry reload is attempted and rejected, so tape keeps serving the last known-good registry instead of the latest one. That is the fail-safe behaviour the shared verifier already implements: tape did not drop auth, it refused to adopt a registry it could not parse. The security consequence is plain — a credential that an operator believed they revoked is still being accepted. Check the `service_auth.audit` warn event's `failure` field: it gives the machine-stable class (read / parse / invalid), which separates a missing mount from malformed JSON from a semantically empty registry. Do not restart the pod to 'force' a reload: a restart makes tape load the broken registry at startup, and with `auth: required` that is a fail-fast crash loop in `bin/tape.rs` rather than a silent stale-credential problem. The related gauge `tape_auth_registry_reload_success_unixtime` exists for a later staleness alert: it publishes the last successful reload timestamp so an operator can see when reloads stop succeeding.";
 
 /// #2578: Backup CronJob failure triage.
 const BACKUP_CRONJOB_FAILED_RUNBOOK: &str = "#2578: Two or more of the retained backup Jobs for this instance have failed. The threshold is 2 on purpose — one failed Job is flake tolerance (a transient object-store error, a node eviction mid-run), two means the schedule is failing on every recent run and the newest backup you can restore from is older than the schedule implies. Read the log of the newest failed Job. The two usual causes are credentials (the admin token the backup runner authenticates with) and the destination (bucket permissions, or a URI that no longer resolves). Confirm the age of the last successful backup before treating this as low priority: this alert says the schedule is broken, not that the data is gone. The CR-level companion is the `BackupSucceeded` condition on the Tape status (#3071), which reports the same CronJob's outcome without Prometheus.";

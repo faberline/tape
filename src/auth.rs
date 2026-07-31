@@ -47,9 +47,10 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use std::sync::Arc;
 
+use crate::metrics::TapeMetrics;
 use service_auth::{
-    AuditedRoleMapPrincipal, AuthError, ReloadableRoleMapVerifier, Role, TokenClaims,
-    TracingAuthEventSink,
+    AuditedRoleMapPrincipal, AuthError, AuthEvent, AuthEventSink, ReloadableRoleMapVerifier, Role,
+    TokenClaims, TracingAuthEventSink,
 };
 
 /// Auth-mode env var (`off`|`disabled`|`required`), surfaced as `--auth`.
@@ -58,6 +59,34 @@ pub const AUTH_MODE_ENV: &str = "TAPE_AUTH";
 pub const TOKEN_REGISTRY_FILE_ENV: &str = "TAPE_TOKEN_REGISTRY_FILE";
 /// Legacy/dev inline token-registry JSON (never the production path).
 pub const LEGACY_TOKENS_ENV: &str = "TAPE_TOKENS";
+
+#[derive(Debug)]
+pub struct TapeAuthEventSink {
+    metrics: Arc<TapeMetrics>,
+    tracing: TracingAuthEventSink,
+}
+
+impl TapeAuthEventSink {
+    pub fn new(metrics: Arc<TapeMetrics>) -> Self {
+        Self {
+            metrics,
+            tracing: TracingAuthEventSink,
+        }
+    }
+}
+
+impl AuthEventSink for TapeAuthEventSink {
+    fn record(&self, event: &AuthEvent) {
+        if let AuthEvent::RegistryReload { applied, .. } = event {
+            if *applied {
+                self.metrics.record_auth_registry_reload_success();
+            } else {
+                self.metrics.record_auth_registry_reload_failure();
+            }
+        }
+        self.tracing.record(event);
+    }
+}
 
 /// Resolved auth settings: the mode plus the token→claims registry.
 #[derive(Debug, Clone)]
@@ -105,11 +134,11 @@ impl AuthConfig {
 
     /// The verifier the data-plane `auth_middleware` runs: the shared static
     /// role-map over this registry (the `open()` shape when auth is off).
-    pub fn verifier(&self) -> ReloadableRoleMapVerifier {
+    pub fn verifier(&self, metrics: Arc<TapeMetrics>) -> ReloadableRoleMapVerifier {
         ReloadableRoleMapVerifier::with_sink(
             self.required,
             self.tokens.clone(),
-            Arc::new(TracingAuthEventSink),
+            Arc::new(TapeAuthEventSink::new(metrics)),
         )
     }
 }
@@ -132,5 +161,51 @@ pub fn authorize(
             denied.subject, denied.needed, denied.resource
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{header, HeaderMap};
+    use service_auth::{Role, Verifier};
+
+    #[test]
+    fn registry_reload_metrics_follow_real_file_reload_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("token-registry.json");
+        std::fs::write(
+            &path,
+            r#"{"writer-token":{"subject":"producer","roles":{"orders":"write"}}}"#,
+        )
+        .unwrap();
+
+        let cfg = AuthConfig::resolve("required", Some(path.to_str().unwrap()), None).unwrap();
+        let metrics = Arc::new(TapeMetrics::new());
+        let verifier = cfg.verifier(metrics.clone());
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer writer-token".parse().unwrap(),
+        );
+        let principal = verifier.authenticate(&headers).unwrap();
+        assert!(principal.ensure("orders", Role::Write).is_ok());
+
+        verifier.reload_file(&path).unwrap();
+        let success_after_good = metrics.auth_registry_reload_success_unixtime.get();
+        assert!(success_after_good > 0);
+        assert_eq!(metrics.auth_registry_reload_failures_total.get(), 0);
+
+        std::fs::write(&path, r#"{"broken": "#).unwrap();
+        assert!(verifier.reload_file(&path).is_err());
+        assert_eq!(metrics.auth_registry_reload_failures_total.get(), 1);
+
+        let principal = verifier.authenticate(&headers).unwrap();
+        assert!(principal.ensure("orders", Role::Write).is_ok());
+        assert_eq!(
+            metrics.auth_registry_reload_success_unixtime.get(),
+            success_after_good
+        );
+    }
 }
 // HANDWRITE-END

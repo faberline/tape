@@ -10,13 +10,14 @@
 //! default. The registry is loaded through the real file loader from a temp
 //! `token-registry.json`.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::http::{header, HeaderMap};
 use serde_json::json;
 use service_auth::{Role, Verifier};
 
 use tape::auth::AuthConfig;
+use tape::metrics::TapeMetrics;
 use tape::server::{router, AppState};
 use tape::TapeJournal;
 
@@ -61,7 +62,7 @@ async fn start_server(auth: Option<AuthConfig>) -> SocketAddr {
 
 #[test]
 fn tape_auth_adapter_rotates_the_shared_registry_without_restart() {
-    let verifier = required_auth().verifier();
+    let verifier = required_auth().verifier(Arc::new(TapeMetrics::new()));
     let mut before = HeaderMap::new();
     before.insert(
         header::AUTHORIZATION,

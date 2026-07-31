@@ -32,6 +32,9 @@ fn alert_rules_only_reference_existing_tape_latency_series() {
         "tape_storage_degraded",
         // #2579 — the raft leader-known gauge `TapeMetrics::render` publishes.
         "tape_raft_leader_known",
+        // #2580 — auth registry reload metrics `TapeMetrics::render` publishes.
+        "tape_auth_registry_reload_failures_total",
+        "tape_auth_registry_reload_success_unixtime",
     ] {
         assert!(rule.contains(metric), "missing real Tape metric {metric}");
     }
