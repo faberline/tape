@@ -359,6 +359,12 @@ impl TapeJournal {
     /// Acknowledge a completed pull window by advancing its existing durable
     /// topic/name checkpoint. The checkpoint's stale and beyond-end guards are
     /// intentionally reused without introducing leases or in-flight state.
+    ///
+    /// The acked offset is not verified against pulled events. The checkpoint
+    /// guards enforce only that `offset <= end_offset` and `offset >= current_offset`.
+    /// Acking forward past unpulled events skips them permanently because cursors
+    /// are monotonic and cannot rewind. Callers must self-enforce pull-before-ack
+    /// by acking the `next_offset` returned by `pull_subscription`.
     pub fn ack_subscription(
         &mut self,
         topic: &str,

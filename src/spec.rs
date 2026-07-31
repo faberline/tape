@@ -81,7 +81,7 @@ The initial service contract is intentionally compact:
 - `POST`/`GET /topics/{topic}/subscriptions` declare topic delivery resources.
 - `GET`/`DELETE /topics/{topic}/subscriptions/{subscription}` declare one resource.
 - `POST /topics/{topic}/subscriptions/{subscription}/pull` declares bounded pull reads.
-- `POST /topics/{topic}/subscriptions/{subscription}/ack` declares explicit cursor advance.
+- `POST /topics/{topic}/subscriptions/{subscription}/ack` declares explicit cursor advance; callers must self-enforce pull-before-ack by acking next_offset.
 - `PUT /topics/{topic}/consumers/{consumer}/checkpoint` advances a replay cursor.
 - `GET /topics/{topic}/consumers/{consumer}/checkpoint` reads the replay cursor.
 - `GET /admin/backup` returns an admin-gated whole-journal snapshot.
@@ -281,6 +281,7 @@ fn openapi() -> Value {
             "/topics/{topic}/subscriptions/{subscription}/ack": {
                 "post": {
                     "summary": "Advance a pull subscription cursor",
+                    "description": "Advance a pull subscription cursor to an in-range offset. The acked offset is not verified against pulled events; checkpoint guards verify only that the offset is monotonic and within the journal end. Acking past unpulled events skips them permanently. Consumers must self-enforce pull-before-ack by providing the next_offset returned by a prior pull_subscription call.",
                     "parameters": [topic_param(), subscription_param()],
                     "requestBody": json_body("PullSubscriptionAckRequest"),
                     "responses": mutating_schema("ConsumerCheckpoint")
@@ -393,7 +394,11 @@ fn schemas() -> Value {
             "type": "object",
             "required": ["offset"],
             "properties": {
-                "offset": {"type": "integer", "minimum": 0}
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The target checkpoint offset to set. Correct clients send the next_offset returned by the pull batch just processed to avoid skipping unpulled events."
+                }
             }
         },
         "CheckpointRequest": {
