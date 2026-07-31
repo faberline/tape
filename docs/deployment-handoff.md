@@ -122,6 +122,26 @@ keep the CR name `tape` — `tape serve` derives raft peer DNS as
 > repeated-leader-loss evidence remains the real h2c integration gate; the Kind
 > proof intentionally covers the operator/PVC replacement boundary.
 
+### 3e. CRD versioning & upgrade order
+
+**Versioning Policy:**
+`k8s/operator/crd.yaml` serves a single version, `v1alpha1` (`served: true`, `storage: true`), with no `conversion:` stanza (API server strategy defaults to `None`). Additive `spec` and `status` fields land inside `v1alpha1` across releases. Renaming, removing, or retyping an existing field requires a new CRD version and a conversion mechanism; no conversion webhook exists today, which is stated as a present limitation.
+
+**Upgrade Order (CRD First):**
+Always apply the updated CRD before deploying a newer operator or applying updated Custom Resources (following the `kubectl apply` sequence in `### 3d`).
+*Why CRD first:* The Kubernetes API server silently prunes any field omitted from the stored CRD schema without error. For example, `spec.auth` (#2765) is a closed enum (`disabled|required`) defaulting to `required`. Applying a CR with `auth: disabled` against a pre-#2765 CRD silently prunes `auth` before storing the object. A post-#2765 operator reading the stored object gets the serde default `required`, finds no token source, and `AuthConfig::resolve` fails fast into a `CrashLoopBackOff`.
+
+**Rollback Contract:**
+Tape does not define a format-version constant on its durable path. Rollback behavior is asymmetric between binary versions and is further split by where a new field lands in the durable schema:
+
+| Direction | Behavior & Hazard |
+|---|---|
+| Newer binary / older data | Safe by construction — `TapeJournal` fields carry `#[serde(default)]` attributes (e.g. `next_offsets`, `subscriptions`, `retention`) to load older state safely. |
+| Older binary / top-level journal field | **Loads without error**, silently dropping unknown top-level fields; persisting rewrites the full document, erasing those fields from disk. Restoring a newer backup into an older binary exhibits the same loss. |
+| Older binary / nested record (`deny_unknown_fields`) | **Fails to load and exits non-zero** (`Error: parse <path>` context); process does not start. `Subscription` (`src/lib.rs:80`) carries `#[serde(deny_unknown_fields)]` today. This is fail-loud, not silent data loss. |
+
+*Operator Action for Rollback:* Copy the data directory **before** starting an older binary, as top-level field loss happens on the first write. If the older binary fails to start with a `parse ...` error, this is the fail-loud case for a nested record that denies unknown fields; inspect the error context rather than assuming storage corruption. Leave the newer CRD installed when rolling back a binary if CRs use newer fields, and revert only the container image; do not downgrade the CRD schema. These two field placements were measured directly; no broader matrix across released versions exists.
+
 ---
 
 ## 4. Environment variables

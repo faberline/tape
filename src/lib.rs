@@ -238,6 +238,11 @@ impl TapeJournal {
     /// Same validation/ordering as [`Self::put_checkpoint`], parameterized on
     /// the timestamp so raft replicas apply an identical `updated_at_ms`
     /// instead of each computing `now_ms()` independently (#1327).
+    ///
+    /// Checkpoints are strictly monotonic by design to record durable consumer
+    /// progress: a checkpoint never moves backwards, there is no admin rewind
+    /// verb, and attempting a backward write is refused with
+    /// [`TapeError::StaleCheckpoint`].
     pub fn put_checkpoint_at(
         &mut self,
         topic: impl Into<String>,
@@ -306,6 +311,9 @@ impl TapeJournal {
 
     /// Delete subscription metadata only; a matching pull checkpoint remains
     /// available through the existing checkpoint interface.
+    ///
+    /// Deleting and recreating a subscription does **not** reset its checkpoint;
+    /// the recreated subscription resumes at the old offset silently.
     pub fn delete_subscription(
         &mut self,
         topic: &str,

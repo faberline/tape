@@ -821,6 +821,10 @@ pub async fn append(
 
 /// `GET /topics/{topic}/replay` — replay topic history by offset or
 /// timestamp.
+///
+/// This is the supported mechanism to reprocess history: it re-reads events from
+/// any offset and never moves a consumer cursor, so the caller owns its own
+/// progress for that pass without altering durable checkpoints.
 #[utoipa::path(
     get,
     path = "/topics/{topic}/replay",
