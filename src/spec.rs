@@ -327,7 +327,10 @@ fn schemas() -> Value {
             "type": "object",
             "required": ["payload"],
             "properties": {
-                "key": {"type": "string"},
+                "key": {
+                    "type": "string",
+                    "description": "Opaque caller-supplied label carried on the event envelope and returned on replay. Tape logic never reads key for partitioning, routing, or deduplication; append is at-least-once."
+                },
                 "timestamp_ms": {"type": "integer", "minimum": 0},
                 "payload": {"description": "Caller-owned event envelope or claim-check reference"}
             }

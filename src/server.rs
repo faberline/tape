@@ -665,7 +665,9 @@ pub fn router_with_admission(
 /// Request body for `POST /topics/{topic}/append`.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AppendRequest {
-    /// Optional partitioning/idempotency key carried in the event envelope.
+    /// Opaque caller-supplied label carried on the event envelope and returned on replay.
+    /// Tape's own logic never reads key — not for partitioning, ordering, routing, or
+    /// deduplication. Append is at-least-once; supplying key does not make a retry safe.
     #[serde(default)]
     pub key: Option<String>,
     /// Event payload.

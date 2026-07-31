@@ -57,7 +57,8 @@ enum Command {
 struct AppendArgs {
     /// Topic name.
     topic: String,
-    /// Optional partitioning/idempotency key carried in the event envelope.
+    /// Opaque caller-supplied label carried on the event envelope and returned on replay.
+    /// Tape never reads key for partitioning, routing, or deduplication; append is at-least-once.
     #[arg(long)]
     key: Option<String>,
     /// JSON payload or a string payload when the value is not valid JSON.
