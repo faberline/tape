@@ -189,6 +189,26 @@ Unmeasured boundaries requiring headroom:
 
 See `### Disk-full runbook (#2573)` for remediation if disk capacity is exhausted.
 
+### 3g. Per-topic quotas (boundary)
+
+While `### 3f` bounds whole-instance disk capacity, per-topic quotas govern per-topic throughput, payload size, or event count limits.
+
+**Current State:**
+Admission control in Tape is strictly global-class-keyed across the instance:
+* **Boot wiring:** `AdmissionConfig::from_env("TAPE")?.controller("tape.read", "tape.write", "tape.admin")` (`src/bin/tape.rs`, ~line 955-975) registers exactly three fixed admission classes.
+* **Class selection:** The request-routing closure (`src/server.rs`, ~line 610-635) routes `/admin/` to `tape.admin`, `GET` to `tape.read`, and all other methods to `tape.write`.
+
+Every topic funnels into the same three buckets; there is no per-topic capacity slot anywhere in this closure today.
+
+**Boundary:**
+Per-topic quotas are a documented non-goal for Tape. Supporting per-topic quotas requires modifying `AdmissionController` in `libs/service-http/src/admission.rs` (~line 175) to support either (a) dynamically-named classes at runtime (e.g. `"tape.write.{topic}"`, requiring `AdmissionConfig` to accept classes not known at boot/env-parse time) or (b) a single class holding a per-key (per-topic) capacity map instead of one. Both mechanism options land in `libs/service-http`, which is an out-of-bounds shared library.
+
+**Operator-side Workaround:**
+Every existing control lever (the three admission classes, PVC size from `### 3f`, and retention policy) applies per Tape service instance, not per topic. The only way to give one topic a different effective quota than another today is to run a separate Tape CR (separate instance) per topic or topic group needing distinct limits, applying the sizing formulas in `### 3f` per instance.
+
+**Forward Pointer:**
+If per-topic rate or capacity limits become a priority, the change belongs in `libs/service-http`'s `AdmissionConfig`/`AdmissionController` (a per-key/wildcard capacity map), filed and owned as a shared-library update.
+
 ---
 
 ## 4. Environment variables
