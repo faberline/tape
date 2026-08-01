@@ -859,9 +859,10 @@ fn subscription(args: SubscriptionArgs) -> Result<()> {
 /// Ensure subscriptions from CR-declared topics. Called after journal/raft
 /// is ready but before listener starts. Parses TAPE_PROVISION_TOPICS (compact JSON
 /// array of {name, subscriptions}), ensures each subscription, and logs decisions
-/// (created|already_exists|noted_implicit). In HA mode, proposals route through raft;
-/// all members' ensure attempts converge safely on AlreadyExists tolerance.
-fn ensure_subscriptions(state: &tape::server::AppState) {
+/// (created|already_exists|noted_implicit). This function now durably persists via
+/// `apply_mutation` in single-node mode (#2568, Gap 1); HA-mode raft routing is a
+/// known, tracked gap (#3284), not yet implemented.
+async fn ensure_subscriptions(state: &tape::server::AppState) {
     let json_str = match std::env::var("TAPE_PROVISION_TOPICS") {
         Ok(s) => s,
         Err(std::env::VarError::NotPresent) => return, // No provisioning declared
@@ -892,13 +893,14 @@ fn ensure_subscriptions(state: &tape::server::AppState) {
 
         for subscription in &topic.subscriptions {
             // Attempt to create the subscription using the same path the API uses.
-            // In single-node mode, this is a direct journal mutation; in HA mode,
-            // this would be a raft proposal (but the serve path runs before the listener
-            // starts, so we use the in-process journal directly).
-            let journal_handle = state.journal_handle();
-            let mut journal = journal_handle.lock().expect("journal mutex poisoned");
-            match journal.create_subscription(&topic.name, subscription) {
-                Ok(_) => {
+            // In single-node mode, this durably persists via apply_mutation; in HA mode,
+            // this still mutates the local journal only, even when raft is attached (see #3284).
+            let command = tape::raft::TapeCommand::SubscriptionCreate {
+                topic: topic.name.clone(),
+                name: subscription.clone(),
+            };
+            match state.apply_mutation(command).await {
+                Ok(tape::raft::TapeOutcome::SubscriptionCreated(Ok(_))) => {
                     tracing::info!(
                         topic = %topic.name,
                         subscription = %subscription,
@@ -906,7 +908,9 @@ fn ensure_subscriptions(state: &tape::server::AppState) {
                         "subscription created (cr-provisioned)"
                     );
                 }
-                Err(tape::SubscriptionError::AlreadyExists { .. }) => {
+                Ok(tape::raft::TapeOutcome::SubscriptionCreated(Err(
+                    tape::SubscriptionError::AlreadyExists { .. },
+                ))) => {
                     tracing::info!(
                         topic = %topic.name,
                         subscription = %subscription,
@@ -914,12 +918,27 @@ fn ensure_subscriptions(state: &tape::server::AppState) {
                         "subscription already exists (idempotent)"
                     );
                 }
-                Err(e) => {
+                Ok(tape::raft::TapeOutcome::SubscriptionCreated(Err(error))) => {
                     tracing::warn!(
                         topic = %topic.name,
                         subscription = %subscription,
-                        error = %e,
+                        error = %error,
                         "subscription ensure failed; continuing with other subscriptions"
+                    );
+                }
+                Ok(_) => {
+                    tracing::warn!(
+                        topic = %topic.name,
+                        subscription = %subscription,
+                        "unexpected outcome for subscription_create"
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        topic = %topic.name,
+                        subscription = %subscription,
+                        error = %error,
+                        "durability failure during subscription ensure; continuing with other subscriptions"
                     );
                 }
             }
@@ -1138,7 +1157,7 @@ async fn serve_main(args: ServeArgs) -> Result<()> {
 
     // Ensure CR-declared subscriptions after journal/raft is ready but before listener starts.
     // This is idempotent and tolerates AlreadyExists errors, so repeated boots converge safely.
-    ensure_subscriptions(&state);
+    ensure_subscriptions(&state).await;
 
     let app = if peer_transport.is_some() {
         tape::server::router_without_raft_routes_with_admission(state.clone(), admission)
@@ -2096,6 +2115,36 @@ mod tests {
             cli_std::artifact::release_tag("tape", None, env!("CARGO_PKG_VERSION")),
             format!("tape@{}", env!("CARGO_PKG_VERSION"))
         );
+    }
+
+    /// `TAPE_PROVISION_TOPICS` is process-global env state and no other test in
+    /// this file touches it today.
+    #[tokio::test]
+    async fn ensure_subscriptions_persists_across_a_restart_in_single_node_mode() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store_path = dir.path().join("journal.json");
+        std::env::set_var(
+            "TAPE_PROVISION_TOPICS",
+            r#"[{"name":"orders","subscriptions":["billing"]}]"#,
+        );
+
+        let state = tape::server::AppState::new(
+            TapeJournal::default(),
+            Some(store_path.clone()),
+            8 * 1024 * 1024,
+        );
+        ensure_subscriptions(&state).await;
+        drop(state);
+        std::env::remove_var("TAPE_PROVISION_TOPICS");
+
+        let reloaded = load_journal(&store_path).expect("reload journal from disk");
+        let subs = reloaded.subscriptions("orders");
+        assert_eq!(
+            subs.len(),
+            1,
+            "subscription must survive a reload from disk"
+        );
+        assert_eq!(subs[0].name, "billing");
     }
 }
 // </HANDWRITE>

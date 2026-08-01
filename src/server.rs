@@ -284,7 +284,7 @@ impl AppState {
     /// and Raft-replicated apply semantics #3052 unified. This function's own
     /// `Err` is reserved for durability failures only (fsync/rename/write
     /// errors on the legacy path; the coordinator's `Err` on the WAL path).
-    async fn apply_mutation(&self, command: TapeCommand) -> std::io::Result<TapeOutcome> {
+    pub async fn apply_mutation(&self, command: TapeCommand) -> std::io::Result<TapeOutcome> {
         // #2573 test seam (#3052: hoisted out of `persist` to here so it
         // fires identically ahead of EVERY backend, including WAL mode, not
         // only the legacy whole-file path `persist` used to gate alone). See
