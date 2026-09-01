@@ -3,7 +3,8 @@
 Tape is Axiom's self-hosted stand-in for Google Cloud Pub/Sub. This directory
 is the product requirements document: what tape promises to publishers,
 subscribers, and operators, written down before the work items that deliver
-it. Epics are carved from these sections, not the other way round.
+it. Release Milestones are carved from these sections, not the other way
+round.
 
 ## How this directory is organised
 
@@ -11,15 +12,16 @@ it. Epics are carved from these sections, not the other way round.
   Each `## <title>` section is one promise.
 - A shipped promise names the [STATUS](../../STATUS.md) rows that measure it.
   A future promise names the [ROADMAP](../../ROADMAP.md) outcome that owns it
-  and ends with `Tracking: not assigned` until its epic exists.
-- A future section is written before its epic. When the epic is opened with
-  `/aw-grill-meta-to-wis`, the epic title is the section title and the section
-  heading gains ` (#<iid>)`. The epic's `## Requirements` are carved from the
-  section's Promise, so nothing is promised here that an epic cannot measure.
+  and ends with `Tracking: not assigned` until its release Milestone exists.
+- A future section is written before its release Milestone. When
+  `/aw-grill-meta-to-wis` binds the release, the section heading gains
+  ` (Milestone #<number>)` and the Milestone's assigned issues are carved
+  from the section's Promise, so nothing is promised here that the Milestone
+  cannot measure.
 - Every section carries the five parts `/aw-grill-me-to-meta` interviews
   for — Problem, Who, Promise, Non-goals, Neighbours — plus `Open:` lines for
   decisions `/aw-grill-meta-to-wis` still has to settle. An `Open:` line is a
-  question, not a default; the epic body answers it or the human does.
+  question, not a default; an assigned issue answers it or the human does.
 - A new capability area is a change to this index first and to the README
   `### Capability index` when the area ships.
 
@@ -52,6 +54,9 @@ Boundaries that every section inherits:
 
 | Horizon | Outcome | Section |
 |---|---|---|
+| H1 | `cluster-connect` | [operations.md](operations.md) § Cluster connect |
+| H1 | `kubernetes-delegated-authentication` | [operations.md](operations.md) § Kubernetes-delegated authentication |
+| H1 | `ungated-kubernetes-render` | [operations.md](operations.md) § Ungated Kubernetes render |
 | H1 | `subscription-ack-and-competing-subscribers` | [subscriptions.md](subscriptions.md) § Subscription ack and competing subscribers |
 | H1 | `push-subscriptions` | [subscriptions.md](subscriptions.md) § Push subscriptions |
 | H1 | `seek-snapshot-and-retention` | [retention-seek-and-snapshots.md](retention-seek-and-snapshots.md) § Seek, snapshot, and retention |
@@ -66,10 +71,14 @@ Boundaries that every section inherits:
 | H2 | `quotas-and-scale-transition` | [operations.md](operations.md) § Quotas and scale transition |
 
 H1 is ordered by dependency, not by value: `deterministic-failover` and
-`pubsub-rebaseline` first, because the subscription epic has to prove its
-lease table across a failover it can observe, and every other epic edits
-identity strings the rebaseline regenerates. Then the subscription epic, then
-push, seek, ordering, and filters, which all build on the lease table.
+`pubsub-rebaseline` first, because the subscription outcome has to prove its
+lease table across a failover it can observe, and every other outcome edits
+identity strings the rebaseline regenerates. Then the subscription outcome,
+then push, seek, ordering, and filters, which all build on the lease table.
+The three shared-library parity outcomes — `cluster-connect`,
+`kubernetes-delegated-authentication`, `ungated-kubernetes-render` — stand
+outside that chain: they align tape's wiring with lumen's and can land
+first, independently of it.
 
 ## Section index
 
@@ -92,6 +101,9 @@ push, seek, ordering, and filters, which all build on the lease table.
 | Multi-shard topology | replication-and-availability.md | outcome | ROADMAP `multi-shard-topology` |
 | Whole-journal backup and cold seed | operations.md | shipped, limited | STATUS `backup-to-sink`, `cold-seed-bootstrap`, `management-audit` |
 | Grants and bounded admission | operations.md | shipped, limited | STATUS `per-topic-authorization`, `flow-control-quotas` |
+| Cluster connect | operations.md | outcome | ROADMAP `cluster-connect` |
+| Kubernetes-delegated authentication | operations.md | outcome | ROADMAP `kubernetes-delegated-authentication` |
+| Ungated Kubernetes render | operations.md | outcome | ROADMAP `ungated-kubernetes-render` |
 | Kubernetes operator and direct install | operations.md | shipped, limited | STATUS `k8s-deployment-assets`, `k8s-operator`, `kind-cluster-acceptance`, `gke-zonal-acceptance` |
 | Health, metrics, traces, and drain | operations.md | shipped | STATUS `standard-operational-endpoints`, `otlp-tracing`, `bounded-stability-run` |
 | Local performance ceiling | operations.md | shipped | STATUS `local-performance-ceiling` |

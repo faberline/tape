@@ -37,7 +37,8 @@ gate. This area spans the README capabilities `backup-and-seed`,
   [subscriptions.md](subscriptions.md) § Subscription ack and competing
   subscribers); the default router keeps admission disabled and there is no
   per-topic or per-subscription quota (closed by Quotas and scale transition
-  below).
+  below); tape itself holds the token registry (closed by
+  § Kubernetes-delegated authentication below).
 - Non-goals: identity federation; the token registry is the shared library's.
 - Neighbours: none within the area.
 - Status rows: `per-topic-authorization`, `flow-control-quotas`.
@@ -88,6 +89,68 @@ gate. This area spans the README capabilities `backup-and-seed`,
 - Non-goals: any figure against Kafka, JetStream, or another broker.
 - Neighbours: none within the area.
 - Status rows: `local-performance-ceiling`.
+
+## Cluster connect
+
+- Problem: reaching a tape deployed on Kubernetes takes a hand-rolled
+  `kubectl port-forward` plus a manual token copy; `lumen connect` gets both
+  from the shared `cli_std::connect`, and tape has no such verb.
+- Who: operators and agents driving a cluster-deployed tape from outside the
+  cluster.
+- Promise: `tape connect` opens the port-forward lifecycle and resolves the
+  caller's credential through `cli_std::connect`, the same shape as
+  `lumen connect`: always built rather than behind a feature flag, prints the
+  local endpoint, and tears the forward down on exit.
+- Non-goals: a general kubectl replacement; multi-cluster context
+  management; any credential store of tape's own.
+- Open: what credential connect hands the caller once the token-registry
+  Secret retires under § Kubernetes-delegated authentication.
+- Neighbours: composes with § Kubernetes-delegated authentication — the
+  credential it resolves must be one the server's verification mode accepts.
+- Outcome: `cluster-connect`. Tracking: not assigned.
+
+## Kubernetes-delegated authentication
+
+- Problem: tape verifies bearer tokens against a static role-map registry it
+  must hold, mount, and reload; lumen holds no credentials at all —
+  TokenReview authenticates and SubjectAccessReview authorizes.
+- Who: operators issuing and rotating tokens today; platform teams that want
+  one identity system across the cluster.
+- Promise: with auth required in-cluster, tape authenticates each caller by
+  TokenReview and authorizes by SubjectAccessReview, mapping topic read,
+  write, and admin operations onto Kubernetes resource attributes the same
+  way lumen's `service_auth::k8s` mode does. Tape stops holding any
+  credential: the static token registry and its Secret retire. Probes stay
+  tokenless, and `--auth off` keeps every route tokenless.
+- Non-goals: an OAuth or OIDC surface of tape's own; identity federation; a
+  parallel static-registry mode kept as fallback.
+- Open: the auth story for a non-Kubernetes deployment once the registry
+  retires (today that leaves only `--auth off`); how the
+  subscription-scoped grants of [subscriptions.md](subscriptions.md)
+  § Subscription ack and competing subscribers map onto SubjectAccessReview
+  resource attributes.
+- Neighbours: supersedes the token-registry half of § Grants and bounded
+  admission; § Cluster connect must hand out a credential this mode accepts.
+- Outcome: `kubernetes-delegated-authentication`. Tracking: not assigned.
+
+## Ungated Kubernetes render
+
+- Problem: every `tape k8s` verb sits behind `--features operator`, so the
+  shipped serving binary answers with a rebuild-with-the-feature stub; lumen
+  ships manifest rendering unconditionally and gates only the reconcile
+  controller.
+- Who: operators rendering the CRD and manifests from the release binary.
+- Promise: `tape k8s crd` and the render verbs work in the default build,
+  with `service-k8s` linked unconditionally as `default-features = false,
+  features = ["render-only"]`, the same shape as lumen; only
+  `tape k8s operator run` — the reconcile controller and its kube-rs
+  client — stays behind the `operator` feature.
+- Non-goals: shipping the reconcile controller or a kube-rs client in the
+  default build.
+- Open: none.
+- Neighbours: extends § Kubernetes operator and direct install on the
+  packaging side; changes no rendered object.
+- Outcome: `ungated-kubernetes-render`. Tracking: not assigned.
 
 ## Quotas and scale transition
 
