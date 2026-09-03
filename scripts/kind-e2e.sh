@@ -9,6 +9,7 @@
 # Usage:
 #   bash apps/tape/scripts/kind-e2e.sh
 #   TAPE_KEEP_CLUSTER=1 bash apps/tape/scripts/kind-e2e.sh
+#   TAPE_E2E_PREBUILT_IMAGE=1 TAPE_E2E_IMAGE=ghcr.io/chrischeng-c4/tape@sha256:<digest> bash apps/tape/scripts/kind-e2e.sh
 #
 # Requirements: docker, kind, kubectl, curl, jq.
 # The default cleanup deletes only the named Kind cluster. Set
@@ -222,6 +223,13 @@ EOF
 }
 
 build_and_load_image() {
+  if [[ "${TAPE_E2E_PREBUILT_IMAGE:-0}" == "1" ]]; then
+    [[ "$IMAGE_TAG" == *@sha256:* ]] || {
+      echo "!! TAPE_E2E_PREBUILT_IMAGE=1 requires a digest-pinned TAPE_E2E_IMAGE" >&2
+      return 1
+    }
+    return 0
+  fi
   docker build -f "$TAPE_DIR/Dockerfile" -t "$IMAGE_TAG" "$REPO_ROOT"
   kind load docker-image "$IMAGE_TAG" --name "$CLUSTER_NAME"
 }
