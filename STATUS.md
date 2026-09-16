@@ -75,7 +75,7 @@ non-goals.
 | Streaming pull | `streaming-pull` | Not supported | None. | Unary pull and, later, push are the only delivery paths. | [Streaming pull](ROADMAP.md#streaming-pull) |
 | Exactly-once delivery | `exactly-once-delivery` | Not supported | None. | Delivery is at least once; consumers deduplicate on offset. | [Exactly-once delivery](ROADMAP.md#exactly-once-delivery) |
 | Export subscription | `export-subscriptions` | Not supported | None. | The whole-journal backup is disaster recovery, not an export. | [Export subscriptions](ROADMAP.md#export-subscriptions) |
-| Peer-broker benchmarks | `peer-broker-benchmarks` | Not supported | None. | Performance is measured only against tape's own baseline. | [Peer-broker benchmarks](ROADMAP.md#peer-broker-benchmarks) |
+| Durable JetStream competitive | `durable-jetstream-competitive` | Not supported | None. | Tape has no supported Tape-versus-JetStream result or win claim. The shipped local performance gate is not peer-comparison evidence. | [Durable JetStream competitive](ROADMAP.md#durable-jetstream-competitive) |
 | Pub/Sub wire compatibility | `pubsub-wire-compatibility` | Not supported | None. | Feature parity is offered only through tape's own h2c and OpenAPI API. | [Pub/Sub wire compatibility](ROADMAP.md#pubsub-wire-compatibility) |
 
 ## Evidence policy

@@ -87,6 +87,8 @@ storage-durable = { path = "../../libs/storage-durable" }
 # `e2e/tape_perf_gate.rs` call into it.
 tempfile = "3"
 reqwest = { workspace = true }
+async-nats = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 futures = { workspace = true }
@@ -119,6 +121,7 @@ backup = ["service-backup/http-client", "service-backup/s3"]
 # Optional shared OTLP trace export. No Tape-local exporter exists: this
 # enables service-http's stable identity, fallback, and W3C propagation path.
 otel = ["service-http/otlp"]
+jetstream-benchmark = ["dep:async-nats", "dep:futures"]
 # </HANDWRITE>
 
 # e2e cases — one file per case under `e2e/`, run by `cargo test -p tape`.
@@ -165,6 +168,14 @@ path = "e2e/durable_write_path.rs"
 [[test]]
 name = "http_transport"
 path = "e2e/http_transport.rs"
+
+[[test]]
+name = "jetstream_benchmark_contract"
+path = "e2e/jetstream_benchmark_contract.rs"
+
+[[test]]
+name = "tape_lumen_profile_contract"
+path = "e2e/tape_lumen_profile_contract.rs"
 
 [[test]]
 name = "long_running_stability"

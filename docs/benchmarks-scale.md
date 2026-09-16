@@ -1,11 +1,11 @@
 # tape — benchmark and scale posture
 
-Tape measures its own performance against its own baseline. The one live gate
-is the local regression budget below. The two peer-broker calibrations that
-followed it are kept here as history: their harnesses were deleted when the
-product stopped comparing itself to other brokers, and
-[ROADMAP.md](../ROADMAP.md#peer-broker-benchmarks) lists that comparison as a
-non-goal.
+Tape measures its own performance against its own baseline today. The one live
+gate is the local regression budget below. The planned
+[`durable-jetstream-competitive`](../ROADMAP.md#durable-jetstream-competitive)
+outcome adds one bounded comparison: single-replica persistent Tape WAL versus
+pinned NATS JetStream FileStore. It is not delivered and makes no win claim
+until its authorized GKE evidence exists.
 
 ## Benchmark standard
 
@@ -42,6 +42,35 @@ calibration source the gate checks itself against:
 cargo run -p tape --bin tape-bench -- run --events 1000 --format json
 ```
 
+## Planned durable JetStream profile
+
+The planned runner accepts `run --backend kind|gke --tape-image <digest>
+--nats-image <digest> --profile durable-v1 --output <empty-dir>`. It pins one
+amd64 NATS Server digest in version control and rejects mutable tags, a wrong
+architecture, a different digest, or a non-empty output directory.
+
+It will give Tape WAL and JetStream FileStore equal dedicated 2 vCPU, 8 GiB,
+50 GiB `pd-balanced` resources, with a separate fixed tester node. The formal
+matrix uses 128 B, 1 KiB, and 4 KiB payloads at 1, 16, and 64 clients. Each
+cell warms up, records five interleaved 60-second publish samples, and replays
+100,000 persisted messages.
+
+Every cell must survive forced pod deletion and restart without message loss,
+duplicates, or invalid messages. Pull acknowledgement correctness uses batches
+of 100. The runner records acknowledgement timing but does not compare it.
+
+Kind is the automatic preflight and must leave no cluster. GKE is an isolated
+Terraform proof only after explicit authorization. It must preserve evidence,
+destroy run-scoped resources, and prove provider cleanup. The unique
+`tape-vs-jetstream-report.v1.json` records the image digests, NATS version,
+resource and storage profile, workload seed, raw samples, recovery results,
+verdict, diagnostics, artifact SHA-256, and `cleanup.json`.
+
+Only a complete authorized GKE report may state the narrow result: correct
+recovery in every formal workload, Tape throughput at least JetStream, and
+Tape p99 no higher than JetStream. A failed cell is recorded as failed; the
+runner does not rerun it to hide the result.
+
 ## Scale vocabulary
 
 | class | meaning | current repo posture |
@@ -51,7 +80,7 @@ cargo run -p tape --bin tape-bench -- run --events 1000 --format json
 | Multi-hour soak | `apps/tape/scripts/soak.sh` | manual, not a gate |
 | Scale transition under load | replica-count change on GKE | not proven; see [ROADMAP.md](../ROADMAP.md#quotas-and-scale-transition) |
 
-## History: peer-broker calibrations (retired)
+## History: retired peer-broker calibrations
 
 These numbers were measured once and are not a product claim. The harnesses
 (`tape_vs_nats_jetstream.rs`, `tape_vs_kafka.rs`, the competitor feature

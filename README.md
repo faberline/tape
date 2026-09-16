@@ -31,9 +31,12 @@ behaviour.
   outbound HTTPS, not a hand-off to defer.
 - Tape does not speak the `pubsub.googleapis.com` wire protocol, does not
   serve gRPC, and does not offer streaming pull, exactly-once delivery, or
-  export subscriptions. It publishes no performance claim against Kafka,
-  JetStream, or any other broker; the only performance gate is tape against
-  its own baseline.
+  export subscriptions. Today it publishes no performance claim against Kafka,
+  JetStream, or any other broker; the only shipped performance gate is tape
+  against its own baseline. The planned
+  [`durable-jetstream-competitive`](ROADMAP.md#durable-jetstream-competitive)
+  outcome is a bounded Tape-versus-JetStream proof. It has no result and makes
+  no win claim until its authorized GKE evidence exists.
 
 ## Primary workflow
 

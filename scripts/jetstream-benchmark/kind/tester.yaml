@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: durable-v1-tester}
+spec:
+  backoffLimit: 0
+  template:
+    metadata: {labels: {app: tester}}
+    spec:
+      nodeSelector: {benchmark-role: tester}
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      restartPolicy: Never
+      containers:
+        - name: tester
+          image: TESTER_IMAGE
+          command: [tape-bench]
+          args: [jetstream-client, --target, TARGET, --profile, durable-v1, --phase, PHASE, --payload-bytes, "PAYLOAD_BYTES", --clients, "CLIENTS", --sample-index, "SAMPLE_INDEX", --tape-url, http://tape:7137, --nats-url, nats://nats:4222, --run-id, RUN_ID, --topic, TOPIC]

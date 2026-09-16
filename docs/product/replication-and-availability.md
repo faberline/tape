@@ -76,5 +76,6 @@ change.
 
 ## Non-goals in this area
 
-- None beyond the inherited boundaries; availability makes no claim against
-  another broker (`peer-broker-benchmarks`).
+- Availability evidence is not peer-performance evidence. The separate
+  `durable-jetstream-competitive` outcome owns the bounded durability
+  comparison and its GKE proof.

@@ -1,0 +1,23 @@
+{
+  "profile": "durable-v1",
+  "architecture": "amd64",
+  "payload_bytes": [128, 1024, 4096],
+  "clients": [1, 16, 64],
+  "warmup": true,
+  "publish_samples": 5,
+  "sample_seconds": 60,
+  "persisted_backlog_replay": 100000,
+  "subscription_batch": 100,
+  "ack_scoring": "correctness_only",
+  "storage": {
+    "tape": "WAL via serve --data-dir",
+    "jetstream": "FileStore on PVC"
+  },
+  "images": {
+    "nats_repository": "docker.io/library/nats",
+    "nats_version": "2.14.6",
+    "nats_architecture": "linux/amd64",
+    "nats_image": "docker.io/library/nats@sha256:190ba625ec25f1eab47e4215f064067a924e548a3428ae226ec23d32a122b03f",
+    "policy": "Tape image is caller supplied immutable amd64 digest; NATS is fixed above"
+  }
+}

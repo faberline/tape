@@ -17,6 +17,64 @@ enum Command {
     /// varying connection counts and report the durable throughput scaling
     /// ratio (highest sampled connection count vs. the lowest).
     Durable(DurableArgs),
+    /// Drive one fixed durable-v1 cell against a real Tape or JetStream endpoint.
+    #[cfg(feature = "jetstream-benchmark")]
+    JetstreamClient(JetstreamClientArgs),
+    /// Run the complete durable-v1 cell matrix and emit one JSON object per line.
+    #[cfg(feature = "jetstream-benchmark")]
+    JetstreamSuite(JetstreamSuiteArgs),
+}
+
+#[cfg(feature = "jetstream-benchmark")]
+#[derive(clap::Args)]
+struct JetstreamClientArgs {
+    #[arg(long, default_value = "durable-v1")]
+    profile: String,
+    #[arg(long, value_parser = ["normal", "recovery"], default_value = "normal")]
+    phase: String,
+    #[arg(long, value_parser = ["tape", "jetstream"], default_value = "jetstream")]
+    target: String,
+    #[arg(long, default_value = "http://127.0.0.1:7137")]
+    tape_url: String,
+    #[arg(long, default_value = "nats://127.0.0.1:4222")]
+    nats_url: String,
+    #[arg(long, default_value = "bench")]
+    topic: String,
+    #[arg(long, default_value = "manual")]
+    run_id: String,
+    #[arg(long)]
+    payload_bytes: usize,
+    #[arg(long)]
+    clients: usize,
+    #[arg(long)]
+    sample_index: usize,
+    #[arg(long, default_value_t = 1_000)]
+    operations_per_client: usize,
+    #[arg(long, default_value_t = 100_000)]
+    replay_events: usize,
+    #[arg(long, default_value_t = 60)]
+    sample_seconds: u64,
+}
+
+#[cfg(feature = "jetstream-benchmark")]
+#[derive(clap::Args)]
+struct JetstreamSuiteArgs {
+    #[arg(long, value_parser = ["tape", "jetstream", "both"])]
+    target: String,
+    #[arg(long, default_value = "durable-v1")]
+    profile: String,
+    #[arg(long, value_parser = ["normal", "recovery"], default_value = "normal")]
+    phase: String,
+    #[arg(long, default_value = "http://127.0.0.1:7137")]
+    tape_url: String,
+    #[arg(long, default_value = "nats://127.0.0.1:4222")]
+    nats_url: String,
+    #[arg(long, default_value = "bench")]
+    topic: String,
+    #[arg(long, default_value = "manual")]
+    run_id: String,
+    #[arg(long, default_value_t = 1_000)]
+    operations_per_client: usize,
 }
 
 #[derive(clap::Args)]
@@ -59,7 +117,72 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Run(args) => run(args),
         Command::Durable(args) => durable(args),
+        #[cfg(feature = "jetstream-benchmark")]
+        Command::JetstreamClient(args) => jetstream_client(args),
+        #[cfg(feature = "jetstream-benchmark")]
+        Command::JetstreamSuite(args) => jetstream_suite(args),
     }
+}
+
+#[cfg(feature = "jetstream-benchmark")]
+fn jetstream_suite(args: JetstreamSuiteArgs) -> Result<()> {
+    let cells = tape::bench::jetstream_client::matrix_cells(&args.phase).map_err(anyhow::Error::msg)?;
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
+    let mut failed: Option<String> = None;
+    for (payload_bytes, clients, sample_index) in cells {
+        let targets: &[&str] = if args.target == "both" { &["tape", "jetstream"] } else { &[args.target.as_str()] };
+        for target in targets {
+            let config = tape::bench::jetstream_client::ClientConfig { tape_url: args.tape_url.clone(), nats_url: args.nats_url.clone(), topic: format!("{}-{}-{}-{}", args.topic, payload_bytes, clients, sample_index), payload_bytes, clients, sample_index, operations_per_client: args.operations_per_client, replay_events: 100_000, sample_seconds: 60, profile: args.profile.clone(), phase: args.phase.clone(), run_id: args.run_id.clone() };
+            let record = if let Some(cause) = failed.clone() {
+                tape::bench::jetstream_client::incomplete_record(&config, if *target == "tape" { "tape" } else { "jetstream" }, cause)
+            } else {
+                match runtime.block_on(async { if *target == "tape" { tape::bench::jetstream_client::run_tape(config.clone()).await } else { tape::bench::jetstream_client::run(config.clone()).await } }) {
+                Ok(record) => record,
+                Err(error) => {
+                    let cause = format!("{} cell {} payload={} clients={} failed: {error:#}", target, sample_index, payload_bytes, clients);
+                    failed = Some(cause.clone());
+                    tape::bench::jetstream_client::incomplete_record(&config, if *target == "tape" { "tape" } else { "jetstream" }, cause)
+                }
+                }
+            };
+            println!("{}", serde_json::to_string(&record)?);
+        }
+    }
+    if let Some(cause) = failed {
+        bail!("durable-v1 suite incomplete: {cause}");
+    }
+    Ok(())
+}
+
+
+#[cfg(feature = "jetstream-benchmark")]
+fn jetstream_client(args: JetstreamClientArgs) -> Result<()> {
+    let config = tape::bench::jetstream_client::ClientConfig {
+        tape_url: args.tape_url,
+        nats_url: args.nats_url,
+        topic: args.topic,
+        payload_bytes: args.payload_bytes,
+        clients: args.clients,
+        sample_index: args.sample_index,
+        operations_per_client: args.operations_per_client,
+        replay_events: args.replay_events,
+        sample_seconds: args.sample_seconds,
+        profile: args.profile,
+        phase: args.phase,
+        run_id: args.run_id,
+    };
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let record = runtime.block_on(async {
+        if args.target == "tape" {
+            tape::bench::jetstream_client::run_tape(config).await
+        } else {
+            tape::bench::jetstream_client::run(config).await
+        }
+    })?;
+    println!("{}", serde_json::to_string(&record)?);
+    Ok(())
 }
 
 fn run(args: RunArgs) -> Result<()> {

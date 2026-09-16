@@ -84,10 +84,30 @@ gate. This area spans the README capabilities `backup-and-seed`,
 - Who: operators sizing a node; the repository, as a regression gate.
 - Promise: append, replay, and checkpoint stay inside the release-mode budget
   measured against tape's own baseline, durable append throughput rises with
-  connection count, and tape never claims a win over another broker.
-- Non-goals: any figure against Kafka, JetStream, or another broker.
-- Neighbours: none within the area.
+  connection count, and this local gate never claims a win over another broker.
+- Limits today: a local result is not Tape-versus-JetStream evidence.
+- Non-goals: a comparison against Kafka or another broker. The one planned
+  JetStream comparison has its own durability and GKE proof.
+- Neighbours: [Durable JetStream competitiveness](#durable-jetstream-competitiveness).
 - Status rows: `local-performance-ceiling`.
+
+## Durable JetStream competitiveness
+
+- Problem: Tape has no current peer-broker performance result that proves equal
+  durability, recovery, resources, throughput, and tail latency.
+- Who: operators who need a narrow, reproducible comparison before choosing a
+  single-replica persistent journal.
+- Promise: the ROADMAP outcome compares Tape WAL with pinned NATS JetStream
+  FileStore under matching resources. It may state a Tape win only after the
+  authorized GKE report proves recovery correctness for every workload, Tape
+  throughput at least equal to JetStream, and Tape p99 no higher than JetStream.
+- Limits today: this is unshipped. The local performance gate and historical
+  calibrations do not make a peer-performance claim.
+- Non-goals: HA comparison, Kafka comparison, a public protocol change, or an
+  acknowledgement-speed comparison.
+- Neighbours: [Local performance ceiling](#local-performance-ceiling) retains
+  the local regression gate; it is not evidence for this outcome.
+- Outcome: `durable-jetstream-competitive`. Tracking: Not assigned.
 
 ## Quotas and scale transition (Milestone #126)
 
@@ -109,6 +129,4 @@ gate. This area spans the README capabilities `backup-and-seed`,
 
 ## Non-goals in this area
 
-- `peer-broker-benchmarks`: the earlier NATS JetStream and Kafka
-  calibrations are history in `docs/benchmarks-scale.md`, not a claim.
 - `export-subscriptions`: backup is disaster recovery only.

@@ -134,6 +134,39 @@ follow once subscriptions carry per-message state.
   runbook path, and the deployment handoff page is no longer tracked.
 - Tracking: [Milestone #116](https://github.com/chrischeng-c4/axiom/milestone/116)
 
+### Durable JetStream competitive
+
+- ID: `durable-jetstream-competitive`
+- Outcome: A single-replica, disk-persistent Tape profile is compared with a
+  pinned amd64 NATS JetStream FileStore profile under the same resources. The
+  result can state that Tape meets or exceeds JetStream only when every formal
+  workload recovers correctly and the authorized GKE report shows Tape
+  throughput at least equal to JetStream and Tape p99 no higher than JetStream.
+- Boundary: This outcome compares only Tape WAL storage through planned
+  `serve --data-dir` and pinned NATS JetStream FileStore. It uses 128 B, 1 KiB,
+  and 4 KiB payloads with 1, 16, and 64 clients; each cell has warm-up then five
+  interleaved 60-second publish samples and a 100,000-message persisted-backlog
+  replay. Each side has a dedicated 2 vCPU, 8 GiB, 50 GiB `pd-balanced` node;
+  the tester has a separate fixed node. Pull acknowledgement correctness is
+  checked in batches of 100 after forced pod deletion and restart, but different
+  acknowledgement semantics and acknowledgement speed are not compared. This
+  does not add a public protocol, change Tape acknowledgement semantics, compare
+  Kafka or other brokers, or cover HA. The JetStream adapter is benchmark-only
+  and must not enter the Tape serving image or default release closure.
+- Completion evidence: The fixed command accepts only immutable, matching
+  amd64 Tape and NATS image digests, the version-controlled NATS pin, profile
+  `durable-v1`, and an empty output directory. It refuses mutable images,
+  unequal resources or workloads, memory storage, missing recovery, lost,
+  duplicate, or invalid messages, sample errors, missing reports, bad artifact
+  hashes, and uncertain cleanup. A Kind run is an automatic preflight and
+  removes its cluster. An explicitly authorized isolated Terraform GKE run
+  preserves evidence, destroys its run-scoped resources, and proves that its
+  cluster, disk, address, PVC, and bucket objects are gone. Each run writes a
+  unique `tape-vs-jetstream-report.v1.json` with its image digests, NATS
+  version, resources, storage profile, workload seed, raw samples, recovery
+  results, verdict, diagnostics, artifact SHA-256, and `cleanup.json`.
+- Tracking: Not assigned.
+
 ## Later outcomes
 
 ### Schema validation
@@ -225,13 +258,6 @@ follow once subscriptions carry per-message state.
 - Reason: Tape does not write messages to object storage or another service
   on a subscription's behalf. The whole-journal backup is disaster recovery,
   not an export path.
-
-### Peer-broker benchmarks
-
-- ID: `peer-broker-benchmarks`
-- Reason: Performance is measured only against tape's own release-mode
-  baseline. The earlier NATS JetStream and Kafka calibrations are recorded as
-  history in the benchmark notes and are not a product claim.
 
 ### Pub/Sub wire compatibility
 

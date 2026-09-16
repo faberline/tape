@@ -1,4 +1,3 @@
-
 // Operator render test: verify that spec.topics is threaded to TAPE_PROVISION_TOPICS env.
 
 #[cfg(all(test, feature = "operator"))]

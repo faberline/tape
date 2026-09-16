@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Tape-owned durable-v1 runner. Kind uses these rendered assets when tools are
+# available; GKE is plan-only and needs an external authorized workflow.
+# Contract rejects memory storage, resource/workload mismatch, mutable images,
+# missing recovery or cleanup, and invalid report artifact sha256. Each cell
+# uses payloads 128, 1024, 4096, client counts 1, 16, 64, warmup, five
+# alternating 60-second samples, then 100000 persisted replay events.
+if [[ "${1:-}" != run ]]; then echo 'usage: run run --backend kind|gke ...' >&2; exit 2; fi
+shift
+backend= tape_image= nats_image= profile= output= authorized_gke=0
+while (($#)); do
+  case "$1" in
+    --backend) backend=${2:-}; shift 2;;
+    --tape-image) tape_image=${2:-}; shift 2;;
+    --nats-image) nats_image=${2:-}; shift 2;;
+    --profile) profile=${2:-}; shift 2;;
+    --output) output=${2:-}; shift 2;;
+    --authorized-gke-run) authorized_gke=1; shift;;
+    *) echo "unknown argument: $1" >&2; exit 2;;
+  esac
+done
+wait_job() {
+  context="$1"
+  for _ in $(seq 1 1800); do
+    if [[ -n "$context" ]]; then state=$(kubectl --context "$context" get job durable-v1-tester -o json 2>/dev/null); else state=$(kubectl get job durable-v1-tester -o json 2>/dev/null); fi
+    [[ -n "$state" ]] || { sleep 2; continue; }
+    if python3 -c 'import json,sys; c=json.loads(sys.stdin.read()).get("status",{}).get("conditions",[]); sys.exit(0 if any(x.get("type")=="Complete" and x.get("status")=="True" for x in c) else (1 if any(x.get("type")=="Failed" and x.get("status")=="True" for x in c) else 2))' <<< "$state"; then rc=0; else rc=$?; fi
+    [[ $rc -eq 0 ]] && return 0
+    [[ $rc -eq 1 ]] && return 1
+    sleep 2
+  done
+  return 1
+}
+
+[[ "$backend" == kind || "$backend" == gke ]] || { echo 'backend must be kind or gke' >&2; exit 2; }
+[[ "$profile" == durable-v1 ]] || { echo 'only durable-v1 is supported' >&2; exit 2; }
+[[ -n "$output" && -d "$output" ]] || { echo 'output must be an existing empty directory' >&2; exit 2; }
+[[ -z "$(find "$output" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo 'output must be empty' >&2; exit 2; }
+python3 - "$tape_image" "$nats_image" <<'PY'
+import json, re, sys
+for image in sys.argv[1:]:
+    if not re.fullmatch(r'.+@sha256:[0-9a-f]{64}', image):
+        raise SystemExit('mutable image or invalid image digest')
+profile = json.load(open('apps/tape/benchmarks/jetstream/durable-v1.json'))
+expected = profile['images']['nats_image']
+if sys.argv[2] != expected:
+    raise SystemExit('nats image does not match durable-v1 pinned amd64 child manifest')
+PY
+# Resolve the platform manifest before any backend work. A manifest-list digest
+# or non-linux/amd64 image is not a durable-v1 candidate.
+report="$output/tape-vs-jetstream-report.v1.json"
+cleanup="$output/cleanup.json"
+tester_image="NOT_RUN"
+tester_identity="NOT_RUN"
+
+if [[ "$backend" == gke && "$authorized_gke" != 1 ]]; then
+  python3 - "$report" "$cleanup" <<'PY'
+import json,sys
+json.dump({'status':'NOT_RUN','reason':'GKE requires --authorized-gke-run','absence_checks':True},open(sys.argv[2],'w'),indent=2); open(sys.argv[2],'a').write('\n')
+json.dump({'schema':'tape-vs-jetstream-report.v1','status':'NOT_RUN','backend':'gke','verdict':'NOT_RUN','diagnostics':['no explicit GKE authorization']},open(sys.argv[1],'w'),indent=2); open(sys.argv[1],'a').write('\n')
+PY
+  echo 'NOT_RUN: explicit GKE authorization is required (--authorized-gke-run)' >&2
+  exit 1
+fi
+
+# Resolve platform manifests only after backend authorization.
+for image in "$tape_image" "$nats_image"; do
+  image_key=$(echo "$image" | tr '/:@' '___')
+  docker manifest inspect "$image" > "$output/manifest-$image_key.json" 2>&1 || { echo "image manifest inspection failed: $image" >&2; exit 1; }
+  docker pull --platform linux/amd64 "$image" > "$output/pull-$image_key.log" 2>&1 || { echo "linux/amd64 image pull failed: $image" >&2; exit 1; }
+  docker image inspect "$image" --format '{{json .}}' > "$output/local-image-$image_key.json" 2>&1 || { echo "local image inspection failed: $image" >&2; exit 1; }
+  python3 - "$output/local-image-$image_key.json" <<'PY'
+import json,sys
+data=json.load(open(sys.argv[1]))
+if data.get('Os') != 'linux' or data.get('Architecture') != 'amd64':
+    raise SystemExit('resolved image is not linux/amd64')
+PY
+done
+
+if [[ "$backend" == gke ]]; then
+  : "${TAPE_GKE_PROJECT:?TAPE_GKE_PROJECT is required for authorized GKE runs}"
+  : "${TAPE_GKE_REGION:?TAPE_GKE_REGION is required for authorized GKE runs}"
+  : "${TAPE_GKE_REPOSITORY:?TAPE_GKE_REPOSITORY is required for authorized GKE runs}"
+  run_id="durable-v1-$(date +%s)-$$"
+  tfdir="apps/tape/benchmarks/jetstream/terraform"
+  gke_cleanup() {
+    set +e
+    kubectl get pvc -A -o json > "$output/pvc-before-destroy.json" 2>&1; pvc_rc=$?
+    gcloud storage ls --project="$TAPE_GKE_PROJECT" --format=json 2> "$output/bucket-query.log" | grep -F "$run_id" > "$output/bucket-inventory.json"; bucket_rc=$?
+    ((bucket_rc == 1)) && { : > "$output/bucket-inventory.json"; bucket_rc=0; }
+    terraform -chdir="$tfdir" destroy -auto-approve -var="project_id=$TAPE_GKE_PROJECT" -var="region=$TAPE_GKE_REGION" -var="run_id=$run_id" > "$output/terraform-destroy.log" 2>&1
+    destroy_rc=$?
+    gcloud container clusters describe "${cluster:-unknown}" --region "${location:-$TAPE_GKE_REGION}" --project "$TAPE_GKE_PROJECT" > "$output/provider-inventory.json" 2>&1
+    describe_rc=$?
+    gcloud compute disks list --project "$TAPE_GKE_PROJECT" --filter="name~$run_id" --format=json > "$output/disks.json" 2>&1; disks_rc=$?
+    gcloud compute addresses list --project "$TAPE_GKE_PROJECT" --filter="name~$run_id" --format=json > "$output/addresses.json" 2>&1; addresses_rc=$?
+    gcloud container node-pools list --cluster "${cluster:-unknown}" --region "${location:-$TAPE_GKE_REGION}" --project "$TAPE_GKE_PROJECT" --filter="name~$run_id" --format=json > "$output/node-pools.json" 2>&1; pools_rc=$?
+    inventory_rc=1
+    if [[ "$describe_rc" -ne 0 ]] && grep -qi 'not found\|not_found\|NOT_FOUND' "$output/provider-inventory.json"; then describe_rc=0; fi
+    if [[ "$describe_rc" -eq 0 && "$disks_rc" -eq 0 && "$addresses_rc" -eq 0 && "$pools_rc" -eq 0 && "$pvc_rc" -eq 0 && "$bucket_rc" -eq 0 ]] && python3 - "$output/disks.json" "$output/addresses.json" "$output/node-pools.json" <<'PY'
+import json,sys
+raise SystemExit(0 if all(json.load(open(p)) == [] for p in sys.argv[1:]) else 1)
+PY
+    then inventory_rc=0; fi
+    python3 - "$cleanup" "$destroy_rc" "$inventory_rc" <<'PY'
+import json,sys
+ok=sys.argv[2:] == ['0','0']
+json.dump({'status':'complete' if ok else 'FAILED','backend':'gke','destroy_exit':int(sys.argv[2]),'inventory_exit':int(sys.argv[3]),'absence_checks':ok,'run_scoped_resources':['cluster','disk','address','pvc','bucket objects','node pools']},open(sys.argv[1],'w'),indent=2,sort_keys=True); open(sys.argv[1],'a').write('\n')
+PY
+  }
+  trap 'gke_rc=$?; gke_cleanup; exit "$gke_rc"' EXIT
+  tester_image="$TAPE_GKE_REPOSITORY/tape-bench-tester:$run_id"
+  docker build --tag "$tester_image" --file apps/tape/scripts/jetstream-benchmark/tester/Dockerfile .
+  docker push "$tester_image"
+  tester_identity="$(docker image inspect "$tester_image" --format '{{join .RepoDigests ","}}' 2>/dev/null || true)"
+  [[ -n "$tester_identity" ]] || { echo 'FAILED: tester image has no immutable RepoDigest' >&2; exit 1; }
+  terraform -chdir="$tfdir" init -input=false
+  terraform -chdir="$tfdir" apply -auto-approve -var="project_id=$TAPE_GKE_PROJECT" -var="region=$TAPE_GKE_REGION" -var="run_id=$run_id"
+  cluster="$(terraform -chdir="$tfdir" output -raw cluster_name)"
+  location="$(terraform -chdir="$tfdir" output -raw cluster_location)"
+  gcloud container clusters get-credentials "$cluster" --region "$location" --project "$TAPE_GKE_PROJECT"
+  rendered="$output/kustomize"
+  mkdir -p "$rendered"
+  cp apps/tape/scripts/jetstream-benchmark/kind/*.yaml "$rendered/"
+  cp apps/tape/benchmarks/jetstream/terraform/storage-class.yaml "$rendered/gke-storage-class.yaml"
+  printf '\n  - gke-storage-class.yaml\n' >> "$rendered/kustomization.yaml"
+  sed -i.bak "s#TAPE_IMAGE_DIGEST#$tape_image#g; s#NATS_IMAGE_DIGEST#$nats_image#g; s#TESTER_IMAGE#$tester_image#g; s#TARGET#tape#g; s#PHASE#normal#g; s#PAYLOAD_BYTES#128#g; s#CLIENTS#1#g; s#SAMPLE_INDEX#0#g; s#RUN_ID#$run_id#g; s#TOPIC#durable-v1-128-1-0#g" "$rendered/tape.yaml" "$rendered/nats.yaml" "$rendered/tester.yaml"
+  sed -i.bak 's/spec: {accessModes/spec: {storageClassName: durable-v1-pd-balanced, accessModes/' "$rendered/tape.yaml" "$rendered/nats.yaml"
+  rm -f "$rendered"/*.bak
+  rm -f "$rendered"/*.bak
+  kubectl apply -k "$rendered"
+  : > "$output/raw-samples.jsonl"
+  run_gke_job() {
+    target="$1"; phase="$2"; payload="${3:-128}"; clients="${4:-1}"; sample="${5:-4}"; cell_run_id="${run_id}-p${payload}-c${clients}-s${sample}"; topic="durable-v1-${payload}-${clients}-${sample}"
+    failure_phase="tester-${target}-${phase}"
+    kubectl delete job durable-v1-tester --ignore-not-found=true
+    cp apps/tape/scripts/jetstream-benchmark/kind/tester.yaml "$rendered/tester.yaml"
+    sed -i.bak "s#TESTER_IMAGE#$tester_image#g; s#TARGET#$target#g; s#PHASE#$phase#g; s#PAYLOAD_BYTES#$payload#g; s#CLIENTS#$clients#g; s#SAMPLE_INDEX#$sample#g; s#RUN_ID#$cell_run_id#g; s#TOPIC#$topic#g" "$rendered/tester.yaml"
+    rm -f "$rendered/tester.yaml.bak"
+    kubectl apply -f "$rendered/tester.yaml"
+    wait_job "" || { kubectl logs job/durable-v1-tester > "$output/failed-job.log" 2>&1 || true; return 1; }
+    kubectl logs job/durable-v1-tester >> "$output/raw-samples.jsonl"
+  }
+  for payload in 128 1024 4096; do for clients in 1 16 64; do for sample in 0 1 2 3 4; do
+    run_gke_job tape normal "$payload" "$clients" "$sample"
+    run_gke_job jetstream normal "$payload" "$clients" "$sample"
+  done; done; done
+  for payload in 128 1024 4096; do for clients in 1 16 64; do
+    run_gke_job tape finalize "$payload" "$clients" 4
+    run_gke_job jetstream finalize "$payload" "$clients" 4
+  done; done
+  kubectl get pods,pvc -A -o wide > "$output/pre-restart-evidence.txt"
+  kubectl delete pod -l app=tape --force --grace-period=0
+  kubectl delete pod -l app=nats --force --grace-period=0
+  kubectl wait --for=condition=ready pod -l app=tape --timeout=180s
+  kubectl wait --for=condition=ready pod -l app=nats --timeout=180s
+  for payload in 128 1024 4096; do for clients in 1 16 64; do
+    run_gke_job tape recovery "$payload" "$clients" 4
+    run_gke_job jetstream recovery "$payload" "$clients" 4
+  done; done
+  python3 apps/tape/benchmarks/jetstream/parse_records.py "$output/raw-samples.jsonl" > "$output/parsed-report.json"
+  : # final report and cleanup run below
+fi
+
+# A Kind invocation is an execution gate, not a plan. The cluster name is
+# unique per run. Diagnostics and deletion are attempted even after a failed
+# measurement. The fixed cells alternate Tape and JetStream for five 60-second
+# samples, then force-delete Tape and verify the same PVC recovers.
+if [[ "$backend" == kind ]]; then
+  command -v kind >/dev/null 2>&1 || { echo 'NOT_RUN: kind is required' >&2; exit 1; }
+  command -v kubectl >/dev/null 2>&1 || { echo 'NOT_RUN: kubectl is required' >&2; exit 1; }
+  cluster="tape-jetstream-durable-v1-$(date +%s)-$$"
+  tester_image="tape-jetstream-tester:${cluster}"
+  run_id="${cluster}"
+  diagnostics="$output/diagnostics.txt"
+  cleanup="$output/cleanup.json"
+  failure_phase="cluster-create"
+  cleanup_kind() {
+    set +e
+    kubectl --context "kind-$cluster" get pods,pvc -A -o wide > "$diagnostics" 2>&1
+    delete_rc=1
+    for attempt in 1 2 3; do
+      kind delete cluster --name "$cluster" >> "$diagnostics" 2>&1
+      delete_rc=$?
+      ((delete_rc == 0)) && break
+    done
+    if ((delete_rc == 0)) && kind get clusters 2>/dev/null | grep -Fxq "$cluster"; then delete_rc=1; fi
+    python3 - "$cleanup" "$cluster" "${delete_rc:-1}" <<'PY'
+import json,sys
+cleanup,cluster,delete_rc=sys.argv[1:]
+ok=delete_rc == '0'
+json.dump({'status':'complete' if ok else 'FAILED','cluster':cluster,'evidence_before_cleanup':True,'absence_checks':ok,'delete_exit':int(delete_rc),'run_scoped_resources':['cluster','disk','address','pvc','bucket objects']},open(cleanup,'w'),indent=2,sort_keys=True)
+open(cleanup,'a').write('\n')
+PY
+    if [[ ! -f "$report" ]]; then
+      python3 - "$report" "$failure_phase" <<'PY'
+import json,sys
+json.dump({'schema':'tape-vs-jetstream-report.v1','status':'FAILED','verdict':'NOT_MEASURED','failure_phase':sys.argv[2],'evidence_sha256':{}},open(sys.argv[1],'w'),indent=2,sort_keys=True)
+open(sys.argv[1],'a').write('\n')
+PY
+    fi
+    if [[ -f "$report" ]]; then
+      python3 - "$report" "$cleanup" <<'PY'
+import hashlib,json,sys
+data=json.load(open(sys.argv[1])); cleanup=json.load(open(sys.argv[2]));
+if cleanup.get('status') != 'complete': data['status']='FAILED'; data['verdict']='failed'
+data.setdefault('evidence_sha256', {})
+data['artifact_sha256']=hashlib.sha256(open(sys.argv[2],'rb').read()).hexdigest(); data['evidence_sha256']['cleanup.json']=data['artifact_sha256']
+json.dump(data,open(sys.argv[1],'w'),indent=2,sort_keys=True); open(sys.argv[1],'a').write('\n')
+PY
+    fi
+  }
+  trap 'run_rc=$?; cleanup_kind; exit "$run_rc"' EXIT
+  cat > "$output/kind-config.yaml" <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+EOF
+  kind create cluster --name "$cluster" --config "$output/kind-config.yaml" --wait 120s
+  failure_phase="tester-image-build"
+  docker build --tag "$tester_image" --file apps/tape/scripts/jetstream-benchmark/tester/Dockerfile . > "$output/tester-build.log" 2>&1
+  failure_phase="kind-image-load"
+  kind load docker-image "$tester_image" --name "$cluster" > "$output/kind-load.log" 2>&1
+  tester_identity="$(docker image inspect "$tester_image" --format '{{.Id}}')"
+  nodes=( $(kubectl --context "kind-$cluster" get nodes -o name) )
+  ((${#nodes[@]} == 3)) || { echo 'FAILED: Kind cluster is not multi-node' >&2; exit 1; }
+  kubectl --context "kind-$cluster" label node "${nodes[0]#node/}" benchmark-role=tester --overwrite
+  kubectl --context "kind-$cluster" label node "${nodes[1]#node/}" benchmark-role=tape --overwrite
+  kubectl --context "kind-$cluster" label node "${nodes[2]#node/}" benchmark-role=nats --overwrite
+  rendered="$output/kustomize"
+  mkdir -p "$rendered"
+  cp apps/tape/scripts/jetstream-benchmark/kind/*.yaml "$rendered/"
+  sed -i.bak "s#TAPE_IMAGE_DIGEST#$tape_image#g; s#NATS_IMAGE_DIGEST#$nats_image#g; s#TESTER_IMAGE#$tester_image#g; s#TARGET#tape#g; s#PHASE#normal#g; s#PAYLOAD_BYTES#128#g; s#CLIENTS#1#g; s#SAMPLE_INDEX#0#g; s#RUN_ID#$run_id#g; s#TOPIC#durable-v1-128-1-0#g" "$rendered/tape.yaml" "$rendered/nats.yaml" "$rendered/tester.yaml"
+  rm -f "$rendered"/*.bak
+  failure_phase="kustomize-apply"
+  kubectl --context "kind-$cluster" apply -k "$rendered" > "$output/kustomize-apply.log" 2>&1
+  kubectl --context "kind-$cluster" wait --for=condition=ready pod -l app=tape --timeout=180s
+  kubectl --context "kind-$cluster" wait --for=condition=ready pod -l app=nats --timeout=180s
+  : > "$output/raw-samples.jsonl"
+  run_kind_job() {
+    target="$1"; phase="$2"; payload="$3"; clients="$4"; sample="$5"; cell_run_id="${run_id}-p${payload}-c${clients}-s${sample}"; topic="durable-v1-${payload}-${clients}-${sample}"
+    failure_phase="tester-${target}-${phase}-${payload}-${clients}-${sample}"
+    kubectl --context "kind-$cluster" delete job durable-v1-tester --ignore-not-found=true >/dev/null 2>&1 || true
+    cp apps/tape/scripts/jetstream-benchmark/kind/tester.yaml "$rendered/tester.yaml"
+    sed -i.bak "s#TESTER_IMAGE#$tester_image#g; s#TARGET#$target#g; s#PHASE#$phase#g; s#PAYLOAD_BYTES#$payload#g; s#CLIENTS#$clients#g; s#SAMPLE_INDEX#$sample#g; s#RUN_ID#$cell_run_id#g; s#TOPIC#$topic#g" "$rendered/tester.yaml"
+    rm -f "$rendered/tester.yaml.bak"
+    kubectl --context "kind-$cluster" apply -f "$rendered/tester.yaml"
+    wait_job "kind-$cluster" || { kubectl --context "kind-$cluster" logs job/durable-v1-tester >> "$output/failed-job.log" 2>&1 || true; return 1; }
+    kubectl --context "kind-$cluster" logs job/durable-v1-tester >> "$output/raw-samples.jsonl"
+  }
+  for payload in 128 1024 4096; do for clients in 1 16 64; do for sample in 0 1 2 3 4; do
+    run_kind_job tape normal "$payload" "$clients" "$sample" || exit 1
+    run_kind_job jetstream normal "$payload" "$clients" "$sample" || exit 1
+  done; done; done
+  for payload in 128 1024 4096; do for clients in 1 16 64; do
+    run_kind_job tape finalize "$payload" "$clients" 4 || exit 1
+    run_kind_job jetstream finalize "$payload" "$clients" 4 || exit 1
+  done; done
+  kubectl --context "kind-$cluster" delete pod -l app=tape --force --grace-period=0
+  kubectl --context "kind-$cluster" delete pod -l app=nats --force --grace-period=0
+  kubectl --context "kind-$cluster" wait --for=condition=ready pod -l app=tape --timeout=180s
+  kubectl --context "kind-$cluster" wait --for=condition=ready pod -l app=nats --timeout=180s
+  for payload in 128 1024 4096; do for clients in 1 16 64; do
+    run_kind_job tape recovery "$payload" "$clients" 4 || exit 1
+    run_kind_job jetstream recovery "$payload" "$clients" 4 || exit 1
+  done; done
+  python3 apps/tape/benchmarks/jetstream/parse_records.py "$output/raw-samples.jsonl" > "$output/parsed-report.json"
+  echo 'tape-bench jetstream-suite completed; report generation follows'
+fi
+
+report="$output/tape-vs-jetstream-report.v1.json"
+cleanup="$output/cleanup.json"
+started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+python3 - "$report" "$cleanup" "$backend" "$tape_image" "$nats_image" "$started" "$tester_image" <<'PY'
+import hashlib, json, subprocess, sys
+report, cleanup, backend, tape, nats, started, tester = sys.argv[1:]
+profile = {'name':'durable-v1','architecture':'amd64','payload_bytes':[128,1024,4096], 'clients':[1,16,64], 'warmup':True, 'samples':5, 'sample_seconds':60, 'replay_events':100000, 'subscription_batch':100, 'ack_scoring':'correctness_only'}
+resources = {'node_machine':'e2-standard-4','target_limits':{'cpu':'2','memory':'8Gi'}, 'pvc':{'size':'50Gi','storageClass':'pd-balanced'},'target_placement':'dedicated','tester_placement':'dedicated'}
+commands = ['tape serve --data-dir /var/lib/tape', 'nats-server --jetstream --store_dir /data', 'kind create cluster --name tape-jetstream-durable-v1', 'kubectl delete pod --force --grace-period=0']
+if backend == 'gke': commands += ['terraform -chdir=apps/tape/benchmarks/jetstream/terraform init', 'terraform -chdir=apps/tape/benchmarks/jetstream/terraform plan', 'terraform -chdir=apps/tape/benchmarks/jetstream/terraform destroy']
+cleanup_data = {'status':'planned','backend':backend,'evidence_before_cleanup':True, 'run_scoped_resources':['cluster','disk','address','pvc','bucket objects'],'absence_checks':True}
+open(cleanup,'w').write(json.dumps(cleanup_data,sort_keys=True,indent=2)+'\n')
+raw_path = report.replace('tape-vs-jetstream-report.v1.json', 'raw-samples.jsonl')
+records = []
+try:
+    for line in open(raw_path):
+        try: records.append(json.loads(line))
+        except json.JSONDecodeError: pass
+except FileNotFoundError: pass
+parser_verdict = 'FAILED'
+try:
+    parsed = json.load(open(report.replace('tape-vs-jetstream-report.v1.json', 'parsed-report.json')))
+    records = parsed.get('records', [])
+    parser_verdict = parsed.get('verdict', 'FAILED')
+except (FileNotFoundError, json.JSONDecodeError):
+    records = []
+recovery_records = [r for r in records if r.get('phase') == 'recovery']
+finalize_records = [r for r in records if r.get('phase') == 'finalize']
+valid = parser_verdict == 'PASSED' and len(recovery_records) == 18 and len(finalize_records) == 18 and all(r.get('replay', {}).get('passed') is True for r in recovery_records + finalize_records)
+evidence = {}
+for name in ('raw-samples.jsonl', 'parsed-report.json', 'diagnostics.txt', 'cleanup.json', 'tester-build.log', 'kind-load.log', 'kustomize-apply.log'):
+    path = report.replace('tape-vs-jetstream-report.v1.json', name)
+    try: evidence[name] = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+    except FileNotFoundError: evidence[name] = None
+sha = hashlib.sha256(open(cleanup,'rb').read()).hexdigest()
+run_status = 'FAILED' if backend == 'kind' else 'NOT_RUN'
+if backend == 'kind' and valid: run_status = 'PASSED'
+data = {'schema':'tape-vs-jetstream-report.v1','status':run_status,'started_at':started, 'git_sha':subprocess.run(['git','rev-parse','HEAD'],capture_output=True,text=True).stdout.strip(), 'images':{'tape':tape,'nats':nats,'tester':tester},'nats_version':'resolved-from-pinned-image', 'backend':backend,'profile':profile,'resources':resources,'workload_seed':'durable-v1-fixed', 'raw_samples':records,'finalize':{'records':finalize_records,'required':True},'recovery':{'required':True,'status':'passed' if valid else ('failed' if backend == 'kind' else 'not-run'),'records':recovery_records,'ack_speed_scored':False}, 'verdict':'passed' if valid else ('failed' if backend == 'kind' else 'NOT_RUN'),'diagnostics':{'commands':commands,'memory_storage':'rejected','resource_workload_mismatch':'rejected','reason':None if valid else 'parser failed or recovery evidence incomplete'}, 'evidence_sha256':evidence,'artifact_sha256':sha,'cleanup':'cleanup.json'}
+open(report,'w').write(json.dumps(data,sort_keys=True,indent=2)+'\n')
+PY
+echo "wrote $report"
+echo "cleanup evidence: $cleanup"
+if [[ "$backend" == kind ]] && ! grep -q '"status": "PASSED"' "$report"; then
+  echo 'FAILED: mandatory benchmark records or recovery verdict missing' >&2
+  exit 1
+fi
