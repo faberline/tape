@@ -9,7 +9,9 @@ use std::net::TcpListener;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use futures::{StreamExt, TryStreamExt};
+use tape::TapeEvent;
 
 // Each observed state transition receives this budget when its wait starts.
 // Never pass an earlier phase's deadline into a later health, election, or
@@ -486,7 +488,16 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
                 let response = append(&client, &base, n as i64).await;
                 let status = response.status();
                 anyhow::ensure!(status.is_success(), "append {n} via {base}: {status}");
-                Ok::<_, anyhow::Error>(())
+                let event: TapeEvent = response
+                    .json()
+                    .await
+                    .with_context(|| format!("append {n} via {base}: decode TapeEvent"))?;
+                anyhow::ensure!(
+                    event.payload.get("n").and_then(serde_json::Value::as_i64) == Some(n as i64),
+                    "append {n} via {base}: payload.n mismatch, got {:?}",
+                    event.payload,
+                );
+                Ok::<_, anyhow::Error>((n as i64, event))
             }
         })
         .buffer_unordered(CONCURRENCY)
@@ -507,6 +518,31 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
         }
         panic!("phase=concurrent-ingress append failure: {error:#}");
     }
+
+    let appended_events = writes.unwrap();
+    assert_eq!(
+        appended_events.len(),
+        EVENTS,
+        "must have received exactly {EVENTS} append responses",
+    );
+    let mut response_identities = std::collections::HashSet::new();
+    for (n, event) in &appended_events {
+        assert_eq!(
+            event.payload.get("n").and_then(serde_json::Value::as_i64),
+            Some(*n),
+            "typed returned event payload must have submitted payload.n value",
+        );
+        let identity = (event.topic.clone(), event.offset);
+        assert!(
+            response_identities.insert(identity.clone()),
+            "duplicate response event identity observed: {identity:?}",
+        );
+    }
+    assert_eq!(
+        response_identities.len(),
+        EVENTS,
+        "append responses must contain {EVENTS} distinct (topic, offset) identities",
+    );
 
     let expected: Vec<i64> = (0..EVENTS).map(|event| event as i64).collect();
     for base in &base_urls {
