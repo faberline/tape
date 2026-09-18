@@ -177,6 +177,14 @@ async fn replayed_ns(client: &reqwest::Client, base: &str) -> Result<Vec<i64>, S
     let events = body["events"]
         .as_array()
         .ok_or_else(|| "replay response has no events array".to_string())?;
+    let mut seen_ids = std::collections::HashSet::new();
+    for event in events {
+        if let Some(id) = event.get("id").and_then(|v| v.as_str()) {
+            if !seen_ids.insert(id) {
+                return Err(format!("duplicate envelope event id observed: {id}"));
+            }
+        }
+    }
     events
         .iter()
         .map(|event| {
@@ -188,29 +196,62 @@ async fn replayed_ns(client: &reqwest::Client, base: &str) -> Result<Vec<i64>, S
 }
 
 fn event_diagnostic(events: &[i64]) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut duplicates = Vec::new();
+    for &id in events {
+        if !seen.insert(id) {
+            duplicates.push(id);
+        }
+    }
     format!(
-        "observed_count={}, first={:?}, last={:?}",
+        "observed_count={}, first={:?}, last={:?}, duplicates_count={}, duplicate_samples={:?}",
         events.len(),
         events.first(),
         events.last(),
+        duplicates.len(),
+        duplicates.iter().take(5).copied().collect::<Vec<_>>(),
     )
 }
 
-/// Poll one replica until it holds every expected event. A replica starts
+/// Poll one replica until it holds every expected event with exact count,
+/// exact expected event set, and no duplicate event IDs. A replica starts
 /// with its own budget, so an earlier replica's catch-up cannot spend time
 /// from a later one.
 async fn wait_replayed(client: &reqwest::Client, base: &str, expected: &[i64], phase: &str) {
     let deadline = phase_deadline();
     let mut observed = Vec::new();
+    let expected_set: std::collections::BTreeSet<i64> = expected.iter().copied().collect();
     loop {
         let last_error = match replayed_ns(client, base).await {
             Ok(events) => {
-                let has_all = expected.iter().all(|event| events.contains(event));
+                let mut seen = std::collections::HashSet::new();
+                let mut duplicates = Vec::new();
+                for &id in &events {
+                    if !seen.insert(id) {
+                        duplicates.push(id);
+                    }
+                }
+                let observed_set: std::collections::BTreeSet<i64> = events.iter().copied().collect();
+                let exact_count = events.len() == expected.len();
+                let exact_set = observed_set == expected_set;
+                let no_duplicates = duplicates.is_empty();
+
                 observed = events;
-                if has_all {
+                if exact_count && exact_set && no_duplicates {
                     return;
                 }
-                None
+                if !no_duplicates {
+                    Some(format!("duplicate event IDs: {duplicates:?}"))
+                } else if !exact_count {
+                    Some(format!(
+                        "count mismatch: observed={}, expected={}",
+                        observed.len(),
+                        expected.len()
+                    ))
+                } else {
+                    let missing: Vec<i64> = expected_set.difference(&observed_set).copied().collect();
+                    Some(format!("missing expected event IDs: {missing:?}"))
+                }
             }
             Err(error) => Some(error),
         };
@@ -386,6 +427,27 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
             "concurrent-ingress replication convergence",
         )
         .await;
+
+        let replayed = replayed_ns(&client, base).await.expect("replay after convergence");
+        assert_eq!(
+            replayed.len(),
+            expected.len(),
+            "replica {base} must have exact event count",
+        );
+        let mut seen = std::collections::HashSet::new();
+        for id in &replayed {
+            assert!(
+                seen.insert(*id),
+                "replica {base} has duplicate event ID {id}",
+            );
+        }
+        let replayed_set: std::collections::BTreeSet<i64> = replayed.into_iter().collect();
+        let expected_set: std::collections::BTreeSet<i64> = expected.iter().copied().collect();
+        assert_eq!(
+            replayed_set,
+            expected_set,
+            "replica {base} must match exact expected event set",
+        );
     }
 }
 // HANDWRITE-END
