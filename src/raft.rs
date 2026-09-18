@@ -23,7 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use axum::Router;
@@ -48,7 +48,7 @@ pub const SNAPSHOT_EVERY: u64 = 1024;
 /// resolved by the proposing handler BEFORE the command is encoded, never
 /// inside [`TapeStateMachine::apply`], so every replica computes the
 /// identical value.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TapeCommand {
     Append {
         topic: String,
@@ -120,6 +120,8 @@ pub(crate) struct JournalSnapshot {
     journal: TapeJournal,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     completed_proposals: Vec<(ProposalId, TapeOutcome)>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    completed_commands: Vec<(ProposalId, TapeCommand)>,
 }
 
 /// Serialize the SAME whole-journal [`JournalSnapshot`] shape
@@ -133,6 +135,7 @@ pub fn snapshot_bytes(journal: &Arc<Mutex<TapeJournal>>, up_to: Index) -> Result
         up_to,
         journal,
         completed_proposals: Vec::new(),
+        completed_commands: Vec::new(),
     })?)
 }
 
@@ -211,6 +214,7 @@ pub fn prepare_bootstrap_seed(data_dir: &Path, node_id: NodeId, bytes: &[u8]) ->
             up_to: 1,
             journal: snapshot.journal,
             completed_proposals: snapshot.completed_proposals,
+            completed_commands: snapshot.completed_commands,
         };
         (
             1,
@@ -250,6 +254,7 @@ pub struct TapeStateMachine {
     marker: Option<PathBuf>,
     outcomes: Mutex<OutcomeWindow<TapeOutcome>>,
     completed: Mutex<ProposalCache<ProposalId, TapeOutcome>>,
+    completed_commands: Mutex<ProposalCache<ProposalId, TapeCommand>>,
 }
 
 /// The sibling snapshot file path for a given marker path
@@ -274,6 +279,7 @@ impl TapeStateMachine {
     pub fn new(journal: Arc<Mutex<TapeJournal>>, marker: Option<PathBuf>) -> Result<Arc<Self>> {
         let mut applied = 0u64;
         let mut recovered_completed = Vec::new();
+        let mut recovered_commands = Vec::new();
         if let Some(path) = &marker {
             let snap_path = snapshot_path_for(path);
             match std::fs::read(&snap_path) {
@@ -286,6 +292,7 @@ impl TapeStateMachine {
                     applied = snap.up_to;
                     // Installed below after `Self` is constructed.
                     recovered_completed = snap.completed_proposals;
+                    recovered_commands = snap.completed_commands;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => return Err(e).context("read journal snapshot"),
@@ -321,6 +328,11 @@ impl TapeStateMachine {
                 cache.restore(recovered_completed);
                 cache
             }),
+            completed_commands: Mutex::new({
+                let mut cache = ProposalCache::default();
+                cache.restore(recovered_commands);
+                cache
+            }),
         }))
     }
 
@@ -330,11 +342,20 @@ impl TapeStateMachine {
         self.outcomes.lock().expect("outcome window").claim(index)
     }
 
-    /// Resolve a committed proposal by its stable id. Unlike the transient
-    /// index window, this cache survives ambiguous transport retries and is
-    /// snapshotted with the state machine.
-    fn proposal_outcome(&self, id: &ProposalId) -> Option<TapeOutcome> {
-        self.completed.lock().expect("completed proposals").get(id)
+    /// Resolve a committed proposal by its stable id and exact command match.
+    /// Unlike the transient index window, this cache survives ambiguous transport
+    /// retries and is snapshotted with the state machine.
+    pub fn proposal_outcome(&self, id: &ProposalId, command: &TapeCommand) -> Option<TapeOutcome> {
+        let cached_cmd = self
+            .completed_commands
+            .lock()
+            .expect("completed commands")
+            .get(id)?;
+        if cached_cmd == *command {
+            self.completed.lock().expect("completed proposals").get(id)
+        } else {
+            None
+        }
     }
 
     /// The journal this state machine applies into.
@@ -427,14 +448,15 @@ impl RaftStateMachine for TapeStateMachine {
                 serde_json::from_slice::<TapeCommand>(command).map_err(|_| envelope_error),
             ),
         };
-        let cached = proposal_id
-            .as_ref()
-            .and_then(|id| self.completed.lock().expect("completed proposals").get(id));
-        let outcome = match (cached, decoded) {
+        let cached = match (&proposal_id, &decoded) {
+            (Some(id), Ok(cmd)) => self.proposal_outcome(id, cmd),
+            _ => None,
+        };
+        let outcome = match (cached, &decoded) {
             (Some(outcome), _) => Some(outcome),
-            (None, Ok(command)) => {
+            (None, Ok(cmd)) => {
                 let mut journal = self.journal.lock().expect("journal mutex poisoned");
-                Some(apply_command(&mut journal, command))
+                Some(apply_command(&mut journal, cmd.clone()))
             }
             (None, Err(e)) => {
                 tracing::warn!(index, error = %e, "raft: undecodable command (entry no-ops)");
@@ -442,11 +464,15 @@ impl RaftStateMachine for TapeStateMachine {
             }
         };
         if let Some(outcome) = outcome {
-            if let Some(id) = proposal_id {
+            if let (Some(id), Ok(cmd)) = (proposal_id, decoded) {
                 self.completed
                     .lock()
                     .expect("completed proposals")
-                    .insert(id, outcome.clone());
+                    .insert(id.clone(), outcome.clone());
+                self.completed_commands
+                    .lock()
+                    .expect("completed commands")
+                    .insert(id, cmd);
             }
             let mut window = self.outcomes.lock().expect("outcome window");
             window.insert(index, outcome);
@@ -466,6 +492,11 @@ impl RaftStateMachine for TapeStateMachine {
                 .lock()
                 .expect("completed proposals")
                 .snapshot(),
+            completed_commands: self
+                .completed_commands
+                .lock()
+                .expect("completed commands")
+                .snapshot(),
         })?;
         writer.write_all(&bytes)?;
         Ok(())
@@ -480,6 +511,10 @@ impl RaftStateMachine for TapeStateMachine {
             .lock()
             .expect("completed proposals")
             .restore(snap.completed_proposals);
+        self.completed_commands
+            .lock()
+            .expect("completed commands")
+            .restore(snap.completed_commands);
         self.applied.store(snap.up_to, Ordering::Release);
         Ok(())
     }
@@ -652,6 +687,40 @@ impl TapeRaft {
         self.host.router()
     }
 
+    /// Wait for this node's state machine to apply the proposal, returning its
+    /// cached outcome. Bounded by a timeout to avoid hanging indefinitely if the
+    /// proposal never commits or is lost.
+    async fn wait_proposal_outcome(
+        &self,
+        proposal_id: &ProposalId,
+        command: &TapeCommand,
+    ) -> Option<TapeOutcome> {
+        if let Some(outcome) = self.sm.proposal_outcome(proposal_id, command) {
+            return Some(outcome);
+        }
+
+        const WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+        const POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+        let deadline = Instant::now() + WAIT_TIMEOUT;
+        while Instant::now() < deadline {
+            tokio::time::sleep(POLL_INTERVAL).await;
+            if let Some(outcome) = self.sm.proposal_outcome(proposal_id, command) {
+                return Some(outcome);
+            }
+        }
+        self.sm.proposal_outcome(proposal_id, command)
+    }
+
+    async fn propose_and_wait(
+        &self,
+        command: TapeCommand,
+    ) -> Result<(Index, Option<TapeOutcome>)> {
+        let (index, proposal_id) = self.propose(command.clone()).await?;
+        let outcome = self.wait_proposal_outcome(&proposal_id, &command).await;
+        Ok((index, outcome))
+    }
+
     /// Propose an append (leader-local or forwarded to the leader by the
     /// host) and claim the appended event once THIS node applied it
     /// (read-your-write). `None` means the outcome aged out of the window.
@@ -669,12 +738,7 @@ impl TapeRaft {
             timestamp_ms,
             applied_at_ms: crate::now_ms(),
         };
-        let (index, proposal_id) = self.propose(cmd).await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(cmd).await
     }
 
     /// Propose a checkpoint-put and claim the outcome once THIS node applied
@@ -692,12 +756,7 @@ impl TapeRaft {
             offset,
             updated_at_ms,
         };
-        let (index, proposal_id) = self.propose(cmd).await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(cmd).await
     }
 
     pub async fn propose_subscription_create(
@@ -705,14 +764,8 @@ impl TapeRaft {
         topic: String,
         name: String,
     ) -> Result<(Index, Option<TapeOutcome>)> {
-        let (index, proposal_id) = self
-            .propose(TapeCommand::SubscriptionCreate { topic, name })
-            .await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(TapeCommand::SubscriptionCreate { topic, name })
+            .await
     }
 
     pub async fn propose_subscription_delete(
@@ -720,14 +773,8 @@ impl TapeRaft {
         topic: String,
         name: String,
     ) -> Result<(Index, Option<TapeOutcome>)> {
-        let (index, proposal_id) = self
-            .propose(TapeCommand::SubscriptionDelete { topic, name })
-            .await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(TapeCommand::SubscriptionDelete { topic, name })
+            .await
     }
 
     pub async fn propose_subscription_ack(
@@ -737,19 +784,13 @@ impl TapeRaft {
         offset: u64,
         updated_at_ms: u64,
     ) -> Result<(Index, Option<TapeOutcome>)> {
-        let (index, proposal_id) = self
-            .propose(TapeCommand::SubscriptionAck {
-                topic,
-                name,
-                offset,
-                updated_at_ms,
-            })
-            .await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(TapeCommand::SubscriptionAck {
+            topic,
+            name,
+            offset,
+            updated_at_ms,
+        })
+        .await
     }
 
     pub async fn propose_retention(
@@ -758,18 +799,12 @@ impl TapeRaft {
         policy: RetentionPolicy,
         now_ms: u64,
     ) -> Result<(Index, Option<TapeOutcome>)> {
-        let (index, proposal_id) = self
-            .propose(TapeCommand::RetentionPut {
-                topic,
-                policy,
-                now_ms,
-            })
-            .await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        self.propose_and_wait(TapeCommand::RetentionPut {
+            topic,
+            policy,
+            now_ms,
+        })
+        .await
     }
 
     async fn propose(&self, command: TapeCommand) -> Result<(Index, ProposalId)> {
@@ -898,6 +933,7 @@ mod tests {
             up_to: 1,
             journal: legacy.lock().unwrap().clone(),
             completed_proposals: Vec::new(),
+            completed_commands: Vec::new(),
         })
         .unwrap();
         std::fs::write(snapshot_path_for(&marker), bytes).unwrap();
@@ -919,6 +955,190 @@ mod tests {
         assert_eq!(sm2.journal().lock().unwrap().end_offset("orders"), 1);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn proposal_outcome_exact_command_retry_reuses_prior_outcome() {
+        let sm = TapeStateMachine::new(journal(), None).unwrap();
+        let proposal_id = ProposalId {
+            node: 1,
+            session: 42,
+            sequence: 1,
+        };
+        let cmd = TapeCommand::Append {
+            topic: "orders".into(),
+            key: Some("k1".into()),
+            payload: serde_json::json!({"n": 10}),
+            timestamp_ms: 100,
+            applied_at_ms: 100,
+        };
+        let envelope = TapeEnvelope {
+            proposal_id: proposal_id.clone(),
+            command: cmd.clone(),
+        };
+        let encoded = serde_json::to_vec(&envelope).unwrap();
+
+        // First apply
+        sm.apply(1, &encoded).unwrap();
+        assert_eq!(sm.applied_index(), 1);
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 1);
+
+        let outcome1 = sm
+            .proposal_outcome(&proposal_id, &cmd)
+            .expect("first proposal outcome cached");
+        let event1 = match outcome1 {
+            TapeOutcome::Appended(e) => e,
+            _ => panic!("expected Appended outcome"),
+        };
+        assert_eq!(event1.offset, 0);
+
+        // Exact retry with same ProposalId and identical TapeCommand
+        sm.apply(2, &encoded).unwrap();
+        assert_eq!(sm.applied_index(), 2);
+        // Journal end offset is STILL 1: command was not applied twice!
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 1);
+
+        let outcome2 = sm
+            .proposal_outcome(&proposal_id, &cmd)
+            .expect("retried proposal outcome cached");
+        let event2 = match outcome2 {
+            TapeOutcome::Appended(e) => e,
+            _ => panic!("expected Appended outcome"),
+        };
+        assert_eq!(event1.id, event2.id);
+        assert_eq!(event1.offset, event2.offset);
+    }
+
+    #[test]
+    fn proposal_outcome_timestamp_difference_does_not_alias_prior_result() {
+        let sm = TapeStateMachine::new(journal(), None).unwrap();
+        let proposal_id = ProposalId {
+            node: 1,
+            session: 42,
+            sequence: 2,
+        };
+        let cmd_base = TapeCommand::Append {
+            topic: "orders".into(),
+            key: None,
+            payload: serde_json::json!({"n": 20}),
+            timestamp_ms: 100,
+            applied_at_ms: 100,
+        };
+        let envelope_base = TapeEnvelope {
+            proposal_id: proposal_id.clone(),
+            command: cmd_base.clone(),
+        };
+        sm.apply(1, &serde_json::to_vec(&envelope_base).unwrap()).unwrap();
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 1);
+
+        // Subcase b1: same ProposalId, but difference in timestamp_ms
+        let cmd_diff_ts = TapeCommand::Append {
+            topic: "orders".into(),
+            key: None,
+            payload: serde_json::json!({"n": 20}),
+            timestamp_ms: 200, // changed
+            applied_at_ms: 100,
+        };
+        // A mismatched command must never return that proposal id's earlier result
+        assert!(sm.proposal_outcome(&proposal_id, &cmd_diff_ts).is_none());
+
+        let envelope_diff_ts = TapeEnvelope {
+            proposal_id: proposal_id.clone(),
+            command: cmd_diff_ts.clone(),
+        };
+        sm.apply(2, &serde_json::to_vec(&envelope_diff_ts).unwrap()).unwrap();
+        // Since command mismatched, it was not deduplicated; new event was appended!
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 2);
+        let outcome_diff_ts = sm
+            .proposal_outcome(&proposal_id, &cmd_diff_ts)
+            .expect("outcome cached for new command");
+        match outcome_diff_ts {
+            TapeOutcome::Appended(e) => {
+                assert_eq!(e.offset, 1);
+                assert_eq!(e.timestamp_ms, 200);
+            }
+            _ => panic!("expected Appended outcome"),
+        }
+
+        // Subcase b2: same ProposalId, but difference in applied_at_ms
+        let cmd_diff_applied = TapeCommand::Append {
+            topic: "orders".into(),
+            key: None,
+            payload: serde_json::json!({"n": 20}),
+            timestamp_ms: 200,
+            applied_at_ms: 300, // changed
+        };
+        assert!(sm.proposal_outcome(&proposal_id, &cmd_diff_applied).is_none());
+
+        let envelope_diff_applied = TapeEnvelope {
+            proposal_id: proposal_id.clone(),
+            command: cmd_diff_applied.clone(),
+        };
+        sm.apply(3, &serde_json::to_vec(&envelope_diff_applied).unwrap()).unwrap();
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 3);
+        let outcome_diff_applied = sm
+            .proposal_outcome(&proposal_id, &cmd_diff_applied)
+            .expect("outcome cached for new command");
+        match outcome_diff_applied {
+            TapeOutcome::Appended(e) => {
+                assert_eq!(e.offset, 2);
+            }
+            _ => panic!("expected Appended outcome"),
+        }
+    }
+
+    #[test]
+    fn distinct_proposal_ids_with_identical_commands_append_separately() {
+        let sm = TapeStateMachine::new(journal(), None).unwrap();
+        let proposal_1 = ProposalId {
+            node: 1,
+            session: 99,
+            sequence: 1,
+        };
+        let proposal_2 = ProposalId {
+            node: 2,
+            session: 99,
+            sequence: 1,
+        };
+        let cmd = TapeCommand::Append {
+            topic: "orders".into(),
+            key: Some("same-key".into()),
+            payload: serde_json::json!({"n": 42}),
+            timestamp_ms: 100,
+            applied_at_ms: 100,
+        };
+
+        let env_1 = TapeEnvelope {
+            proposal_id: proposal_1.clone(),
+            command: cmd.clone(),
+        };
+        let env_2 = TapeEnvelope {
+            proposal_id: proposal_2.clone(),
+            command: cmd.clone(),
+        };
+
+        // First proposal applies
+        sm.apply(1, &serde_json::to_vec(&env_1).unwrap()).unwrap();
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 1);
+
+        // Distinct proposal id with otherwise identical command MUST NOT dedupe
+        sm.apply(2, &serde_json::to_vec(&env_2).unwrap()).unwrap();
+        assert_eq!(sm.journal().lock().unwrap().end_offset("orders"), 2);
+
+        let out_1 = sm
+            .proposal_outcome(&proposal_1, &cmd)
+            .expect("outcome 1");
+        let out_2 = sm
+            .proposal_outcome(&proposal_2, &cmd)
+            .expect("outcome 2");
+
+        let (e1, e2) = match (out_1, out_2) {
+            (TapeOutcome::Appended(e1), TapeOutcome::Appended(e2)) => (e1, e2),
+            _ => panic!("expected Appended outcomes"),
+        };
+        assert_ne!(e1.id, e2.id);
+        assert_eq!(e1.offset, 0);
+        assert_eq!(e2.offset, 1);
     }
 }
 // HANDWRITE-END
