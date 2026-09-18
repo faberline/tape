@@ -1005,7 +1005,7 @@ mod tests {
             TapeOutcome::Appended(e) => e,
             _ => panic!("expected Appended outcome"),
         };
-        assert_eq!(event1.id, event2.id);
+        assert_eq!((&event1.topic, event1.offset), (&event2.topic, event2.offset));
         assert_eq!(event1.offset, event2.offset);
     }
 
@@ -1136,7 +1136,7 @@ mod tests {
             (TapeOutcome::Appended(e1), TapeOutcome::Appended(e2)) => (e1, e2),
             _ => panic!("expected Appended outcomes"),
         };
-        assert_ne!(e1.id, e2.id);
+        assert_ne!((&e1.topic, e1.offset), (&e2.topic, e2.offset));
         assert_eq!(e1.offset, 0);
         assert_eq!(e2.offset, 1);
     }
