@@ -213,11 +213,98 @@ fn event_diagnostic(events: &[i64]) -> String {
     )
 }
 
+async fn capture_raft_diagnostic(
+    client: &reqwest::Client,
+    timed_out_base: &str,
+    known_replicas: &[&str],
+) -> String {
+    let mut diagnostics = Vec::new();
+    for &replica in known_replicas {
+        let (applied_index, detail) = match client.get(format!("{replica}/raftz")).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                match resp.text().await {
+                    Ok(body) if status.is_success() => {
+                        let applied_index = serde_json::from_str::<serde_json::Value>(&body)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("applied_index").and_then(|idx| {
+                                    idx.as_u64().or_else(|| idx.as_str().and_then(|s| s.parse().ok()))
+                                })
+                            });
+                        (applied_index, format!("status={status}, body={}", body.trim()))
+                    }
+                    Ok(body) => (None, format!("status={status}, body={}", body.trim())),
+                    Err(err) => (None, format!("status={status}, body_err={err}")),
+                }
+            }
+            Err(err) => (None, format!("error={err}")),
+        };
+        diagnostics.push((replica.to_string(), applied_index, detail));
+    }
+
+    let timed_out_index = diagnostics
+        .iter()
+        .find(|(r, _, _)| r == timed_out_base)
+        .and_then(|(_, idx, _)| *idx);
+
+    let classification = if let Some(t_idx) = timed_out_index {
+        let peer_lag = diagnostics.iter().any(|(r, idx, _)| {
+            r != timed_out_base && match *idx {
+                Some(p_idx) => t_idx < p_idx,
+                None => false,
+            }
+        });
+        if peer_lag {
+            "applied-index lag"
+        } else {
+            let all_have_index = !diagnostics.is_empty()
+                && diagnostics.iter().all(|(_, idx, _)| idx.is_some());
+            let all_equal = all_have_index
+                && diagnostics.iter().all(|(_, idx, _)| *idx == timed_out_index);
+            if all_equal {
+                "state-machine replay mismatch"
+            } else {
+                "applied-index evidence unavailable"
+            }
+        }
+    } else {
+        "applied-index evidence unavailable"
+    };
+
+    let mut diag_parts = Vec::new();
+    for (replica, idx, detail) in &diagnostics {
+        let role = if replica == timed_out_base {
+            "timed-out"
+        } else {
+            "peer"
+        };
+        let idx_repr = match idx {
+            Some(i) => i.to_string(),
+            None => "unavailable".to_string(),
+        };
+        diag_parts.push(format!(
+            "replica={replica} role={role} applied_index={idx_repr} {detail}"
+        ));
+    }
+
+    format!(
+        "raft_diagnostic: classification={classification}; {}",
+        diag_parts.join("; ")
+    )
+}
+
 /// Poll one replica until it holds every expected event with exact count,
 /// exact expected event set, and no duplicate event IDs. A replica starts
 /// with its own budget, so an earlier replica's catch-up cannot spend time
 /// from a later one.
-async fn wait_replayed(client: &reqwest::Client, base: &str, expected: &[i64], phase: &str) {
+async fn wait_replayed(
+    client: &reqwest::Client,
+    base: &str,
+    known_replicas: &[&str],
+    expected: &[i64],
+    phase: &str,
+) {
     let deadline = phase_deadline();
     let mut observed = Vec::new();
     let expected_set: std::collections::BTreeSet<i64> = expected.iter().copied().collect();
@@ -255,13 +342,15 @@ async fn wait_replayed(client: &reqwest::Client, base: &str, expected: &[i64], p
             }
             Err(error) => Some(error),
         };
-        assert!(
-            Instant::now() < deadline,
-            "{phase}: {base} did not converge; expected_count={}, {}, last_error={}",
-            expected.len(),
-            event_diagnostic(&observed),
-            last_error.as_deref().unwrap_or("none"),
-        );
+        if Instant::now() >= deadline {
+            let diagnostic = capture_raft_diagnostic(client, base, known_replicas).await;
+            panic!(
+                "{phase}: {base} did not converge; expected_count={}, {}, last_error={}; {diagnostic}",
+                expected.len(),
+                event_diagnostic(&observed),
+                last_error.as_deref().unwrap_or("none"),
+            );
+        }
         tokio::time::sleep(REPLAY_POLL_INTERVAL).await;
     }
 }
@@ -347,6 +436,7 @@ async fn kill_9_leader_survivors_reelect_with_no_committed_event_loss() {
         wait_replayed(
             &client,
             base,
+            &base_refs,
             &[1, 2, 3],
             "post-kill replication convergence",
         )
@@ -423,6 +513,7 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
         wait_replayed(
             &client,
             base,
+            &base_refs,
             &expected,
             "concurrent-ingress replication convergence",
         )
