@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: apps/tape/build.sh <debug|release>
+Usage: ./build.sh <debug|release>
 
 debug    Build tape and install target/debug/tape to ~/.cargo/bin/tape.
 release  Build/install tape with release features.

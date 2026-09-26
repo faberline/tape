@@ -1,7 +1,7 @@
 // HANDWRITE-BEGIN gap="missing-generator:logic:a53592d8" tracker="pending-tracker" reason="Tape's deterministic Raft commands/outcomes, whole-journal snapshots, shared RaftStore recovery, proposal dedupe, and single-group wrapper remain service-owned domain integration."
 //! raft-runtime-backed consensus for tape (#1327).
 //!
-//! `apps/tape`'s journal is wired as a [`raft_runtime::RaftStateMachine`] so HA
+//! `tape`'s journal is wired as a [`raft_runtime::RaftStateMachine`] so HA
 //! append/checkpoint-put go through the shared driver (propose -> commit ->
 //! sole applier) instead of a hand-rolled one. tape is a **single-group**
 //! adopter (like relay, unlike keep's host-per-shard): one [`RaftHost`]

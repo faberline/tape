@@ -81,7 +81,7 @@ fn render_verbs_emit_parseable_yaml_offline() {
     // whatever it currently is.
     assert_eq!(
         image,
-        format!("ghcr.io/chrischeng-c4/tape:{}", env!("CARGO_PKG_VERSION")),
+        format!("ghcr.io/faberline/tape:{}", env!("CARGO_PKG_VERSION")),
         "operator image is release-pinned to the crate version"
     );
     assert_ne!(image, "tape:latest", "operator never emits a mutable tag");

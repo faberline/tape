@@ -17,18 +17,18 @@ import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE_PATH = ROOT / ".github/workflows/tape-release-candidate.yml"
 PROMOTION_PATH = ROOT / ".github/workflows/tape-release.yml"
-GKE_MAKER = ROOT / "apps/tape/scripts/make-gke-release-receipt.py"
+GKE_MAKER = ROOT / "scripts/make-gke-release-receipt.py"
 GKE_HARNESS = ROOT / "acceptance/gcp/scripts/verify-tape.sh"
-CANDIDATE_VERIFIER = ROOT / "apps/tape/scripts/verify-release-candidate.sh"
-ARTIFACT_VERIFIER = ROOT / "apps/tape/scripts/verify-release-artifacts.sh"
-KIND_SCRIPT = ROOT / "apps/tape/scripts/kind-e2e.sh"
-DOCKERFILE = ROOT / "apps/tape/Dockerfile.release"
-CARGO_TOML = ROOT / "apps/tape/Cargo.toml"
-STATEFULSET = ROOT / "apps/tape/k8s/base/statefulset.yaml"
-OPERATOR_DEPLOYMENT = ROOT / "apps/tape/k8s/operator/deployment.yaml"
+CANDIDATE_VERIFIER = ROOT / "scripts/verify-release-candidate.sh"
+ARTIFACT_VERIFIER = ROOT / "scripts/verify-release-artifacts.sh"
+KIND_SCRIPT = ROOT / "scripts/kind-e2e.sh"
+DOCKERFILE = ROOT / "Dockerfile.release"
+CARGO_TOML = ROOT / "Cargo.toml"
+STATEFULSET = ROOT / "k8s/base/statefulset.yaml"
+OPERATOR_DEPLOYMENT = ROOT / "k8s/operator/deployment.yaml"
 PROMOTION_WORKFLOW_SHA256 = "3042fba754460473df9ae899173243d3d504543ec0524cd3e91e01acf986ad9e"
 KIND_SERVER_STATEFULSET_SELECTOR = (
     "  stateful_image=\"$(kubectl -n \"$NAMESPACE\" get statefulset \"$TAPE_NAME\" "
@@ -39,13 +39,13 @@ KIND_SERVER_POD_INVENTORY = (
 )
 
 TAPE_GATES = (
-    "python3 apps/tape/scripts/verify-release-contract.py --self-test",
+    "python3 scripts/verify-release-contract.py --self-test",
     "cargo test --locked -p tape",
     "cargo test --locked -p tape --features operator,backup",
     "cargo test --release --locked -p tape --test tape_perf_gate",
-    "uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check apps/tape --format json",
+    "uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json",
     "bash scripts/raft-implementor-build.sh",
-    "bash apps/tape/e2e/raft_soak.sh",
+    "bash e2e/raft_soak.sh",
 )
 LIBRARY_GATES = (
     "bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime",
@@ -327,7 +327,7 @@ test = false'''
     version = matches[0]
     if dockerfile.count(f"ARG TAPE_VERSION=tape@{version}") != 1:
         fail("release Dockerfile version does not match Tape Cargo version")
-    expected_image = f"image: ghcr.io/chrischeng-c4/tape:{version}"
+    expected_image = f"image: ghcr.io/faberline/tape:{version}"
     if statefulset.count(expected_image) != 1:
         fail("Tape StatefulSet image version does not match Tape Cargo version")
     if operator_deployment.count(expected_image) != 1:
@@ -440,7 +440,7 @@ def check_contract(candidate: str, promotion: str) -> None:
             "TAPE_E2E_IMAGE=",
             "TAPE_E2E_EXPECTED_VERSION=",
             f"outputs.{digest}",
-            "bash apps/tape/scripts/kind-e2e.sh",
+            "bash scripts/kind-e2e.sh",
         ):
             if required not in script:
                 fail(f"{job} does not bind the prebuilt candidate: {required}")
@@ -609,7 +609,7 @@ def fixture_command(root: Path, *, commit: str, attempt: str, receipt: Path, sid
         "bash",
         str(ARTIFACT_VERIFIER),
         "--repo",
-        "chrischeng-c4/axiom",
+        "faberline/tape",
         "--tag",
         "tape@0.5.0",
         "--commit",
@@ -685,21 +685,21 @@ def build_fixture(root: Path) -> tuple[str, dict[str, object], dict[str, object]
     root_digest = "sha256:" + "1" * 64
     manifest = {
         "schema": "cclab.tape.candidate-manifest.v1",
-        "repository": "chrischeng-c4/axiom",
+        "repository": "faberline/tape",
         "workflow_path": ".github/workflows/tape-release-candidate.yml",
         "workflow_id": 1,
         "run_id": "42",
         "run_attempt": "3",
-        "run_url": "https://github.com/chrischeng-c4/axiom/actions/runs/42/attempts/3",
+        "run_url": "https://github.com/faberline/tape/actions/runs/42/attempts/3",
         "source_ref": "refs/heads/main",
-        "workflow_ref": "chrischeng-c4/axiom/.github/workflows/tape-release-candidate.yml@refs/heads/main",
+        "workflow_ref": "faberline/tape/.github/workflows/tape-release-candidate.yml@refs/heads/main",
         "commit": commit,
         "version": "0.5.0",
         "tag": "tape@0.5.0",
         "candidate_tag": "release-candidate-42-3",
-        "pr": {"number": 1, "url": "https://github.com/chrischeng-c4/axiom/pull/1"},
+        "pr": {"number": 1, "url": "https://github.com/faberline/axiom/pull/1"},
         "image": {
-            "repository": "ghcr.io/chrischeng-c4/tape",
+            "repository": "ghcr.io/faberline/tape",
             "root_digest": root_digest,
             "amd64_digest": "sha256:" + "2" * 64,
             "arm64_digest": "sha256:" + "3" * 64,
@@ -725,7 +725,7 @@ def build_fixture(root: Path) -> tuple[str, dict[str, object], dict[str, object]
         "image_provenance": "prebuilt",
     }
     write_json(evidence / "run.json", run)
-    write_json(evidence / "images.json", {"tape": f"ghcr.io/chrischeng-c4/tape@{root_digest}"})
+    write_json(evidence / "images.json", {"tape": f"ghcr.io/faberline/tape@{root_digest}"})
     tape = {
         "schema": "axiom.gcp.tape.acceptance.v1",
         "operator_reconcile_1x1": "passed",
@@ -988,8 +988,8 @@ def self_test() -> None:
             dockerfile,
             replace_once(
                 statefulset,
-                f"image: ghcr.io/chrischeng-c4/tape:{version}",
-                "image: ghcr.io/chrischeng-c4/tape:9.9.9",
+                f"image: ghcr.io/faberline/tape:{version}",
+                "image: ghcr.io/faberline/tape:9.9.9",
                 "statefulset-version-pin",
             ),
             operator,
@@ -1000,8 +1000,8 @@ def self_test() -> None:
             statefulset,
             replace_once(
                 operator,
-                f"image: ghcr.io/chrischeng-c4/tape:{version}",
-                "image: ghcr.io/chrischeng-c4/tape:9.9.9",
+                f"image: ghcr.io/faberline/tape:{version}",
+                "image: ghcr.io/faberline/tape:9.9.9",
                 "operator-version-pin",
             ),
         ),

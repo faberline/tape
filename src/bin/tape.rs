@@ -609,7 +609,7 @@ enum DockerfileVariant {
 
 const TOOL: cli_std::ToolInfo = cli_std::ToolInfo {
     project: "tape",
-    repo: "chrischeng-c4/axiom",
+    repo: "faberline/tape",
     target: env!("TAPE_TARGET"),
     version: env!("CARGO_PKG_VERSION"),
     git_sha: env!("TAPE_GIT_SHA"),
@@ -636,7 +636,7 @@ const LLM_TOPICS: &[cli_std::llm::Topic] = &[
         id: "operations",
         summary: "deploy artifacts — k8s crd/operator/instance render, dockerfile render",
         body: "# tape — deploying to Kubernetes\n\n\
-            Deploy artifacts are offline renders; the checked-in files under `apps/tape/` \
+            Deploy artifacts are offline renders; the checked-in files under `` \
             are the fixtures, and these commands are their in-binary form (#1328):\n\n\
             - `tape k8s crd render` — the Tape CustomResourceDefinition (tape.dev/v1alpha1).\n\
             - `tape k8s operator render [--namespace tape-system] [--monitoring]` — the \
@@ -1705,13 +1705,13 @@ fn render_instance_yaml(args: &K8sInstanceRenderArgs) -> String {
         K8sInstanceProfile::Staging => (
             "tape",
             "staging",
-            format!("ghcr.io/chrischeng-c4/tape:{default_version}"),
+            format!("ghcr.io/faberline/tape:{default_version}"),
             InstanceBody::Staging,
         ),
         K8sInstanceProfile::Prod => (
             "tape",
             "production",
-            format!("ghcr.io/chrischeng-c4/tape:{default_version}"),
+            format!("ghcr.io/faberline/tape:{default_version}"),
             InstanceBody::Prod,
         ),
         K8sInstanceProfile::Template => (
@@ -1798,9 +1798,9 @@ fn render_release_dockerfile(version: Option<&str>) -> String {
         cli_std::artifact::strip_source_ownership_markers(include_str!("../../Dockerfile.release"));
     let mut out = String::new();
     for line in template.lines() {
-        if line.starts_with("#   docker build -f apps/tape/Dockerfile.release -t tape:") {
+        if line.starts_with("#   docker build -f Dockerfile.release -t tape:") {
             out.push_str(&format!(
-                "#   docker build -f apps/tape/Dockerfile.release -t tape:{version} \\"
+                "#   docker build -f Dockerfile.release -t tape:{version} \\"
             ));
         } else if line.starts_with("#     --build-arg TAPE_VERSION=") {
             out.push_str(&format!("#     --build-arg TAPE_VERSION={tag} ."));

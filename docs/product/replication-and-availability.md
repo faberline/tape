@@ -43,7 +43,7 @@ change.
 - Neighbours: repairs Replicated group with peer mTLS; prerequisite for
   [subscriptions.md](subscriptions.md) § Subscription ack and competing
   subscribers.
-- Outcome: `deterministic-failover`. Tracking: [Milestone #115](https://github.com/chrischeng-c4/axiom/milestone/115)
+- Outcome: `deterministic-failover`. Tracking: [Milestone #115](https://github.com/faberline/tape/milestone/115)
 
 ## Live replica membership (Milestone #124)
 
@@ -58,7 +58,7 @@ change.
 - Open: none; the ROADMAP boundary is complete.
 - Neighbours: extends Replicated group with peer mTLS and
   [operations.md](operations.md) § Kubernetes operator and direct install.
-- Outcome: `live-replica-membership`. Tracking: [Milestone #124](https://github.com/chrischeng-c4/axiom/milestone/124)
+- Outcome: `live-replica-membership`. Tracking: [Milestone #124](https://github.com/faberline/tape/milestone/124)
 
 ## Multi-shard topology (Milestone #125)
 
@@ -72,7 +72,7 @@ change.
   under a shard-count change.
 - Neighbours: extends Live replica membership; carries
   [subscriptions.md](subscriptions.md) § Ordering keys across shards.
-- Outcome: `multi-shard-topology`. Tracking: [Milestone #125](https://github.com/chrischeng-c4/axiom/milestone/125)
+- Outcome: `multi-shard-topology`. Tracking: [Milestone #125](https://github.com/faberline/tape/milestone/125)
 
 ## Non-goals in this area
 

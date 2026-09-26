@@ -57,7 +57,7 @@ jobs:
           [[ "$WORKFLOW_REF" == "${GITHUB_REPOSITORY}/.github/workflows/tape-release-candidate.yml@refs/heads/main" ]] || { echo "candidate workflow ref mismatch" >&2; exit 1; }
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "candidate is not landed on main" >&2; exit 1; }
-          cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' apps/tape/Cargo.toml | head -n1)"
+          cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml | head -n1)"
           [[ "$cargo_version" == "$REQUESTED_VERSION" ]] || { echo "Cargo version mismatch" >&2; exit 1; }
           set +e
           git ls-remote --exit-code --tags origin "refs/tags/tape@${cargo_version}" >/dev/null 2>&1
@@ -149,7 +149,7 @@ jobs:
           name="tape-${{ matrix.target }}"
           mkdir -p "pkg/${name}" out
           cp "target/${{ matrix.target }}/release/tape" "pkg/${name}/tape"
-          cp apps/tape/README.md "pkg/${name}/README.md"
+          cp README.md "pkg/${name}/README.md"
           tar -C pkg -czf "out/${name}.tar.gz" "$name"
           (
             cd out
@@ -191,13 +191,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 apps/tape/scripts/verify-release-contract.py --self-test
+          python3 scripts/verify-release-contract.py --self-test
           cargo test --locked -p tape
           cargo test --locked -p tape --features operator,backup
           cargo test --release --locked -p tape --test tape_perf_gate
-          uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check apps/tape --format json
+          uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json
           bash scripts/raft-implementor-build.sh
-          bash apps/tape/e2e/raft_soak.sh
+          bash e2e/raft_soak.sh
 
   ghcr-image-and-attest:
     name: build candidate image and attest
@@ -251,7 +251,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "image_repo=ghcr.io/chrischeng-c4/tape"
+            echo "image_repo=ghcr.io/faberline/tape"
             echo "candidate_tag=release-candidate-${{ github.run_id }}-${{ github.run_attempt }}"
           } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
@@ -266,7 +266,7 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          file: apps/tape/Dockerfile.release
+          file: Dockerfile.release
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
@@ -462,8 +462,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apps/tape/scripts/verify-release-candidate.sh \
-            --repo chrischeng-c4/axiom \
+          scripts/verify-release-candidate.sh \
+            --repo faberline/tape \
             --version "${{ needs.identity.outputs.version }}" \
             --commit "${{ needs.identity.outputs.commit }}" \
             --run-id "${{ github.run_id }}" \
@@ -540,7 +540,7 @@ jobs:
           TAPE_E2E_IMAGE="${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}" \
           TAPE_E2E_EXPECTED_VERSION="${{ needs.identity.outputs.version }}" \
           TAPE_E2E_EXPECTED_RUNTIME_DIGEST="${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}" \
-          bash apps/tape/scripts/kind-e2e.sh
+          bash scripts/kind-e2e.sh
 
   kind-arm64:
     name: kind e2e (arm64)
@@ -573,7 +573,7 @@ jobs:
           TAPE_E2E_IMAGE="${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}" \
           TAPE_E2E_EXPECTED_VERSION="${{ needs.identity.outputs.version }}" \
           TAPE_E2E_EXPECTED_RUNTIME_DIGEST="${{ needs.ghcr-image-and-attest.outputs.arm64_digest }}" \
-          bash apps/tape/scripts/kind-e2e.sh
+          bash scripts/kind-e2e.sh
 
   result:
     name: final candidate receipt
@@ -636,8 +636,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apps/tape/scripts/verify-release-candidate.sh \
-            --repo chrischeng-c4/axiom \
+          scripts/verify-release-candidate.sh \
+            --repo faberline/tape \
             --version "${{ needs.identity.outputs.version }}" \
             --commit "${{ needs.identity.outputs.commit }}" \
             --run-id "${{ github.run_id }}" \

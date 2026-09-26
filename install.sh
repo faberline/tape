@@ -2,7 +2,7 @@
 # <HANDWRITE gap="missing-generator:project-bootstrap" tracker="#768" reason="Initial Tape installer wrapper matching the ecosystem release-asset convention.">
 set -eu
 
-REPO="${TAPE_REPO:-chrischeng-c4/axiom}"
+REPO="${TAPE_REPO:-faberline/tape}"
 INSTALL_DIR="${TAPE_INSTALL:-$HOME/.local/bin}"
 VERSION="${TAPE_VERSION:-latest}"
 TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"

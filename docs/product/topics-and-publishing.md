@@ -48,7 +48,7 @@ delivery, so their sections live in [subscriptions.md](subscriptions.md).
 - Neighbours: extends Durable single publish; the expiration and detach
   halves extend [subscriptions.md](subscriptions.md) § Named pull
   subscriptions.
-- Outcome: `resource-lifecycle-parity`. Tracking: [Milestone #123](https://github.com/chrischeng-c4/axiom/milestone/123)
+- Outcome: `resource-lifecycle-parity`. Tracking: [Milestone #123](https://github.com/faberline/tape/milestone/123)
 
 ## Schema validation (Milestone #122)
 
@@ -66,7 +66,7 @@ delivery, so their sections live in [subscriptions.md](subscriptions.md).
 - Open: the wire encoding of an Avro or Protobuf payload (binary versus JSON
   encoding); whether a topic can change its bound schema in place.
 - Neighbours: narrows what Durable single publish accepts as `payload`.
-- Outcome: `schema-validation`. Tracking: [Milestone #122](https://github.com/chrischeng-c4/axiom/milestone/122)
+- Outcome: `schema-validation`. Tracking: [Milestone #122](https://github.com/faberline/tape/milestone/122)
 
 ## Non-goals in this area
 

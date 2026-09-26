@@ -708,9 +708,9 @@ fn generated_crd_carries_the_backup_properties() {
     // line that matters.
     assert!(
         committed.trim_end() == yaml.trim_end(),
-        "apps/tape/k8s/operator/crd.yaml has drifted from the generator — \
+        "k8s/operator/crd.yaml has drifted from the generator — \
          regenerate it with `cargo run -p tape --bin tape --features operator \
-         -- k8s crd render --out apps/tape/k8s/operator/crd.yaml`"
+         -- k8s crd render --out k8s/operator/crd.yaml`"
     );
 }
 
@@ -803,7 +803,7 @@ fn prometheus_rule_reproduces_the_static_component_alert_contract() {
         contract(rendered),
         contract(&file),
         "the operator-rendered PrometheusRule has drifted from \
-         apps/tape/k8s/components/observability/prometheusrule.yaml — keep the two in step \
+         k8s/components/observability/prometheusrule.yaml — keep the two in step \
          (alert names, `for`, severity, summary, and runbook text)"
     );
 

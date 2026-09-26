@@ -2,7 +2,7 @@
 # directly; otel-collector/Jaeger wired up ready for tape's future OTLP
 # trace exporter).
 #
-#   docker compose -f apps/tape/compose.yaml up --build
+#   docker compose -f compose.yaml up --build
 #
 # Proves the local service + metrics scrape path on one machine. For
 # multi-node local raft replication, use the raft/HA test harness instead.
@@ -13,7 +13,7 @@ services:
   tape:
     build:
       context: ../..
-      dockerfile: apps/tape/Dockerfile
+      dockerfile: Dockerfile
     image: tape:dev
     hostname: tape
     command: ["serve", "--bind", "0.0.0.0:7137"]

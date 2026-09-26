@@ -12,10 +12,10 @@ from typing import Any
 
 CANDIDATE_SCHEMA = "cclab.tape.candidate-manifest.v1"
 RECEIPT_SCHEMA = "tape.gke-release-receipt/v1"
-REPOSITORY = "chrischeng-c4/axiom"
-IMAGE_REPOSITORY = "ghcr.io/chrischeng-c4/tape"
+REPOSITORY = "faberline/tape"
+IMAGE_REPOSITORY = "ghcr.io/faberline/tape"
 WORKFLOW_REF = (
-    "chrischeng-c4/axiom/.github/workflows/"
+    "faberline/tape/.github/workflows/"
     "tape-release-candidate.yml@refs/heads/main"
 )
 FINAL_JOBS = {

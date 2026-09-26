@@ -21,7 +21,7 @@
 #   dist/linux/amd64/tape
 #   dist/linux/arm64/tape
 #
-#   docker buildx build -f apps/tape/Dockerfile.test \
+#   docker buildx build -f Dockerfile.test \
 #     --platform linux/amd64,linux/arm64 \
 #     -t ghcr.io/<owner>/tape:sha-<git12> --push .
 

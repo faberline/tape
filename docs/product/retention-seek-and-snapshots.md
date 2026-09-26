@@ -67,7 +67,7 @@ the subscription model was built on, and the seek outcome is where they leave.
   ack and competing subscribers, because seek moves a subscription's lease
   state, and the acceptance scripts must read back through pull before the
   legacy routes go.
-- Outcome: `seek-snapshot-and-retention`. Tracking: [Milestone #119](https://github.com/chrischeng-c4/axiom/milestone/119)
+- Outcome: `seek-snapshot-and-retention`. Tracking: [Milestone #119](https://github.com/faberline/tape/milestone/119)
 
 ## Non-goals in this area
 

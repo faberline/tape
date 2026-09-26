@@ -6,7 +6,7 @@
 //! # What one frame encodes
 //!
 //! A frame holds one JSON-encoded [`TapeCommand`], never [`TapeJournal`]
-//! state. [`TapeJournal::append_at`] (`apps/tape/src/lib.rs`) calls
+//! state. [`TapeJournal::append_at`] (`src/lib.rs`) calls
 //! `enforce_retention` as a side effect of appending, which can *delete*
 //! events; logging post-mutation state would silently lose that
 //! deleted-event history. Logging the command and replaying it through the
@@ -19,7 +19,7 @@
 //!
 //! Both paths live directly under the caller's `--data-dir`, with fixed
 //! names chosen so neither can collide with the `.storage_full_probe` file
-//! the ENOSPC re-probe loop writes there (`apps/tape/src/bin/tape.rs`):
+//! the ENOSPC re-probe loop writes there (`src/bin/tape.rs`):
 //!
 //! - WAL: `<dir>/journal.wal`
 //! - Snapshots: `<dir>/journal-<seq>.snap` via [`SnapshotFileStore`]
@@ -67,7 +67,7 @@ use crate::TapeJournal;
 
 /// Fixed WAL filename under `--data-dir`. Chosen so it cannot collide with
 /// `.storage_full_probe` (written by `spawn_storage_full_reprobe` in
-/// `apps/tape/src/bin/tape.rs`).
+/// `src/bin/tape.rs`).
 const WAL_FILE_NAME: &str = "journal.wal";
 
 /// Snapshot file prefix/extension under `--data-dir`: `journal-<seq>.snap`.
@@ -83,7 +83,7 @@ const SNAPSHOT_EXTENSION: &str = "snap";
 pub const DEFAULT_SNAPSHOT_THRESHOLD: u64 = 1024;
 
 /// The legacy whole-file JSON journal name a pre-WI-#3052 `tape serve
-/// --data-dir` wrote (`resolve_journal_store` in `apps/tape/src/bin/tape.rs`
+/// --data-dir` wrote (`resolve_journal_store` in `src/bin/tape.rs`
 /// used to join this onto `--data-dir` before the WAL existed).
 const LEGACY_JOURNAL_FILE_NAME: &str = "journal.json";
 
@@ -191,7 +191,7 @@ pub struct WalStore {
     ///
     /// Deliberately NOT `#[cfg(test)]` (unlike the older
     /// [`Self::inject_next_sync_failure`] this replaces the body of below):
-    /// an integration test under `apps/tape/e2e/` links this crate as an
+    /// an integration test under `e2e/` links this crate as an
     /// ordinary, non-`cfg(test)` dependency, so a `#[cfg(test)]`-gated seam
     /// would not exist for `e2e/durable_write_path.rs` to call at all.
     /// This is an honestly-named, always-present fault-injection hook, not a
@@ -412,7 +412,7 @@ impl WalStore {
     /// frames normally (so they can land on disk unsynced, matching a real
     /// crash-during-sync) and then fails exactly where the real `sync()`
     /// call would run, before anything is applied to the journal (mirrors
-    /// `AppState::inject_storage_full` in `apps/tape/src/server.rs`).
+    /// `AppState::inject_storage_full` in `src/server.rs`).
     #[cfg(test)]
     fn inject_next_sync_failure(&self) {
         self.inject_next_sync_failure_with_kind(std::io::ErrorKind::Other);
@@ -424,7 +424,7 @@ impl WalStore {
     /// INSIDE the WAL (as opposed to `AppState::set_inject_storage_full`,
     /// which short-circuits BEFORE the durable backend is ever reached and
     /// so cannot exercise this path -- see
-    /// `apps/tape/e2e/durable_write_path.rs`). Frames from the armed batch
+    /// `e2e/durable_write_path.rs`). Frames from the armed batch
     /// still land on disk (matching a real crash-during-sync), and the
     /// failure poisons the store exactly as a genuine sync failure would --
     /// see the `poisoned` field doc comment.
@@ -443,7 +443,7 @@ impl WalStore {
 
 /// Collapse an `anyhow::Error` from a `storage_durable` call back into a
 /// `std::io::Error` without losing its [`std::io::ErrorKind`], the same
-/// discipline `apps/tape/src/server.rs`'s `flatten_atomic_write_error` uses
+/// discipline `src/server.rs`'s `flatten_atomic_write_error` uses
 /// for exactly this reason: a caller (WI #3052 step 3) needs to discriminate
 /// ENOSPC/EIO from an ordinary failure, which a bare `anyhow` chain loses.
 fn flatten_io_error(error: anyhow::Error) -> std::io::Error {

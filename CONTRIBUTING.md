@@ -2,10 +2,10 @@
 
 ## Brief
 
-How to change `apps/tape`. What it promises and the work roots it owns live in
+How to change `tape`. What it promises and the work roots it owns live in
 [README.md](README.md); the per-surface support state is in
 [STATUS.md](STATUS.md); repository-wide authoring and verification rules live
-in the root [CONTRIBUTING.md](../../CONTRIBUTING.md).
+in the root [CONTRIBUTING.md](https://github.com/faberline/workspace/blob/main/CONTRIBUTING.md).
 
 Use `product-deliver` for authorized work. QA owns the red e2e case and its
 registration. Dev owns the red unit test and scoped implementation. A fresh
@@ -24,8 +24,8 @@ carry `required-features` and only run with that feature enabled.
 | Declared e2e targets plus colocated unit tests | `cargo test -p tape` |
 | Operator and backup feature targets | `cargo test -p tape --features operator,backup` |
 | Release-mode performance ceiling | `cargo test --release -p tape --test tape_perf_gate` |
-| Product document contract | `uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check apps/tape --format json` |
-| Local kind acceptance (manual) | `bash apps/tape/scripts/kind-e2e.sh` |
+| Product document contract | `uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json` |
+| Local kind acceptance (manual) | `bash scripts/kind-e2e.sh` |
 
 Run the document contract check after editing `README.md`, `STATUS.md`,
 `ROADMAP.md`, or `clients/README.md`; it resolves every gate above to a

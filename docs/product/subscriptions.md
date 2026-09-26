@@ -56,7 +56,7 @@ checklist; four of the seven H1 outcomes land here.
   subscriptions; depends on
   [replication-and-availability.md](replication-and-availability.md)
   § Deterministic failover for the failover proof.
-- Outcome: `subscription-ack-and-competing-subscribers`. Tracking: [Milestone #117](https://github.com/chrischeng-c4/axiom/milestone/117)
+- Outcome: `subscription-ack-and-competing-subscribers`. Tracking: [Milestone #117](https://github.com/faberline/tape/milestone/117)
 
 ## Push subscriptions (Milestone #118)
 
@@ -81,7 +81,7 @@ checklist; four of the seven H1 outcomes land here.
   creates. Confirmed on 2026-08-27: push stays a promise rather than becoming
   a non-goal, because the `streaming-pull` non-goal argues from pull and push
   being the two delivery paths.
-- Outcome: `push-subscriptions`. Tracking: [Milestone #118](https://github.com/chrischeng-c4/axiom/milestone/118)
+- Outcome: `push-subscriptions`. Tracking: [Milestone #118](https://github.com/faberline/tape/milestone/118)
 
 ## Ordering keys (Milestone #120)
 
@@ -100,7 +100,7 @@ checklist; four of the seven H1 outcomes land here.
   semantics; the publish half is already in
   [topics-and-publishing.md](topics-and-publishing.md) § Durable single
   publish.
-- Outcome: `ordering-keys`. Tracking: [Milestone #120](https://github.com/chrischeng-c4/axiom/milestone/120)
+- Outcome: `ordering-keys`. Tracking: [Milestone #120](https://github.com/faberline/tape/milestone/120)
 
 ## Attributes and filters (Milestone #121)
 
@@ -119,7 +119,7 @@ checklist; four of the seven H1 outcomes land here.
   creation.
 - Neighbours: extends Named pull subscriptions and Push subscriptions on the
   delivery side, Durable single publish on the publish side.
-- Outcome: `attributes-and-filters`. Tracking: [Milestone #121](https://github.com/chrischeng-c4/axiom/milestone/121)
+- Outcome: `attributes-and-filters`. Tracking: [Milestone #121](https://github.com/faberline/tape/milestone/121)
 
 ## Non-goals in this area
 

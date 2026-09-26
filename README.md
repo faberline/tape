@@ -22,11 +22,11 @@ behaviour.
 
 **Boundaries.**
 
-- [`relay`](../relay/README.md) is the single-queue work-queue broker
+- [`relay`](https://github.com/faberline/relay/blob/main/README.md) is the single-queue work-queue broker
   (RabbitMQ/SQS-shaped): one job, one worker, lease, ack, delete. Use relay
   when exactly one worker should take each job; use tape when N independent
   subscriptions must each see every message.
-- [`defer`](../defer/README.md) is the Cloud Tasks stand-in for scheduled
+- [`defer`](https://github.com/faberline/defer/blob/main/README.md) is the Cloud Tasks stand-in for scheduled
   HTTP dispatch. Tape's push delivery (a ROADMAP outcome) is tape's own
   outbound HTTPS, not a hand-off to defer.
 - Tape does not speak the `pubsub.googleapis.com` wire protocol, does not
@@ -126,7 +126,7 @@ readback oracle for the current acceptance scripts.
 Every entry below is a tape product capability. The list has no primary and
 secondary classes.
 
-A capability can have several sources. `apps/tape` supplies tape-specific
+A capability can have several sources. `tape` supplies tape-specific
 behaviour and composition. `core/<name>` supplies a reusable mechanism from
 [faberline/core](https://github.com/faberline/core).
 `external:<name>` supplies an outside runtime or provisioned contract. Each
@@ -136,16 +136,16 @@ source below states its direct contribution.
 
 | Capability | ID | User promise | Sources |
 |---|---|---|---|
-| Publish and durable write | `topic-publish` | Append one message to a topic and receive its offset only after the write is durable. | `apps/tape`, `core/storage-durable`, `core/raft-runtime` |
-| Pull subscriptions | `pull-subscriptions` | Create named subscriptions on a topic and pull messages from each subscription's own cursor. | `apps/tape` |
-| Topic retention | `topic-retention` | Bound a topic's journal by an offset floor without dropping messages a protected consumer still needs. | `apps/tape` |
-| Replicated availability | `replicated-availability` | Run a Raft group whose members replicate, forward, fail over, and rejoin over mutually authenticated peer links. | `apps/tape`, `core/raft-runtime`, `core/peer-tls` |
-| Backup and seed | `backup-and-seed` | Export a whole-journal snapshot to a sink and restore it into an empty node. | `apps/tape`, `core/service-backup`, `core/storage-durable` |
-| Security hardening | `security-hardening` | Gate data-plane routes by per-topic grants, bound request admission, and keep management audit redacted. | `apps/tape`, `core/service-auth`, `core/service-http`, `core/peer-tls` |
-| Kubernetes-native deployment | `kubernetes-native-deployment` | Reconcile a `Tape` custom resource, or apply the direct-install base, into stable Kubernetes workloads. | `apps/tape`, `core/service-k8s`, `external:kubernetes` |
-| Operations and observability | `operations-observability` | Expose health, readiness, metrics, traces, and graceful drain on one port. | `apps/tape`, `core/service-http`, `core/metrics-prometheus` |
-| API, CLI, and clients | `api-cli-clients` | Publish one discoverable HTTP contract and generate typed clients from it. | `apps/tape`, `core/service-http`, `core/transport-h2c`, `core/openapi-codegen`, `core/cli-std` |
-| Local performance ceiling | `local-performance-ceiling` | Keep append, replay, and checkpoint latency inside tape's own release-mode budget. | `apps/tape` |
+| Publish and durable write | `topic-publish` | Append one message to a topic and receive its offset only after the write is durable. | `tape`, `core/storage-durable`, `core/raft-runtime` |
+| Pull subscriptions | `pull-subscriptions` | Create named subscriptions on a topic and pull messages from each subscription's own cursor. | `tape` |
+| Topic retention | `topic-retention` | Bound a topic's journal by an offset floor without dropping messages a protected consumer still needs. | `tape` |
+| Replicated availability | `replicated-availability` | Run a Raft group whose members replicate, forward, fail over, and rejoin over mutually authenticated peer links. | `tape`, `core/raft-runtime`, `core/peer-tls` |
+| Backup and seed | `backup-and-seed` | Export a whole-journal snapshot to a sink and restore it into an empty node. | `tape`, `core/service-backup`, `core/storage-durable` |
+| Security hardening | `security-hardening` | Gate data-plane routes by per-topic grants, bound request admission, and keep management audit redacted. | `tape`, `core/service-auth`, `core/service-http`, `core/peer-tls` |
+| Kubernetes-native deployment | `kubernetes-native-deployment` | Reconcile a `Tape` custom resource, or apply the direct-install base, into stable Kubernetes workloads. | `tape`, `core/service-k8s`, `external:kubernetes` |
+| Operations and observability | `operations-observability` | Expose health, readiness, metrics, traces, and graceful drain on one port. | `tape`, `core/service-http`, `core/metrics-prometheus` |
+| API, CLI, and clients | `api-cli-clients` | Publish one discoverable HTTP contract and generate typed clients from it. | `tape`, `core/service-http`, `core/transport-h2c`, `core/openapi-codegen`, `core/cli-std` |
+| Local performance ceiling | `local-performance-ceiling` | Keep append, replay, and checkpoint latency inside tape's own release-mode budget. | `tape` |
 
 ### Publish and durable write
 
@@ -154,7 +154,7 @@ source below states its direct contribution.
   answer with its offset; refuse oversized bodies with 413; keep reads serving
   and answer 507 when the volume is full.
 - Sources:
-  - [`apps/tape`](./) defines the message envelope, the journal, the WAL frame
+  - [`tape`](./) defines the message envelope, the journal, the WAL frame
     format, the group-commit fsync, and the storage-full degraded mode.
   - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.4.14/crates/storage-durable/README.md) provides
     durable files, atomic replacement, fsync, and framed logs.
@@ -170,7 +170,7 @@ source below states its direct contribution.
   a bounded window from the subscription cursor; advance the cursor with an
   explicit ack; report per-subscription lag.
 - Sources:
-  - [`apps/tape`](./) defines the subscription resource, the pull window, the
+  - [`tape`](./) defines the subscription resource, the pull window, the
     ack semantics, the lag gauge, and the offline `--store` verbs.
 - Gate: `cargo test -p tape --test cli_contract --test http_transport`
 - Gate: `cargo test -p tape --test provision_topics_via_spec`
@@ -182,7 +182,7 @@ source below states its direct contribution.
   a protected consumer's checkpoint, and let a backfill append land behind the
   live head without moving any consumer.
 - Sources:
-  - [`apps/tape`](./) defines the retention policy, the protected floor, and
+  - [`tape`](./) defines the retention policy, the protected floor, and
     the backfill offsets.
 - Gate: `cargo test -p tape --test retention_backfill`
 
@@ -197,7 +197,7 @@ source below states its direct contribution.
   `raft-replication` names it and the `deterministic-failover` outcome owns
   the repair.
 - Sources:
-  - [`apps/tape`](./) defines the replicated command set, the applied-floor
+  - [`tape`](./) defines the replicated command set, the applied-floor
     recovery, and the peer mTLS listener that keeps raft routes off the public
     router.
   - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.4.14/crates/raft-runtime/README.md) hosts the group,
@@ -214,7 +214,7 @@ source below states its direct contribution.
   with `tape backup` to a `file://`, `s3://`, or `gs://` destination, and
   restore it with `--bootstrap-seed-uri` into an empty data directory only.
 - Sources:
-  - [`apps/tape`](./) defines the snapshot route, the backup verb, the
+  - [`tape`](./) defines the snapshot route, the backup verb, the
     seed-only-into-empty rule, and the redacted backup audit.
   - [`core/service-backup`](https://github.com/faberline/core/blob/v0.4.14/crates/service-backup/README.md) provides the
     destination sinks and retention pruning.
@@ -230,7 +230,7 @@ source below states its direct contribution.
   required`, keep probes tokenless, classify append as write admission, and
   keep the backup audit redacted and off the hot data-plane routes.
 - Sources:
-  - [`apps/tape`](./) defines the grant model, the admission classification,
+  - [`tape`](./) defines the grant model, the admission classification,
     and the audit record.
   - [`core/service-auth`](https://github.com/faberline/core/blob/v0.4.14/crates/service-auth/README.md) provides the
     bearer-token registry and grant evaluation.
@@ -249,7 +249,7 @@ source below states its direct contribution.
   pair with status conditions; ship a direct-install base for a durable
   singleton; provision topics and subscriptions declaratively.
 - Sources:
-  - [`apps/tape`](./) defines the CRD, defaults, topology policy, conditions,
+  - [`tape`](./) defines the CRD, defaults, topology policy, conditions,
     render verbs, direct-install base, and provisioning.
   - [`core/service-k8s`](https://github.com/faberline/core/blob/v0.4.14/crates/service-k8s/README.md) provides reusable
     reconciliation, leader election, workload, Service, and status mechanisms.
@@ -257,7 +257,7 @@ source below states its direct contribution.
     network, lease, RBAC, and Secret contracts.
 - Gate: `cargo test -p tape --features operator --test operator --test operator_render_provision_topics`
 - Gate: `cargo test -p tape --test deploy_cli --test direct_k8s_assets --test network_policy_assets --test observability_assets`
-- Gate: `bash apps/tape/scripts/kind-e2e.sh`
+- Gate: `bash scripts/kind-e2e.sh`
 - Gate: `bash acceptance/gcp/scripts/verify-tape.sh`
 
 Release 0.4.11 (2026-07-25, digest-pinned multi-arch GHCR image) passed four
@@ -272,7 +272,7 @@ evidence; it does not define the current contract.
   request counters, latency sums, topic offset and subscription lag gauges;
   export OTLP traces; survive repeated restarts without losing history.
 - Sources:
-  - [`apps/tape`](./) defines the tape metric families, the drain window, and
+  - [`tape`](./) defines the tape metric families, the drain window, and
     the stateful restart behaviour.
   - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
     probe routes, `Server-Timing`, structured logs, and OTLP wiring.
@@ -288,7 +288,7 @@ evidence; it does not define the current contract.
   one port; generate TypeScript, Python, and Rust clients scoped to those
   routes; ship the standard CLI surface.
 - Sources:
-  - [`apps/tape`](./) defines the route inventory, the OpenAPI document, and
+  - [`tape`](./) defines the route inventory, the OpenAPI document, and
     the CLI verbs.
   - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
     router shell and error envelope.
@@ -307,7 +307,7 @@ evidence; it does not define the current contract.
   measured against tape's own baseline, show durable append throughput rising
   with connection count, and never claim a win over another broker.
 - Sources:
-  - [`apps/tape`](./) defines the benchmark, the budget, and the
+  - [`tape`](./) defines the benchmark, the budget, and the
     `tape-bench` CLI.
 - Gate: `cargo test --release -p tape --test tape_perf_gate`
 

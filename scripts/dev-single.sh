@@ -3,8 +3,8 @@
 # Single-node local dev. Embedded file-backed journal — NO raft, NO peers.
 # The simplest way to poke tape.
 #
-#   ./apps/tape/scripts/dev-single.sh                             # :7137, journal in .tape/
-#   TAPE_BIND=127.0.0.1:17137 ./apps/tape/scripts/dev-single.sh   # different port
+#   ./scripts/dev-single.sh                             # :7137, journal in .tape/
+#   TAPE_BIND=127.0.0.1:17137 ./scripts/dev-single.sh   # different port
 #
 # Journal persists to TAPE_STORE (default .tape/dev-single.json) so a restart
 # resumes with prior events. Delete that file to start clean. Ctrl-C to stop.

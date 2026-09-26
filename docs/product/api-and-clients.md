@@ -40,7 +40,7 @@ with Cloud Pub/Sub is offered only through this contract.
 - Neighbours: rewrites the prose of One discoverable HTTP contract; the
   runbook move touches [operations.md](operations.md) § Whole-journal backup
   and cold seed.
-- Outcome: `pubsub-rebaseline`. Tracking: [Milestone #116](https://github.com/chrischeng-c4/axiom/milestone/116)
+- Outcome: `pubsub-rebaseline`. Tracking: [Milestone #116](https://github.com/faberline/tape/milestone/116)
 
 ## Non-goals in this area
 

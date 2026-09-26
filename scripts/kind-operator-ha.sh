@@ -29,8 +29,8 @@
 #        surviving replica served the probes by itself.
 #
 # Usage:
-#   bash apps/tape/scripts/kind-operator-ha.sh
-#   TAPE_KEEP_CLUSTER=1 bash apps/tape/scripts/kind-operator-ha.sh
+#   bash scripts/kind-operator-ha.sh
+#   TAPE_KEEP_CLUSTER=1 bash scripts/kind-operator-ha.sh
 #
 # Requirements: docker, kind, kubectl, jq.
 
@@ -38,7 +38,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAPE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$TAPE_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$TAPE_DIR" && pwd)"
 
 CLUSTER_NAME="${TAPE_KIND_CLUSTER:-tape-cp-e2e}"
 NAMESPACE="${TAPE_KIND_NAMESPACE:-tape}"

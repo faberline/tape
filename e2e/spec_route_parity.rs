@@ -139,6 +139,6 @@ fn openapi_committed_snapshot_matches_live_generation() {
     let live = format!("{}\n", tape::spec::openapi_json());
     assert_eq!(
         committed, live,
-        "clients/openapi.json is stale: regenerate via `cargo run -q -p tape --bin tape -- spec --format openapi > apps/tape/clients/openapi.json`"
+        "clients/openapi.json is stale: regenerate via `cargo run -q -p tape --bin tape -- spec --format openapi > clients/openapi.json`"
     );
 }

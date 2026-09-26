@@ -7,11 +7,11 @@
 #   serving-pod replacement with its PVC retained -> HTTP replay + new append.
 #
 # Usage:
-#   bash apps/tape/scripts/kind-e2e.sh
-#   TAPE_KEEP_CLUSTER=1 bash apps/tape/scripts/kind-e2e.sh
-#   TAPE_E2E_IMAGE_MODE=prebuilt TAPE_E2E_IMAGE=ghcr.io/chrischeng-c4/tape@sha256:<digest> \
+#   bash scripts/kind-e2e.sh
+#   TAPE_KEEP_CLUSTER=1 bash scripts/kind-e2e.sh
+#   TAPE_E2E_IMAGE_MODE=prebuilt TAPE_E2E_IMAGE=ghcr.io/faberline/tape@sha256:<digest> \
 #     TAPE_E2E_EXPECTED_VERSION=0.5.0 TAPE_E2E_EXPECTED_RUNTIME_DIGEST=sha256:<digest> \
-#     bash apps/tape/scripts/kind-e2e.sh
+#     bash scripts/kind-e2e.sh
 #
 # Requirements: docker, kind, kubectl, curl, jq.
 # The default cleanup deletes only the named Kind cluster. Set
@@ -21,7 +21,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAPE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$TAPE_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$TAPE_DIR" && pwd)"
 
 CLUSTER_NAME="${TAPE_KIND_CLUSTER:-tape-e2e}"
 NAMESPACE="${TAPE_KIND_NAMESPACE:-tape}"
@@ -43,7 +43,7 @@ if [[ "$IMAGE_MODE" == "prebuilt" ]]; then
     exit 1
   }
   [[ "$IMAGE_TAG" =~ ^ghcr\.io/chrischeng-c4/tape@sha256:[0-9a-f]{64}$ ]] || {
-    echo "!! prebuilt TAPE_E2E_IMAGE must be ghcr.io/chrischeng-c4/tape@sha256:<64 hex>" >&2
+    echo "!! prebuilt TAPE_E2E_IMAGE must be ghcr.io/faberline/tape@sha256:<64 hex>" >&2
     exit 1
   }
   cargo_version="$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' "$TAPE_DIR/Cargo.toml" | head -n1)"

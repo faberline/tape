@@ -105,7 +105,7 @@ gate. This area spans the README capabilities `backup-and-seed`,
   and direct install; depends on
   [replication-and-availability.md](replication-and-availability.md)
   § Live replica membership for the transition it proves.
-- Outcome: `quotas-and-scale-transition`. Tracking: [Milestone #126](https://github.com/chrischeng-c4/axiom/milestone/126)
+- Outcome: `quotas-and-scale-transition`. Tracking: [Milestone #126](https://github.com/faberline/tape/milestone/126)
 
 ## Non-goals in this area
 

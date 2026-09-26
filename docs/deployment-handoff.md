@@ -35,8 +35,8 @@ serving API (no separate peer port).
 
 | Line | Tag | Produced by | Audience |
 |------|-----|-------------|----------|
-| release | `ghcr.io/chrischeng-c4/tape:<semver>` + `latest` | `.github/workflows/tape-release.yml` | integrators — the only line to hand a user |
-| dev/test | `ghcr.io/chrischeng-c4/tape:sha-<git12>` | `.github/workflows/tape-test-image.yml` | acceptance harnesses only |
+| release | `ghcr.io/faberline/tape:<semver>` + `latest` | `.github/workflows/tape-release.yml` | integrators — the only line to hand a user |
+| dev/test | `ghcr.io/faberline/tape:sha-<git12>` | `.github/workflows/tape-test-image.yml` | acceptance harnesses only |
 
 The dev/test line exists so that verifying a commit in a real cluster does
 not require cutting a release first — that is how tape went 0.4.5 → 0.4.11
@@ -71,7 +71,7 @@ semver tag.
 ### 3a. Local binary (single node, embedded journal)
 
 ```bash
-./apps/tape/scripts/dev-single.sh
+./scripts/dev-single.sh
 # or directly:
 tape serve --bind 127.0.0.1:7137 --store .tape/journal.json
 ```
@@ -85,7 +85,7 @@ docker run --rm -p 7137:7137 tape:0.1.0 serve --bind 0.0.0.0:7137
 ### 3c. Local multi-node raft (auto-mode HA)
 
 ```bash
-./apps/tape/scripts/dev-cluster.sh
+./scripts/dev-cluster.sh
 ```
 
 Boots 3 `tape serve` processes on `:7137`/`:7138`/`:7139` with
@@ -306,7 +306,7 @@ unless noted):
 cargo build -p tape
 cargo test -p tape
 
-TAPE_SOAK_AUTOSTART=1 TAPE_SOAK_DURATION_SECS=60 bash apps/tape/scripts/soak.sh
+TAPE_SOAK_AUTOSTART=1 TAPE_SOAK_DURATION_SECS=60 bash scripts/soak.sh
 ```
 
 > Shared service hardening is runnable here: topic authz, projected-secret

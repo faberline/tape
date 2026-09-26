@@ -9,8 +9,8 @@
 # RSS/FD/thread/p99 drift.
 #
 # Usage:
-#   TAPE_SOAK_AUTOSTART=1 bash apps/tape/scripts/soak.sh
-#   TAPE_UPSTREAM=127.0.0.1:7137 TAPE_SOAK_PID=<pid> bash apps/tape/scripts/soak.sh
+#   TAPE_SOAK_AUTOSTART=1 bash scripts/soak.sh
+#   TAPE_UPSTREAM=127.0.0.1:7137 TAPE_SOAK_PID=<pid> bash scripts/soak.sh
 #
 # Environment:
 #   TAPE_SOAK_DURATION_SECS      two-window wall-clock budget (default: 60)
@@ -30,9 +30,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TAPE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$TAPE_DIR/../.." && pwd)"
-source "$REPO_ROOT/libs/service-observability/scripts/soak-metrics.sh"
-
+REPO_ROOT="$(cd "$TAPE_DIR" && pwd)"
+# service-observability comes from faberline/core: use the checkout cargo resolved.
+SERVICE_OBSERVABILITY_DIR="$(cd "$REPO_ROOT" && cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "service-observability") | .manifest_path' | xargs dirname)"
+source "$SERVICE_OBSERVABILITY_DIR/scripts/soak-metrics.sh"
 DURATION_SECS="${TAPE_SOAK_DURATION_SECS:-60}"
 UPSTREAM="${TAPE_UPSTREAM:-127.0.0.1:7137}"
 RSS_GROWTH_PCT="${TAPE_SOAK_RSS_GROWTH_PCT:-10}"

@@ -15,7 +15,7 @@ resources:
   # - secret.yaml
 
 images:
-  # Published releases live at ghcr.io/chrischeng-c4/tape:<version> (digest
+  # Published releases live at ghcr.io/faberline/tape:<version> (digest
   # in each release's notes); point REPLACE_ME__REGISTRY there unless you
   # mirror images into your own registry.
   - name: tape

@@ -11,7 +11,7 @@ same document a running node serves at `GET /openapi.json`. A gate refuses any
 drift between the two, so client generation works offline against this file.
 
 ```bash
-cargo run -q -p tape --bin tape -- spec --format openapi > apps/tape/clients/openapi.json
+cargo run -q -p tape --bin tape -- spec --format openapi > clients/openapi.json
 ```
 
 Regenerate and commit the snapshot in the same change that alters a route or a
@@ -25,9 +25,9 @@ Clients are generated in-binary by `tape spec gen` through the shared
 involved; a `cargo` toolchain is the only requirement.
 
 ```bash
-cargo run -q -p tape --bin tape -- spec gen --lang ts --out apps/tape/clients/ts
-cargo run -q -p tape --bin tape -- spec gen --lang py --out apps/tape/clients/py
-cargo run -q -p tape --bin tape -- spec gen --lang rust --out apps/tape/clients/rust
+cargo run -q -p tape --bin tape -- spec gen --lang ts --out clients/ts
+cargo run -q -p tape --bin tape -- spec gen --lang py --out clients/py
+cargo run -q -p tape --bin tape -- spec gen --lang rust --out clients/rust
 ```
 
 `codegen.toml` pins the default target for each language. Every generated
