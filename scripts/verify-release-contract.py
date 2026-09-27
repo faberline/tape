@@ -29,7 +29,7 @@ DOCKERFILE = ROOT / "Dockerfile.release"
 CARGO_TOML = ROOT / "Cargo.toml"
 STATEFULSET = ROOT / "k8s/base/statefulset.yaml"
 OPERATOR_DEPLOYMENT = ROOT / "k8s/operator/deployment.yaml"
-PROMOTION_WORKFLOW_SHA256 = "3042fba754460473df9ae899173243d3d504543ec0524cd3e91e01acf986ad9e"
+PROMOTION_WORKFLOW_SHA256 = "9c91a905924fe44ac95a60bc6042b6569a47315a822428e2ff57b088a13aad82"
 KIND_SERVER_STATEFULSET_SELECTOR = (
     "  stateful_image=\"$(kubectl -n \"$NAMESPACE\" get statefulset \"$TAPE_NAME\" "
     "-o jsonpath='{.spec.template.spec.containers[?(@.name==\"server\")].image}')\""

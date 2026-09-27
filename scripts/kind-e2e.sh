@@ -42,7 +42,7 @@ if [[ "$IMAGE_MODE" == "prebuilt" ]]; then
     echo "!! TAPE_E2E_IMAGE contains whitespace or control characters" >&2
     exit 1
   }
-  [[ "$IMAGE_TAG" =~ ^ghcr\.io/chrischeng-c4/tape@sha256:[0-9a-f]{64}$ ]] || {
+  [[ "$IMAGE_TAG" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] || {
     echo "!! prebuilt TAPE_E2E_IMAGE must be ghcr.io/faberline/tape@sha256:<64 hex>" >&2
     exit 1
   }
@@ -268,9 +268,9 @@ build_and_load_image() {
 
 normalize_runtime_image_id() {
   local raw="$1"
-  if [[ "$raw" =~ ^ghcr\.io/chrischeng-c4/tape@(sha256:[0-9a-f]{64})$ ]]; then
+  if [[ "$raw" =~ ^ghcr\.io/faberline/tape@(sha256:[0-9a-f]{64})$ ]]; then
     echo "${BASH_REMATCH[1]}"
-  elif [[ "$raw" =~ ^docker-pullable://ghcr\.io/chrischeng-c4/tape@(sha256:[0-9a-f]{64})$ ]]; then
+  elif [[ "$raw" =~ ^docker-pullable://ghcr\.io/faberline/tape@(sha256:[0-9a-f]{64})$ ]]; then
     echo "${BASH_REMATCH[1]}"
   elif [[ "$raw" =~ ^(containerd|cri-o|docker)://(sha256:[0-9a-f]{64})$ ]]; then
     echo "${BASH_REMATCH[2]}"

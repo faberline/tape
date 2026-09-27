@@ -198,7 +198,7 @@ jobs:
             echo
             echo "Internal acceptance use ONLY — never hand this tag to users."
             echo
-            echo "Run the GKE acceptance harness against it with:"
+            echo "Run the GKE acceptance harness (faberline/workspace) against it with:"
             echo
             echo '```bash'
             echo "PROJECT_ID=<disposable-gcp-project> \\"
