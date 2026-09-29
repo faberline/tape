@@ -89,7 +89,7 @@ gate. This area spans the README capabilities `backup-and-seed`,
 - Neighbours: none within the area.
 - Status rows: `local-performance-ceiling`.
 
-## Quotas and scale transition (Milestone #126)
+## Quotas and scale transition (Milestone #17)
 
 - Problem: nothing bounds a single tenant's topics, subscriptions, or bytes,
   and no run proves a replica-count change under load.
@@ -105,7 +105,7 @@ gate. This area spans the README capabilities `backup-and-seed`,
   and direct install; depends on
   [replication-and-availability.md](replication-and-availability.md)
   § Live replica membership for the transition it proves.
-- Outcome: `quotas-and-scale-transition`. Tracking: [Milestone #126](https://github.com/faberline/tape/milestone/126)
+- Outcome: `quotas-and-scale-transition`. Tracking: [Milestone #17](https://github.com/faberline/tape/milestone/17)
 
 ## Non-goals in this area
 
