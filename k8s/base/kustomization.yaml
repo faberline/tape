@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="Layered direct-install Kustomize composition is hand-authored until the shared stateful-service generator emits base and profile overlays."
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -22,4 +21,3 @@ resources:
 
 # The Prometheus Operator and NetworkPolicy components remain opt-in. Dev can
 # apply on a vanilla Kind cluster; staging/prod compose components explicitly.
-# HANDWRITE-END

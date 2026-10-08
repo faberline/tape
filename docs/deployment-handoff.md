@@ -52,7 +52,7 @@ semver tag.
 
 ## 2. CLI surface (first-level commands)
 
-`tape --help` (from `src/bin/tape.rs`):
+`tape --help` (from `crates/tape/src/bin/tape/cli.rs`):
 
 | Command | Purpose |
 |---------|---------|
@@ -125,8 +125,8 @@ keep the CR name `tape` — `tape serve` derives raft peer DNS as
 
 ## 4. Environment variables
 
-`serve` reads flags and env (flag wins). Source: `src/bin/tape.rs::ServeArgs`,
-`src/auth.rs`, `libs/raft-runtime/src/cluster.rs`.
+`serve` reads flags and env (flag wins). Source: `crates/tape/src/bin/tape/serve.rs::ServeArgs`,
+`crates/tape-access/src/authorization.rs`, core's `raft-runtime` (`src/cluster.rs`).
 
 | Area | Env (≡ flag) | Default |
 |------|--------------|---------|
@@ -149,8 +149,9 @@ keep the CR name `tape` — `tape serve` derives raft peer DNS as
 
 ## 5. HTTP surface & probes
 
-Registered in `src/server.rs` (standard probes via the shared
-`libs/service-http` shell; data-plane routes are tape-specific):
+Registered in `crates/tape/src/http/router.rs` and `crates/tape-journal/src/interfaces/http.rs`
+(standard probes via core's `service-http` shell; data-plane routes are
+tape-specific):
 
 | Path | Purpose | Auth |
 |------|---------|------|
@@ -173,8 +174,8 @@ Registered in `src/server.rs` (standard probes via the shared
 | `PUT /topics/{topic}/consumers/{consumer}/checkpoint` | Legacy: advance a consumer cursor without a subscription. Leaves with the seek outcome. | per `TAPE_AUTH` (write) |
 | `GET /topics/{topic}/consumers/{consumer}/checkpoint` | Legacy: read a consumer cursor. Leaves with the seek outcome. | per `TAPE_AUTH` (read) |
 
-The served set equals `tape spec --format routes`; `cargo test -p tape --test
-spec_route_parity` refuses any drift between the router, the spec inventory,
+The served set equals `tape spec --format routes`; `cargo test -p tape --test it --
+spec_route_parity::` refuses any drift between the router, the spec inventory,
 and `clients/openapi.json`.
 
 ---
@@ -319,5 +320,6 @@ TAPE_SOAK_AUTOSTART=1 TAPE_SOAK_DURATION_SECS=60 bash scripts/soak.sh
 
 *Generated as the tape docs+scripts+traits polish handoff (#1331, epic
 #1324). Coordinates (env names, ports, paths) are sourced from
-`src/bin/tape.rs`, `src/server.rs`, `src/auth.rs`, `libs/raft-runtime/src/
-cluster.rs`, `k8s/`, `Dockerfile.release`.*
+`crates/tape/src/bin/tape/serve.rs`, `crates/tape/src/http/router.rs`, `crates/tape-journal/src/interfaces/http.rs`,
+`crates/tape-access/src/authorization.rs`, core's `raft-runtime` (`src/cluster.rs`), `k8s/`,
+`Dockerfile.release`.*

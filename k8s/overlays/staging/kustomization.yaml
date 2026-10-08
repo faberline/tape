@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="Staging profile composes monitoring evidence around the direct singleton; Raft soak remains operator-managed."
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -31,4 +30,3 @@ patches:
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: "20Gi"
-# HANDWRITE-END

@@ -272,7 +272,7 @@ jq -e --arg topic "$topic" --arg consumer "$sub" \
   "$EVIDENCE_DIR/kubernetes/tape-ack.json" >/dev/null
 
 # Acked events are never redelivered: pull_subscription's cursor is the
-# checkpoint offset (apps/tape/src/lib.rs), not a lease/redelivery lock.
+# checkpoint offset (crates/tape-shared-kernel/src/tape_journal.rs), not a lease/redelivery lock.
 curl --silent --show-error --fail-with-body -X POST \
   "http://127.0.0.1:17137/topics/${topic}/subscriptions/${sub}/pull" \
   > "$EVIDENCE_DIR/kubernetes/tape-pull-after-ack.json"
@@ -317,14 +317,14 @@ object_size="$(gcloud storage objects describe "$first_object" --format='value(s
 printf '%s\n' "$object_size" > "$EVIDENCE_DIR/gcs/tape-first-object-bytes.txt"
 gcloud storage cat "$first_object" > "$EVIDENCE_DIR/gcs/tape-first-object.json"
 # Stronger than a generic `type == "object"` probe: the backup object is a
-# `JournalSnapshot` (apps/tape/src/raft.rs) whose `journal.topics` map
-# (apps/tape/src/lib.rs `TapeJournal`) must actually carry our 3 events.
+# `JournalSnapshot` (crates/tape-shared-kernel/src/snapshot.rs) whose `journal.topics` map
+# (crates/tape-shared-kernel/src/tape_journal.rs `TapeJournal`) must actually carry our 3 events.
 jq -e --arg topic "$topic" \
   '(.up_to | type == "number") and ((.journal.topics[$topic] // []) | length) >= 3' \
   "$EVIDENCE_DIR/gcs/tape-first-object.json" >/dev/null
 
 # ---- Step D: cold restore + 3-replica topology stand-up, including failover ----
-# `prepare_bootstrap_seed` (apps/tape/src/raft.rs) hard-fails on data
+# `prepare_bootstrap_seed` (crates/tape-replication/src/raft/bootstrap.rs) hard-fails on data
 # directories carrying raft state, so this must be a genuine cold restore:
 # tear the whole instance down (CR first — see the ordering note below), let
 # the claims drain, then apply ONE complete seeded 3x3 CR so every replica
@@ -384,7 +384,7 @@ start_forward
 # Pod readiness does NOT mean the raft group has elected and applied the
 # seed snapshot yet: runs 0723113842/0723120246 replayed an empty journal by
 # probing the instant readiness flipped, and the identical in-process
-# 3-voter seed bootstrap (apps/tape/tests/seed_ha_bootstrap.rs) proves the
+# 3-voter seed bootstrap (crates/tape/tests/it/seed_ha_bootstrap.rs) proves the
 # data surfaces once the group applies. Poll with a bound instead of
 # asserting a single racy read. No re-append happens in this step: 3 events
 # at offsets 0-2 proves the fresh cluster's data came from the GCS seed.

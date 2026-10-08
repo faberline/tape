@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# HANDWRITE-BEGIN gap="missing-generator:e2e-test:2004fbb4" tracker="#1590" reason="Build the checked-in Tape image, create a disposable Kind cluster, install the real CRD/operator, exercise append/replay across one pod replacement, and clean up by default. generator gap: missing-generator:service-kind-dogfood."
 # Tape's bounded operator-mode Kind dogfood gate (#1590).
 #
 # Exercises one Tape-owned operational path only:
@@ -430,7 +429,7 @@ step "verify ordered replay across replacement" assert_replay '["before-restart"
 # status write included -- every 15s, forever. The first version of this change
 # did name them, and this gate is what caught it: the symptom was an empty
 # status.conditions, nothing mentioning pruning. See #3079 for the libs fix;
-# until it lands, e2e/operator.rs's built-in-API-group allow-list is the
+# until it lands, crates/tape/tests/it/operator.rs's built-in-API-group allow-list is the
 # guard. Installing prometheus-operator here to manufacture coverage would hide
 # precisely the condition a real vanilla cluster has.
 BACKUP_CRON_JOB="${TAPE_NAME}-backup"
@@ -455,4 +454,3 @@ step "confirm the operator prunes the backup CronJob" \
   wait_for_cron_job_absent "$BACKUP_CRON_JOB"
 
 echo ">> Tape operator Kind recovery dogfood PASS"
-# HANDWRITE-END

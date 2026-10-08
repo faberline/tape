@@ -45,7 +45,7 @@ NAMESPACE="${TAPE_KIND_NAMESPACE:-tape}"
 OPERATOR_NAMESPACE="tape-system"
 OPERATOR_NAME="tape-operator"
 # The Lease is named for the manager and lives in the operator's own namespace
-# (libs/service-k8s/src/controller.rs:58-72), and its holderIdentity is the
+# (core/crates/service-k8s/src/controller.rs:58-72), and its holderIdentity is the
 # holder's POD_NAME. That is the whole leader-election observable.
 LEASE_NAME="$OPERATOR_NAME"
 METRICS_SERVICE="tape-operator-metrics"
@@ -398,7 +398,7 @@ assert_heartbeat_unbroken() {
   fi
   # "Reconciliation continued" only means something if the drain actually took
   # the leader away. Reconciliation is leader-gated -- reconcile_entry() in
-  # libs/service-k8s/src/controller.rs returns a bare requeue on a follower --
+  # core/crates/service-k8s/src/controller.rs returns a bare requeue on a follower --
   # so if the Lease holder never changed across the whole window, the surviving
   # replica did every one of these reconciles and the drain proved nothing
   # about a handover. That reads as a pass and is not one, which is the exact

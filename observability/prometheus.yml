@@ -1,5 +1,5 @@
 # Tape exposes Prometheus text-exposition metrics directly at /metrics (see
-# src/metrics.rs) -- it does not yet push OTLP metrics, so
+# crates/tape-journal/src/application/metrics.rs) -- it does not yet push OTLP metrics, so
 # Prometheus scrapes tape itself rather than the otel-collector. The
 # otel-collector in this stack is wired up for tape's traces once tape gains
 # an OTLP exporter; it is not on tape's metrics path today.

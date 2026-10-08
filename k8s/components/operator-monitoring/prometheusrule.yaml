@@ -68,7 +68,7 @@ spec:
         # rule, and TapeOperatorAbsent is the only one that fires.
         #
         # Only the leader increments either counter -- the follower's no-op is
-        # excluded on purpose (libs/service-k8s/src/controller.rs), so summing
+        # excluded on purpose (core/crates/service-k8s/src/controller.rs), so summing
         # across replicas measures actual work, not replica count.
         - alert: TapeOperatorReconcileErrorRate
           expr: |

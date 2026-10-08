@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="Prod direct-install profile demonstrates strict auth and optional policy composition while preserving the operator boundary for raft HA."
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -61,4 +60,3 @@ patches:
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: "100Gi"
-# HANDWRITE-END

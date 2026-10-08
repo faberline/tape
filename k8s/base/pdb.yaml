@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="The direct singleton's PDB is a durable-data safety guard; multi-member availability belongs to the operator CR path."
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -21,4 +20,3 @@ spec:
     matchLabels:
       app: tape
       role: server
-# HANDWRITE-END

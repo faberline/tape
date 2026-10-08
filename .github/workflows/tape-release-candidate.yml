@@ -192,12 +192,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/verify-release-contract.py --self-test
-          cargo test --locked -p tape
+          cargo test --locked --workspace
           cargo test --locked -p tape --features operator,backup
-          cargo test --release --locked -p tape --test tape_perf_gate
+          cargo test --release --locked -p tape-bench --test tape_perf_gate
           uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json
           bash scripts/raft-implementor-build.sh
-          bash e2e/raft_soak.sh
+          bash scripts/raft_soak.sh
 
   ghcr-image-and-attest:
     name: build candidate image and attest

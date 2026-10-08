@@ -160,8 +160,8 @@ source below states its direct contribution.
     durable files, atomic replacement, fsync, and framed logs.
   - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.4.14/crates/raft-runtime/README.md) orders and
     replicates the append when the node runs in a group.
-- Gate: `cargo test -p tape --test http_transport --test durable_write_path --test durable_crash_recovery`
-- Gate: `cargo test -p tape --lib`
+- Gate: `cargo test -p tape --test it -- http_transport:: durable_write_path:: durable_crash_recovery::`
+- Gate: `cargo test --workspace --lib`
 
 ### Pull subscriptions
 
@@ -172,8 +172,8 @@ source below states its direct contribution.
 - Sources:
   - [`tape`](./) defines the subscription resource, the pull window, the
     ack semantics, the lag gauge, and the offline `--store` verbs.
-- Gate: `cargo test -p tape --test cli_contract --test http_transport`
-- Gate: `cargo test -p tape --test provision_topics_via_spec`
+- Gate: `cargo test -p tape --test it -- cli_contract:: http_transport::`
+- Gate: `cargo test -p tape --test it -- provision_topics_via_spec::`
 
 ### Topic retention
 
@@ -184,7 +184,7 @@ source below states its direct contribution.
 - Sources:
   - [`tape`](./) defines the retention policy, the protected floor, and
     the backfill offsets.
-- Gate: `cargo test -p tape --test retention_backfill`
+- Gate: `cargo test -p tape --test it -- retention_backfill::`
 
 ### Replicated availability
 
@@ -204,8 +204,8 @@ source below states its direct contribution.
     the log, snapshots, and forwarding.
   - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.4.14/crates/peer-tls/README.md) provides the mutual TLS
     material and verification for peer links.
-- Gate: `cargo test -p tape --test raft_cluster --test raft_persistence --test raft_peer_mtls`
-- Gate: `cargo test -p tape --test raft_failover`
+- Gate: `cargo test -p tape --test it -- raft_cluster:: raft_persistence:: raft_peer_mtls::`
+- Gate: `cargo test -p tape --test it -- raft_failover::`
 
 ### Backup and seed
 
@@ -220,8 +220,8 @@ source below states its direct contribution.
     destination sinks and retention pruning.
   - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.4.14/crates/storage-durable/README.md) provides
     the atomic restore write.
-- Gate: `cargo test -p tape --features backup --test backup --test backup_destination_docs`
-- Gate: `cargo test -p tape --test bootstrap --test seed_ha_bootstrap`
+- Gate: `cargo test -p tape --features backup --test it -- backup:: backup_destination_docs::`
+- Gate: `cargo test -p tape --test it -- bootstrap:: seed_ha_bootstrap::`
 
 ### Security hardening
 
@@ -238,8 +238,8 @@ source below states its direct contribution.
     shared router shell, error envelope, and admission hooks.
   - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.4.14/crates/peer-tls/README.md) provides the peer
     identity plane.
-- Gate: `cargo test -p tape --test service_auth --test service_admission --test audit_contract`
-- Gate: `cargo test -p tape --test raft_peer_mtls`
+- Gate: `cargo test -p tape --test it -- service_auth:: service_admission:: audit_contract::`
+- Gate: `cargo test -p tape --test it -- raft_peer_mtls::`
 
 ### Kubernetes-native deployment
 
@@ -255,8 +255,8 @@ source below states its direct contribution.
     reconciliation, leader election, workload, Service, and status mechanisms.
   - `external:kubernetes` stores desired state and runs the workload,
     network, lease, RBAC, and Secret contracts.
-- Gate: `cargo test -p tape --features operator --test operator --test operator_render_provision_topics`
-- Gate: `cargo test -p tape --test deploy_cli --test direct_k8s_assets --test network_policy_assets --test observability_assets`
+- Gate: `cargo test -p tape --features operator --test it -- operator:: operator_render_provision_topics::`
+- Gate: `cargo test -p tape --test it -- deploy_cli:: direct_k8s_assets:: network_policy_assets:: observability_assets::`
 - Gate: `bash scripts/kind-e2e.sh`
 - Gate: `bash acceptance/gcp/scripts/verify-tape.sh`
 
@@ -278,8 +278,8 @@ evidence; it does not define the current contract.
     probe routes, `Server-Timing`, structured logs, and OTLP wiring.
   - [`core/metrics-prometheus`](https://github.com/faberline/core/blob/v0.4.14/crates/metrics-prometheus/README.md)
     provides the Prometheus text exposition.
-- Gate: `cargo test -p tape --test http_transport --test shared_otlp_tracing --test long_running_stability`
-- Gate: `cargo test -p tape --test rig_stateful_adapter`
+- Gate: `cargo test -p tape --test it -- http_transport:: shared_otlp_tracing:: long_running_stability::`
+- Gate: `cargo test -p tape --test it -- rig_stateful_adapter::`
 
 ### API, CLI, and clients
 
@@ -298,7 +298,7 @@ evidence; it does not define the current contract.
     the in-binary client generator.
   - [`core/cli-std`](https://github.com/faberline/core/blob/v0.4.14/crates/cli-std/README.md) provides the standard
     command set and output conventions.
-- Gate: `cargo test -p tape --test spec_route_parity --test spec_generated_clients --test cli_contract`
+- Gate: `cargo test -p tape --test it -- spec_route_parity:: spec_generated_clients:: cli_contract::`
 
 ### Local performance ceiling
 
@@ -309,7 +309,7 @@ evidence; it does not define the current contract.
 - Sources:
   - [`tape`](./) defines the benchmark, the budget, and the
     `tape-bench` CLI.
-- Gate: `cargo test --release -p tape --test tape_perf_gate`
+- Gate: `cargo test --release -p tape-bench --test tape_perf_gate`
 
 ## Supporting documents
 

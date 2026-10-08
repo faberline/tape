@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="Static direct-install runtime configuration is kept in a stable ConfigMap so overlays can patch values without changing immutable selectors."
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -19,4 +18,3 @@ data:
   # Direct Kustomize starts tokenless. Staging/prod overlays may set required
   # only together with a mounted token-registry Secret or CSI projection.
   TAPE_AUTH: "off"
-# HANDWRITE-END

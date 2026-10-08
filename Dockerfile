@@ -1,5 +1,5 @@
-# Multi-stage build of the single tape binary. Build context is the repo
-# root (tape is a workspace member); see Dockerfile.dockerignore for the
+# Multi-stage build of the tape binary (crates/tape). Build context is the
+# repo root, the Cargo workspace root; see Dockerfile.dockerignore for the
 # trimmed context. The image also runs the checked-in operator Deployment,
 # so it includes the operator feature; the same entrypoint serves single-node
 # and raft-replica pods — REPLICAS_PER_SHARD > 1 flips HA.
