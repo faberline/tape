@@ -1,0 +1,16 @@
+[package]
+name = "tape-access"
+description = "tape access control: bearer authentication over service-auth and per-topic authorization"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+service-auth.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "tape-shared-kernel"
+description = "tape journal model shared by every context: TapeJournal, commands, events, snapshots, and the CommitLog/Replicator ports"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# ToSchema on the wire value objects tape's OpenAPI document serves as-is
+# (ddd.toml B2 exception).
+utoipa.workspace = true
+
+[lints]
+workspace = true

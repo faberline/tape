@@ -1,0 +1,28 @@
+[package]
+name = "tape-journal"
+description = "tape journal use cases and driving adapters: JournalService, metrics, the HTTP data plane, OpenAPI, and the spec document"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+axum.workspace = true
+cli-std.workspace = true
+metrics-prometheus.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+service-auth.workspace = true
+service-backup.workspace = true
+service-http.workspace = true
+tape-access.workspace = true
+tape-shared-kernel.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,42 @@
+[package]
+name = "tape-bench"
+description = "tape benchmarks: the local append/replay/checkpoint benchmark, the durable group-commit benchmark, and the release perf gate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+# The perf gate is the only test target and runs on request (below).
+autotests = false
+
+[[bin]]
+name = "tape-bench"
+path = "src/bin/tape-bench/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+service-http.workspace = true
+tape.workspace = true
+tape-journal.workspace = true
+tape-shared-kernel.workspace = true
+tape-storage.workspace = true
+# WI #3052 AC1: `run_durable_benchmark` drives the real WAL commit coordinator
+# over a real HTTP socket, so the library itself (not just tests) needs a temp
+# dir and an HTTP client: both `tape-bench` (a [[bin]], which cargo never
+# grants dev-dependencies) and the perf gate call into it.
+reqwest.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+# Release-mode perf gate: `cargo test --release -p tape-bench --test tape_perf_gate`.
+[[test]]
+name = "tape_perf_gate"
+path = "tests/tape_perf_gate.rs"
+test = false
+
+[lints]
+workspace = true

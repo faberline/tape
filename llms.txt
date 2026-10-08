@@ -24,7 +24,7 @@ HTTP/1.1 + h2c API.
 ## Commands
 
 - Build: `cargo build -p tape` (release: `cargo build --release -p tape`).
-- Test: `cargo test -p tape`; feature targets: `cargo test -p tape --features operator,backup`.
+- Test: `cargo test --workspace`; feature targets: `cargo test -p tape --features operator,backup`.
 - Serve: `tape serve --bind 127.0.0.1:7137 --store <path>`.
 - Deploy renders: `tape k8s crd|operator|instance render`, `tape dockerfile render`.
 - Backup: `tape backup --url <node> --dest <file://|s3://|gs://>`.

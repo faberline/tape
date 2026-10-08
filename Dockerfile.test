@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="tape-test-image-dockerfile" tracker="2576" reason="Per-commit GHCR dev/test image variant of Dockerfile.release — COPY a locally built binary instead of downloading a published release tarball; never tagged latest/semver."
 # syntax=docker/dockerfile:1
 # Internal dev/test image for tape — NEVER user-facing (see #2576). COPY
 # variant of `Dockerfile.release`: same runtime stage (distroless
@@ -39,4 +38,3 @@ COPY --chown=65532:65532 dist/linux/${TARGETARCH}/tape /usr/local/bin/tape
 # workloads), so a default subcommand here would only ever be shadowed.
 EXPOSE 7137
 ENTRYPOINT ["/usr/local/bin/tape"]
-# HANDWRITE-END

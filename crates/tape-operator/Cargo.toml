@@ -1,0 +1,24 @@
+[package]
+name = "tape-operator"
+description = "tape Kubernetes operator: the Tape CRD, its render, and the reconcile loop over service-k8s"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+# The CustomResource derive expands to ::k8s_openapi paths.
+k8s-openapi.workspace = true
+kube.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+service-backup.workspace = true
+service-k8s.workspace = true
+
+[lints]
+workspace = true

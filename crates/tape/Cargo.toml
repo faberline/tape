@@ -1,0 +1,86 @@
+[package]
+name = "tape"
+description = "tape - topic replay journal service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+build = "build.rs"
+# Integration tests are one binary (tests/it/main.rs), declared below, so
+# nothing starts or stops running without showing up in a diff.
+autotests = false
+
+[[bin]]
+name = "tape"
+path = "src/bin/tape/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+cli-std.workspace = true
+openapi-codegen.workspace = true
+peer-tls.workspace = true
+raft-runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+service-auth.workspace = true
+# Unconditional: the schema types and the local sink are cheap; only the HTTP
+# fetch path of `tape backup` needs the `backup` feature.
+service-backup.workspace = true
+service-http.workspace = true
+storage-durable.workspace = true
+tape-access.workspace = true
+tape-journal.workspace = true
+tape-replication.workspace = true
+tape-shared-kernel.workspace = true
+tape-storage.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tempfile.workspace = true
+# Behind `operator`, so the serving image never links kube-rs unless built
+# with `--features operator` (#1328).
+tape-operator = { workspace = true, optional = true }
+service-k8s = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures.workspace = true
+http-body-util.workspace = true
+rcgen.workspace = true
+reqwest.workspace = true
+rig.workspace = true
+tower.workspace = true
+transport-h2c.workspace = true
+
+[build-dependencies]
+build-stamp.workspace = true
+
+[features]
+default = []
+self-update = ["cli-std/online"]
+issue = ["cli-std/online"]
+# operator — the Tape CRD + ManagedService render driven by
+# tape_operator::run. Ships the `tape k8s operator run` controller and the
+# CRD generator; pulls kube-rs, so the serving image stays kube-free unless
+# built with this feature (#1328).
+operator = ["dep:tape-operator", "dep:service-k8s"]
+# backup — `tape backup` (#1329): fetches a snapshot from a running node's
+# `GET /admin/backup` over HTTP and ships it to a core/crates/service-backup
+# destination sink. Enables the lib's s3 sink; file:// always works. The
+# endpoint itself is always served — this gates only the CLI verb's HTTP
+# fetch path.
+backup = ["service-backup/http-client", "service-backup/s3"]
+# Optional shared OTLP trace export. No Tape-local exporter exists: this
+# enables service-http's stable identity, fallback, and W3C propagation path.
+otel = ["service-http/otlp"]
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[lints]
+workspace = true

@@ -1,5 +1,4 @@
 #!/usr/bin/env sh
-# <HANDWRITE gap="missing-generator:project-bootstrap" tracker="#768" reason="Initial Tape installer wrapper matching the ecosystem release-asset convention.">
 set -eu
 
 REPO="${TAPE_REPO:-faberline/tape}"
@@ -100,4 +99,3 @@ say "installed: ${INSTALL_DIR}/tape"
 if "${INSTALL_DIR}/tape" --version >/dev/null 2>&1; then
   say "ready: $("${INSTALL_DIR}/tape" --version 2>/dev/null || echo unknown)"
 fi
-# </HANDWRITE>

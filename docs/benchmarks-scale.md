@@ -18,7 +18,7 @@ non-goal.
 
 ## Local regression budget
 
-`e2e/tape_perf_gate.rs` runs `tape::bench::run_benchmark(1_000,
+`crates/tape-bench/tests/tape_perf_gate.rs` runs `tape_bench::run_benchmark(1_000,
 128)` and asserts:
 
 - `report.local_regression_passed` — append, replay, and checkpoint stay inside
@@ -47,7 +47,7 @@ cargo run -p tape --bin tape-bench -- run --events 1000 --format json
 | class | meaning | current repo posture |
 |---|---|---|
 | Local regression | 1,000 events | release-mode gate, listed in `CONTRIBUTING.md` |
-| Bounded stability | repeated restarts over minutes | `cargo test -p tape --test long_running_stability` |
+| Bounded stability | repeated restarts over minutes | `cargo test -p tape --test it -- long_running_stability::` |
 | Multi-hour soak | `scripts/soak.sh` | manual, not a gate |
 | Scale transition under load | replica-count change on GKE | not proven; see [ROADMAP.md](../ROADMAP.md#quotas-and-scale-transition) |
 

@@ -44,7 +44,7 @@ effect of a policy edit.
 **During graceful shutdown:**
 
 When the pod is deleted, the kubelet sends SIGTERM. Tape then
-(`libs/server-lifecycle/src/signal.rs`, `shutdown_with_drain`):
+(`core/crates/server-lifecycle/src/signal.rs`, `shutdown_with_drain`):
 
 1. Calls `start_drain()`, so `/readyz` returns 503.
 2. The kubelet's readiness probe fails and the endpoints controller withdraws the
@@ -54,8 +54,8 @@ When the pod is deleted, the kubelet sends SIGTERM. Tape then
    in-flight requests can finish, then exits.
 
 **Nothing is flushed at shutdown, and nothing needs to be.** Every acked write
-was already made durable at the time it was acked: `AppState::persist`
-(`src/server.rs`) writes the journal through `storage_durable::atomic_write` with
+was already made durable at the time it was acked: `FileLog::persist`
+(`crates/tape-storage/src/file_log.rs`) writes the journal through `storage_durable::atomic_write` with
 `FsyncPolicy::Always` on every mutation. The grace window buys in-flight requests
 time to complete — it is not a durability window, and cutting it short costs
 open requests, not data.
@@ -66,7 +66,7 @@ open requests, not data.
 > the ConfigMap. They ship equal, so there is zero margin — raise the ConfigMap
 > value alone and the kubelet SIGKILLs the process partway through its own drain
 > sleep. Raise both together. (On the operator path this cannot happen:
-> `src/operator/render.rs` derives `terminationGracePeriodSeconds` from
+> `crates/tape-operator/src/render.rs` derives `terminationGracePeriodSeconds` from
 > `spec.graceSecs`.)
 
 **After pod deletion (write outage begins):**

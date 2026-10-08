@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# <HANDWRITE gap="missing-generator:project-bootstrap" tracker="#768" reason="Initial Tape local build/install wrapper matching the service-project shape.">
 set -euo pipefail
 
 usage() {
@@ -48,4 +47,3 @@ fi
 codesign -s - -f "$INSTALL_DIR/tape" 2>/dev/null || true
 echo "Installed: $("$INSTALL_DIR/tape" --version 2>/dev/null || echo tape)"
 echo "Verify with: ${INSTALL_DIR}/tape --version"
-# </HANDWRITE>

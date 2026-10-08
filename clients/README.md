@@ -66,7 +66,7 @@ client includes `.openapi-codegen.json` naming the exact target contract; pass
 ## Verification
 
 ```bash
-cargo test -p tape --test spec_generated_clients --test spec_route_parity
+cargo test -p tape --test it -- spec_generated_clients:: spec_route_parity::
 ```
 
 The first target generates all three clients and checks their route scope.

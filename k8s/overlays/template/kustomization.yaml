@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="The copy-to-customize direct-install template is hand-authored until profile-aware stateful-service Kustomize generation exists."
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -57,4 +56,3 @@ patches:
   #           items:
   #             - key: token-registry.json
   #               path: token-registry.json
-# HANDWRITE-END

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# HANDWRITE-BEGIN gap="missing-generator:e2e-test:bounded-replay-soak" tracker="#1589" reason="Tape's bounded HTTP replay/checkpoint soak has service-specific append-only workload setup, process lifecycle, and RSS plateau assertions."
 # Tape bounded replay soak.
 #
 # A replay journal must not use an ever-growing append stream as a leak test:
@@ -250,4 +249,3 @@ service_soak_assert_max_growth "thread/task" "$TASK_A" "$TASK_B" "$TASK_GROWTH"
 service_soak_assert_latency_plateau "$P99_A" "$P99_B" "$P99_MS" "$P99_GROWTH_PCT"
 
 echo ">> Tape bounded replay soak PASS"
-# HANDWRITE-END

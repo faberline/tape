@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:deployment:direct-install-statefulset" tracker="#1809" reason="Direct-install Services preserve the Tape operator's stable headless peer identity and distinct client endpoint."
 # Headless Service gives StatefulSet members stable DNS. Direct Kustomize keeps
 # it at one member; HA peer membership is rendered by the operator.
 apiVersion: v1
@@ -44,4 +43,3 @@ spec:
       port: 7137
       targetPort: http
       protocol: TCP
-# HANDWRITE-END

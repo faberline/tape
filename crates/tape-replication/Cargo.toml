@@ -1,0 +1,22 @@
+[package]
+name = "tape-replication"
+description = "tape raft replication: the journal state machine over raft-runtime, bootstrap seeding, and peer mTLS"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+peer-tls.workspace = true
+raft-runtime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tape-shared-kernel.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

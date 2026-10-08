@@ -1,4 +1,3 @@
-# HANDWRITE-BEGIN gap="missing-generator:manifest:c207ddd3" tracker="#1593" reason="Declare the opt-in NetworkPolicy component without automatically composing it into an instance profile. generator gap: missing-generator:kustomize-component-manifest."
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
@@ -8,4 +7,3 @@ kind: Component
 # ignored.
 resources:
   - networkpolicy.yaml
-# HANDWRITE-END

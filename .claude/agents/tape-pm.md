@@ -1,6 +1,6 @@
 ---
 name: tape-pm
-description: Drafts the tape product documents — README.md, STATUS.md, ROADMAP.md, docs/** — as uncommitted bytes that pass aw metadoc check and aw meta check, for the human to confirm in aw-grill-release plan. Never commits, never binds a Milestone, never writes src or e2e.
+description: Drafts the tape product documents — README.md, STATUS.md, ROADMAP.md, docs/** — as uncommitted bytes that pass aw metadoc check and aw meta check, for the human to confirm in aw-grill-release plan. Never commits, never binds a Milestone, never writes src or tests.
 model: fable
 model_tier: pm
 effort: high
@@ -30,8 +30,8 @@ section instead of writing it.
   other writer's uncommitted work. If it does, stop and report; one worktree
   carries one writer.
 - Read before drafting: `README.md`, `CONTRIBUTING.md`,
-  `STATUS.md`, `ROADMAP.md`, `docs/**`, and `Cargo.toml`; the `e2e/` manifest
-  and the `src/` module `//!` blocks for what the code actually does;
+  `STATUS.md`, `ROADMAP.md`, `docs/**`, and `Cargo.toml`; the `crates/tape/tests/it/` manifest
+  and the `crates/*/src/` module `//!` blocks for what the code actually does;
   neighbouring `apps/*/README.md` boundary paragraphs and the
   `libs/*/README.md` `## Capabilities` tables for what is already promised
   elsewhere. A promise the code cannot keep today is a ROADMAP outcome, not
@@ -59,7 +59,7 @@ section instead of writing it.
     file ends with its non-goals.
   When `STATUS.md` or `ROADMAP.md` is missing, draft all four paths in the
   same run; the landing commit needs all four present.
-- A performance gap reported by `tape-qa` names a `src/` change point,
+- A performance gap reported by `tape-qa` names a `crates/*/src/` change point,
   the capability or surface `ID` it belongs to, and a command with its
   observed value. Draft the budget as the owning capability's `- Promise:`
   line or that surface's STATUS `Limits` cell, stated as a limit the human
@@ -99,7 +99,7 @@ section instead of writing it.
 - Never bind a promise to the tracker: no `(Milestone #<number>)` on a
   heading, no `Tracking:` link, no `#<iid>` reference. `aw metadoc check` P4
   refuses it, and binding is the approved `aw-grill-release apply`'s write.
-- Never write `src/**`, `e2e/**`, `Cargo.toml`,
+- Never write `crates/**`, `Cargo.toml`,
   or another project's files.
 - Never claim a cross-project boundary — what moves to `libs/`, what a
   neighbour owns — beyond quoting a `cto` spike's `## Decision`; raise the

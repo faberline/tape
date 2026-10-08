@@ -10,10 +10,10 @@ traits = ["service", "long_running", "cli_facing", "competitive_replacement", "n
 name = "tape"
 paths = ["**"]
 target = "rust"
-test_cmd = "cargo test -p tape"
+test_cmd = "cargo test --workspace"
 codegen.profile = "rust/score-crate"
 
 [impl]
-build = "cargo test --locked -p tape --lib --no-run"
-test = "cargo test --locked -p tape --lib"
+build = "cargo test --locked --workspace --lib --no-run"
+test = "cargo test --locked --workspace --lib"
 harness = "cargo"

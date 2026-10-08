@@ -27,6 +27,7 @@ ARTIFACT_VERIFIER = ROOT / "scripts/verify-release-artifacts.sh"
 KIND_SCRIPT = ROOT / "scripts/kind-e2e.sh"
 DOCKERFILE = ROOT / "Dockerfile.release"
 CARGO_TOML = ROOT / "Cargo.toml"
+BENCH_CARGO_TOML = ROOT / "crates/tape-bench/Cargo.toml"
 STATEFULSET = ROOT / "k8s/base/statefulset.yaml"
 OPERATOR_DEPLOYMENT = ROOT / "k8s/operator/deployment.yaml"
 PROMOTION_WORKFLOW_SHA256 = "9c91a905924fe44ac95a60bc6042b6569a47315a822428e2ff57b088a13aad82"
@@ -40,12 +41,12 @@ KIND_SERVER_POD_INVENTORY = (
 
 TAPE_GATES = (
     "python3 scripts/verify-release-contract.py --self-test",
-    "cargo test --locked -p tape",
+    "cargo test --locked --workspace",
     "cargo test --locked -p tape --features operator,backup",
-    "cargo test --release --locked -p tape --test tape_perf_gate",
+    "cargo test --release --locked -p tape-bench --test tape_perf_gate",
     "uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json",
     "bash scripts/raft-implementor-build.sh",
-    "bash e2e/raft_soak.sh",
+    "bash scripts/raft_soak.sh",
 )
 LIBRARY_GATES = (
     "bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime",
@@ -311,15 +312,16 @@ def assert_reviewed_promotion_bytes(text: str) -> None:
 
 def assert_release_versions(
     cargo_toml: str,
+    bench_toml: str,
     dockerfile: str,
     statefulset: str,
     operator_deployment: str,
 ) -> str:
     perf_target = '''[[test]]
 name = "tape_perf_gate"
-path = "e2e/tape_perf_gate.rs"
+path = "tests/tape_perf_gate.rs"
 test = false'''
-    if cargo_toml.count('name = "tape_perf_gate"') != 1 or cargo_toml.count(perf_target) != 1:
+    if bench_toml.count('name = "tape_perf_gate"') != 1 or bench_toml.count(perf_target) != 1:
         fail("Tape performance target must be opt-in with test = false")
     matches = re.findall(r'^version = "([0-9]+\.[0-9]+\.[0-9]+)"$', cargo_toml, re.MULTILINE)
     if len(matches) != 1:
@@ -367,6 +369,7 @@ def check_contract(candidate: str, promotion: str) -> None:
         "Kind script": KIND_SCRIPT.read_text(),
         "release Dockerfile": DOCKERFILE.read_text(),
         "Tape Cargo manifest": CARGO_TOML.read_text(),
+        "Tape bench Cargo manifest": BENCH_CARGO_TOML.read_text(),
         "Tape StatefulSet": STATEFULSET.read_text(),
         "Tape operator Deployment": OPERATOR_DEPLOYMENT.read_text(),
     }
@@ -488,6 +491,7 @@ def check_contract(candidate: str, promotion: str) -> None:
     dockerfile = supporting["release Dockerfile"]
     assert_release_versions(
         supporting["Tape Cargo manifest"],
+        supporting["Tape bench Cargo manifest"],
         dockerfile,
         supporting["Tape StatefulSet"],
         supporting["Tape operator Deployment"],
@@ -817,7 +821,7 @@ def self_test() -> None:
             promotion,
         ),
         "missing-tape-gate-quoted-fake": (
-            replace_once(candidate, "          cargo test --release --locked -p tape --test tape_perf_gate\n", "          echo 'cargo test --release --locked -p tape --test tape_perf_gate'\n", "missing-tape-gate-quoted-fake"),
+            replace_once(candidate, "          cargo test --release --locked -p tape-bench --test tape_perf_gate\n", "          echo 'cargo test --release --locked -p tape-bench --test tape_perf_gate'\n", "missing-tape-gate-quoted-fake"),
             promotion,
         ),
         "missing-library-gate": (
@@ -945,16 +949,18 @@ def self_test() -> None:
         expect_failover_failure(name, mutation, maker)
 
     cargo = CARGO_TOML.read_text()
+    bench = BENCH_CARGO_TOML.read_text()
     dockerfile = DOCKERFILE.read_text()
     statefulset = STATEFULSET.read_text()
     operator = OPERATOR_DEPLOYMENT.read_text()
-    version = assert_release_versions(cargo, dockerfile, statefulset, operator)
+    version = assert_release_versions(cargo, bench, dockerfile, statefulset, operator)
     version_mutations = {
         "perf-target-default-selection": (
+            cargo,
             replace_once(
-                cargo,
-                'path = "e2e/tape_perf_gate.rs"\ntest = false',
-                'path = "e2e/tape_perf_gate.rs"',
+                bench,
+                'path = "tests/tape_perf_gate.rs"\ntest = false',
+                'path = "tests/tape_perf_gate.rs"',
                 "perf-target-default-selection",
             ),
             dockerfile,
@@ -968,12 +974,14 @@ def self_test() -> None:
                 'version = "9.9.9"',
                 "cargo-version-pin",
             ),
+            bench,
             dockerfile,
             statefulset,
             operator,
         ),
         "dockerfile-version-pin": (
             cargo,
+            bench,
             replace_once(
                 dockerfile,
                 f"ARG TAPE_VERSION=tape@{version}",
@@ -985,6 +993,7 @@ def self_test() -> None:
         ),
         "statefulset-version-pin": (
             cargo,
+            bench,
             dockerfile,
             replace_once(
                 statefulset,
@@ -996,6 +1005,7 @@ def self_test() -> None:
         ),
         "operator-version-pin": (
             cargo,
+            bench,
             dockerfile,
             statefulset,
             replace_once(

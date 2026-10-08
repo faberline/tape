@@ -4306,21 +4306,16 @@ dependencies = [
  "anyhow",
  "axum 0.8.9",
  "build-stamp",
- "chrono",
  "clap",
  "cli-std",
  "futures",
  "http-body-util",
- "k8s-openapi",
- "kube",
- "metrics-prometheus",
  "openapi-codegen",
  "peer-tls",
  "raft-runtime",
  "rcgen",
  "reqwest",
  "rig",
- "schemars",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4329,14 +4324,116 @@ dependencies = [
  "service-http",
  "service-k8s",
  "storage-durable",
+ "tape-access",
+ "tape-journal",
+ "tape-operator",
+ "tape-replication",
+ "tape-shared-kernel",
+ "tape-storage",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tower 0.5.3",
  "tracing",
  "tracing-subscriber",
  "transport-h2c",
+]
+
+[[package]]
+name = "tape-access"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "service-auth",
+]
+
+[[package]]
+name = "tape-bench"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "service-http",
+ "tape",
+ "tape-journal",
+ "tape-shared-kernel",
+ "tape-storage",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "tape-journal"
+version = "0.5.0"
+dependencies = [
+ "axum 0.8.9",
+ "cli-std",
+ "metrics-prometheus",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "service-auth",
+ "service-backup",
+ "service-http",
+ "tape-access",
+ "tape-shared-kernel",
+ "thiserror 2.0.18",
+ "tracing",
  "utoipa",
+]
+
+[[package]]
+name = "tape-operator"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "k8s-openapi",
+ "kube",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "service-backup",
+ "service-k8s",
+]
+
+[[package]]
+name = "tape-replication"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.9",
+ "peer-tls",
+ "raft-runtime",
+ "serde",
+ "serde_json",
+ "tape-shared-kernel",
+ "tracing",
+]
+
+[[package]]
+name = "tape-shared-kernel"
+version = "0.5.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "utoipa",
+]
+
+[[package]]
+name = "tape-storage"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "storage-durable",
+ "tape-shared-kernel",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
