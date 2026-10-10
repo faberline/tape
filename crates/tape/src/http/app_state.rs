@@ -106,7 +106,7 @@ impl AppState {
     }
 
     /// Flip readiness to draining so `/readyz` returns 503. Called on
-    /// SIGTERM via `service_http::shutdown_with_drain`.
+    /// SIGTERM, at the start of `tape serve`'s shutdown sequence.
     pub fn start_drain(&self) {
         self.service.start_drain();
     }

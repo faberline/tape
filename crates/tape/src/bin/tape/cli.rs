@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::backup::BackupArgs;
+use crate::connect::ConnectArgs;
 use crate::dockerfile::DockerfileArgs;
 use crate::issue::IssueArgs;
 use crate::k8s::K8sArgs;
@@ -56,6 +57,9 @@ pub(crate) enum Command {
     /// (`file://`, `s3://`, or `gs://`, workload-identity ADC in-cluster).
     /// Needs a build with `--features backup`.
     Backup(BackupArgs),
+    /// Port-forward to a tape Service with `kubectl` and run a command with
+    /// `TAPE_URL` pointing at it. Needs `kubectl` on PATH; plaintext only.
+    Connect(ConnectArgs),
 }
 
 #[derive(clap::Args)]
@@ -109,6 +113,7 @@ pub(crate) async fn dispatch(cli: Cli) -> Result<()> {
         Command::K8s(args) => crate::k8s::k8s(args).await,
         Command::Dockerfile(args) => crate::dockerfile::dockerfile(args),
         Command::Backup(args) => crate::backup::dispatch_backup(args).await,
+        Command::Connect(args) => crate::connect::connect(args).await,
     }
 }
 

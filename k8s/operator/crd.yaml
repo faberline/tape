@@ -80,7 +80,7 @@ spec:
                 type: string
               graceSecs:
                 default: 10
-                description: Graceful drain window on SIGTERM (seconds); tracks `terminationGracePeriodSeconds`. Defaults to 10 (`TAPE_GRACE_SECS`).
+                description: 'Shutdown budget on SIGTERM (seconds): the readiness drain, the raft leadership handoff and the listener drains finish within it. The pod''s `terminationGracePeriodSeconds` is this plus 5. Defaults to 10 (`TAPE_GRACE_SECS`).'
                 type: integer
                 minimum: 0.0
               image:

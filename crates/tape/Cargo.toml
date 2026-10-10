@@ -20,13 +20,14 @@ path = "src/bin/tape/main.rs"
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
-cli-std.workspace = true
+cli-std = { workspace = true, features = ["k8s"] }
 openapi-codegen.workspace = true
 peer-tls.workspace = true
 raft-runtime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+server-lifecycle.workspace = true
 service-auth.workspace = true
 # Unconditional: the schema types and the local sink are cheap; only the HTTP
 # fetch path of `tape backup` needs the `backup` feature.

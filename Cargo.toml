@@ -7,7 +7,7 @@ members = ["crates/*"]
 [workspace.package]
 # tape releases independently (tape@<version> tags →
 # .github/workflows/tape-release.yml). Every member inherits this version.
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Chris Cheng <chris.cheng.c4@gmail.com>"]
 license = "MIT"
@@ -35,6 +35,9 @@ peer-tls = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
 # Shared raft driver (#1327): RaftHost/RaftStore/RaftStateMachine,
 # ClusterTopology::from_env, OutcomeWindow, SnapshotPolicy/HostConfig.
 raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+# Shared shutdown deadline: one absolute budget for the HTTP drain and the
+# raft host's leadership handoff (`RaftHost::shutdown_within`).
+server-lifecycle = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
 # Shared bearer-token auth contract (#1326).
 service-auth = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
 # Shared backup contract (#1329): destination/policy schema, BackupSink,

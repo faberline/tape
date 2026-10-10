@@ -9,7 +9,7 @@
 #   bash scripts/kind-e2e.sh
 #   TAPE_KEEP_CLUSTER=1 bash scripts/kind-e2e.sh
 #   TAPE_E2E_IMAGE_MODE=prebuilt TAPE_E2E_IMAGE=ghcr.io/faberline/tape@sha256:<digest> \
-#     TAPE_E2E_EXPECTED_VERSION=0.5.0 TAPE_E2E_EXPECTED_RUNTIME_DIGEST=sha256:<digest> \
+#     TAPE_E2E_EXPECTED_VERSION=0.6.0 TAPE_E2E_EXPECTED_RUNTIME_DIGEST=sha256:<digest> \
 #     bash scripts/kind-e2e.sh
 #
 # Requirements: docker, kind, kubectl, curl, jq.

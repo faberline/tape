@@ -21,6 +21,7 @@ fn help_ships_standard_and_replay_commands() {
         "llm",
         "upgrade",
         "issue",
+        "connect",
     ] {
         assert!(stdout.contains(needle), "help should contain {needle}");
     }

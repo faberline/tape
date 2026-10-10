@@ -33,6 +33,7 @@ fn cli_parse_surface() {
     assert_eq!(args.bind, "127.0.0.1:7137");
     assert!(args.store.is_none());
     assert_eq!(args.grace_secs, 10);
+    assert_eq!(args.drain_delay_secs, 5);
     assert_eq!(args.auth, "off");
     assert!(args.token_registry_file.is_none());
     assert_eq!(args.body_limit_bytes, 8 * 1024 * 1024);
@@ -46,6 +47,8 @@ fn cli_parse_surface() {
         "/tmp/journal.json",
         "--grace-secs",
         "3",
+        "--drain-delay-secs",
+        "1",
         "--auth",
         "required",
         "--token-registry-file",
@@ -60,6 +63,7 @@ fn cli_parse_surface() {
     assert_eq!(args.bind, "0.0.0.0:9000");
     assert_eq!(args.store, Some(PathBuf::from("/tmp/journal.json")));
     assert_eq!(args.grace_secs, 3);
+    assert_eq!(args.drain_delay_secs, 1);
     assert_eq!(args.auth, "required");
     assert_eq!(
         args.token_registry_file,

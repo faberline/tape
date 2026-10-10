@@ -132,7 +132,8 @@ keep the CR name `tape` — `tape serve` derives raft peer DNS as
 |------|--------------|---------|
 | Bind | `TAPE_BIND` (`--bind`) | `127.0.0.1:7137` |
 | Storage | `TAPE_STORE` (`--store`) | unset (in-memory) |
-| Shutdown | `TAPE_GRACE_SECS` (`--grace-secs`) | `10` |
+| Shutdown | `TAPE_GRACE_SECS` (`--grace-secs`) — the whole SIGTERM shutdown budget; set `terminationGracePeriodSeconds` to this plus 5 | `10` |
+| Shutdown | `TAPE_DRAIN_DELAY_SECS` (`--drain-delay-secs`) — how long the node keeps serving after `/readyz` turns 503, capped by the grace budget | `5` |
 | **Auth** | `TAPE_AUTH` (`--auth`) — `off`\|`required`; `TAPE_TOKEN_REGISTRY_FILE` (`--token-registry-file`) bearer-token registry JSON; `TAPE_TOKENS` legacy/dev inline fallback | `off` |
 | **Raft HA** | `TAPE_DATA_DIR` (`--data-dir`), `TAPE_PEER_SERVICE` (`--peer-service`), `TAPE_PEERS`, plus the standard `POD_NAME`/`SHARD_COUNT`/`REPLICAS_PER_SHARD`/`VOTER_COUNT` downward-API quartet | peer-service `tape` |
 | Peer mTLS | `TAPE_PEER_TLS_CERT`/`_KEY`/`_CA`, `TAPE_PEER_MTLS=on\|off` | unset (cleartext peer transport only when mTLS is off) |
@@ -156,7 +157,7 @@ tape-specific):
 | Path | Purpose | Auth |
 |------|---------|------|
 | `GET /healthz` | Liveness. | no |
-| `GET /readyz` | Readiness — `503` while draining after SIGTERM. | no |
+| `GET /readyz` | Readiness — `503` from SIGTERM until the process exits. | no |
 | `GET /metrics` | Prometheus text. | no |
 | `GET /openapi.json`, `GET /docs` | OpenAPI 3 + Swagger UI. | no |
 | `GET /admin/backup` | Stream a whole-journal snapshot. | per `TAPE_AUTH` (needs `admin` role on `*` when `--auth required`) |
