@@ -14,17 +14,17 @@ use futures::{StreamExt, TryStreamExt};
 // Never pass an earlier phase's deadline into a later health, election, or
 // replication wait: that would make a slow earlier phase hide the later one.
 const PHASE_BUDGET: Duration = Duration::from_secs(12);
-const REQUEST_BUDGET: Duration = Duration::from_secs(12);
+pub(crate) const REQUEST_BUDGET: Duration = Duration::from_secs(12);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const REPLAY_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
-struct Node {
-    child: Child,
+pub(crate) struct Node {
+    pub(crate) child: Child,
     bind: String,
 }
 
 impl Node {
-    fn base_url(&self) -> String {
+    pub(crate) fn base_url(&self) -> String {
         format!("http://{}", self.bind)
     }
 }
@@ -40,19 +40,32 @@ impl Drop for Node {
 
 /// Bind an ephemeral port and immediately release it for the child process
 /// to rebind -- a small, accepted race in this style of subprocess test.
-fn free_addr() -> String {
+pub(crate) fn free_addr() -> String {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     format!("{}", l.local_addr().unwrap())
 }
 
 fn spawn_node(id: u32, bind: &str, data_dir: &std::path::Path, peers_csv: &str) -> Node {
+    spawn_node_with(id, bind, data_dir, peers_csv, |_| {})
+}
+
+/// [`spawn_node`] with a hook to add flags, environment or output
+/// redirection to the child before it starts.
+pub(crate) fn spawn_node_with(
+    id: u32,
+    bind: &str,
+    data_dir: &std::path::Path,
+    peers_csv: &str,
+    configure: impl FnOnce(&mut Command),
+) -> Node {
     let child_log = std::env::var("TAPE_CHILD_RUST_LOG").unwrap_or_else(|_| "warn".into());
     let stderr = if std::env::var_os("TAPE_TEST_LOG").is_some() {
         Stdio::inherit()
     } else {
         Stdio::null()
     };
-    let child = Command::new(env!("CARGO_BIN_EXE_tape"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tape"));
+    command
         .arg("serve")
         .arg("--bind")
         .arg(bind)
@@ -67,9 +80,9 @@ fn spawn_node(id: u32, bind: &str, data_dir: &std::path::Path, peers_csv: &str) 
         .env("TAPE_AUTH", "off")
         .env("RUST_LOG", child_log)
         .stdout(Stdio::null())
-        .stderr(stderr)
-        .spawn()
-        .expect("spawn tape serve subprocess");
+        .stderr(stderr);
+    configure(&mut command);
+    let child = command.spawn().expect("spawn tape serve subprocess");
     Node {
         child,
         bind: bind.to_string(),
@@ -80,7 +93,7 @@ fn phase_deadline() -> Instant {
     Instant::now() + PHASE_BUDGET
 }
 
-async fn wait_healthy(client: &reqwest::Client, base: &str, phase: &str) {
+pub(crate) async fn wait_healthy(client: &reqwest::Client, base: &str, phase: &str) {
     let deadline = phase_deadline();
     loop {
         let last_status = match client.get(format!("{base}/healthz")).send().await {
@@ -123,7 +136,11 @@ async fn observed_leader<'a>(client: &reqwest::Client, bases: &[&'a str]) -> Opt
     leader
 }
 
-async fn wait_leader<'a>(client: &reqwest::Client, bases: &[&'a str], phase: &str) -> &'a str {
+pub(crate) async fn wait_leader<'a>(
+    client: &reqwest::Client,
+    bases: &[&'a str],
+    phase: &str,
+) -> &'a str {
     let deadline = phase_deadline();
     let mut stable = None;
     let mut samples = 0;
@@ -150,7 +167,7 @@ async fn wait_leader<'a>(client: &reqwest::Client, bases: &[&'a str], phase: &st
     }
 }
 
-async fn append(client: &reqwest::Client, base: &str, n: i64) -> reqwest::Response {
+pub(crate) async fn append(client: &reqwest::Client, base: &str, n: i64) -> reqwest::Response {
     client
         .post(format!("{base}/topics/orders/append"))
         .json(&serde_json::json!({ "payload": { "n": n } }))
@@ -198,7 +215,12 @@ fn event_diagnostic(events: &[i64]) -> String {
 /// Poll one replica until it holds every expected event. A replica starts
 /// with its own budget, so an earlier replica's catch-up cannot spend time
 /// from a later one.
-async fn wait_replayed(client: &reqwest::Client, base: &str, expected: &[i64], phase: &str) {
+pub(crate) async fn wait_replayed(
+    client: &reqwest::Client,
+    base: &str,
+    expected: &[i64],
+    phase: &str,
+) {
     let deadline = phase_deadline();
     let mut observed = Vec::new();
     loop {

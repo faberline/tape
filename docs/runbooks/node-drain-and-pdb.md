@@ -43,31 +43,46 @@ effect of a policy edit.
 
 **During graceful shutdown:**
 
-When the pod is deleted, the kubelet sends SIGTERM. Tape then
-(`core/crates/server-lifecycle/src/signal.rs`, `shutdown_with_drain`):
+When the pod is deleted, the kubelet sends SIGTERM. Tape runs one shutdown
+sequence inside a single deadline of `TAPE_GRACE_SECS` (ConfigMap `tape-config`,
+default `30`), built from core's `server_lifecycle::ShutdownDeadline`
+(`crates/tape/src/bin/tape/serve/shutdown.rs`):
 
-1. Calls `start_drain()`, so `/readyz` returns 503.
-2. The kubelet's readiness probe fails and the endpoints controller withdraws the
-   pod from the `tape` Service. New clients stop being routed here; this is the
-   whole mechanism, there is no flag clients read.
-3. Sleeps for `TAPE_GRACE_SECS` (ConfigMap `tape-config`, default `30`) so
-   in-flight requests can finish, then exits.
+1. Calls `start_drain()`, so `/readyz` returns 503. The kubelet's readiness
+   probe fails and the endpoints controller withdraws the pod from the `tape`
+   Service. New clients stop being routed here; this is the whole mechanism,
+   there is no flag clients read.
+2. Keeps serving for `TAPE_DRAIN_DELAY_SECS` (default `5`, capped by the
+   deadline) while the endpoints move.
+3. In replica mode, stops admitting raft proposals (writes answer 503), hands
+   leadership to a caught-up voter and drains peer RPCs
+   (`RaftHost::shutdown_within`). It logs one `event="raft_shutdown"` line with
+   the handoff and whether every phase finished.
+4. Closes the public listener and tells every open connection to close
+   (GOAWAY on HTTP/2, `Connection: close` on HTTP/1.1), so in-flight requests
+   finish and idle keep-alive or peer connections end at once instead of
+   holding the drain open until the deadline. It logs `event="http_drained"`,
+   or `event="http_drain_incomplete"` if connections were cut at the deadline,
+   and exits. If the raft host could not finish within the deadline, the peer
+   listener is aborted and the process exits non-zero.
 
 **Nothing is flushed at shutdown, and nothing needs to be.** Every acked write
-was already made durable at the time it was acked: `FileLog::persist`
-(`crates/tape-storage/src/file_log.rs`) writes the journal through `storage_durable::atomic_write` with
-`FsyncPolicy::Always` on every mutation. The grace window buys in-flight requests
-time to complete — it is not a durability window, and cutting it short costs
-open requests, not data.
+was already made durable at the time it was acked: the WAL
+(`crates/tape-storage/src/wal`) fsyncs each group commit before it answers, and
+in replica mode raft commits it to a quorum first. The grace budget buys
+in-flight requests and the leadership handoff time to complete. It is not a
+durability window, and cutting it short costs open requests and one election,
+not data.
 
-> **Keep `TAPE_GRACE_SECS` ≤ `terminationGracePeriodSeconds`.** These are two
-> independent knobs on the direct-install path: `k8s/base/statefulset.yaml`
-> hardcodes `terminationGracePeriodSeconds: 30` and `TAPE_GRACE_SECS` comes from
-> the ConfigMap. They ship equal, so there is zero margin — raise the ConfigMap
-> value alone and the kubelet SIGKILLs the process partway through its own drain
-> sleep. Raise both together. (On the operator path this cannot happen:
-> `crates/tape-operator/src/render.rs` derives `terminationGracePeriodSeconds` from
-> `spec.graceSecs`.)
+> **Keep `terminationGracePeriodSeconds` at `TAPE_GRACE_SECS` + 5.** These are
+> two independent knobs on the direct-install path:
+> `k8s/base/statefulset.yaml` hardcodes `terminationGracePeriodSeconds: 35` and
+> `TAPE_GRACE_SECS` comes from the ConfigMap. The 5 s slack lets the process
+> exit on its own; raise the ConfigMap value alone and the kubelet SIGKILLs the
+> process partway through its shutdown. Raise both together. (On the operator
+> path this cannot happen: `crates/tape-operator/src/render.rs` derives
+> `terminationGracePeriodSeconds` from `spec.graceSecs` plus
+> `TERMINATION_SLACK_SECS`.)
 
 **After pod deletion (write outage begins):**
 

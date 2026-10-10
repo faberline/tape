@@ -181,6 +181,13 @@ fn render_emits_expected_child_objects() {
     assert_eq!(get("TAPE_BIND")["value"], "0.0.0.0:7137");
     assert_eq!(get("TAPE_RAFT_PORT")["value"], "7138");
     assert_eq!(get("TAPE_DATA_DIR")["value"], "/data");
+    // graceSecs is the whole shutdown budget; the kubelet waits a fixed
+    // slack beyond it so the sequence finishes before SIGKILL.
+    assert_eq!(get("TAPE_GRACE_SECS")["value"], "10");
+    assert_eq!(
+        sts["spec"]["template"]["spec"]["terminationGracePeriodSeconds"],
+        10 + tape_operator::render::TERMINATION_SLACK_SECS
+    );
 
     // Probe contract on the serve port: /readyz readiness, /healthz liveness
     // + startup — what service-http's standard probe routes answer.

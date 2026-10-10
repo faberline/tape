@@ -75,7 +75,8 @@ contexts, held by the application layer as trait objects:
   `should_enter_storage_degraded_mode` accepts, `storage_writable` fails every
   mutation until the periodic storage re-probe (started by `tape serve`)
   clears it; reads keep working.
-- **Drain** — `start_drain` makes `/readyz` report not ready.
+- **Drain** — `start_drain` makes `/readyz` report not ready. `tape serve`
+  calls it first on SIGTERM, before the raft handoff and the listener drains.
 
 ## Interfaces
 

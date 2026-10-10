@@ -17,7 +17,9 @@ holds tape's state machine, its bootstrap seeding and its environment names.
   `raft::SNAPSHOT_EVERY` (1024) applied entries.
 - **Host** — `raft::TapeRaft`: the `Replicator`. It proposes a command and
   reads back this node's `TapeOutcome`, and reports the applied index and the
-  snapshot at it. tape has one group and no shards.
+  snapshot at it. tape has one group and no shards. On SIGTERM `tape serve`
+  calls `quiesce_proposals` and then `shutdown_within(deadline)`, which hands
+  leadership to a caught-up voter and drains peer RPCs before it reports.
 - **Bootstrap seed** — `raft::prepare_bootstrap_seed` restores an empty
   replica from one `/admin/backup` object before its first election.
   `raft::data_dir_has_existing_state` is the emptiness check it and its
@@ -35,6 +37,11 @@ holds tape's state machine, its bootstrap seeding and its environment names.
 - Completed proposal ids travel in the snapshot, so a retried proposal applies
   once.
 - Bootstrap seeding refuses a data directory that already holds raft state.
+- Shutdown closes the public listener only after the host has shut down:
+  without peer mTLS the raft routes share that listener, so closing it first
+  would cut the leadership handoff. The dedicated mTLS peer listener closes
+  gracefully only when the host reports `peer_listener_close_safe`, and is
+  aborted otherwise.
 
 ## Exceptions and debts
 

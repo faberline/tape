@@ -31,7 +31,9 @@ spec:
         prometheus.io/path: /metrics
     spec:
       serviceAccountName: tape
-      terminationGracePeriodSeconds: 30
+      # TAPE_GRACE_SECS (30, configmap.yaml) is the whole shutdown budget;
+      # the extra 5 s lets the process exit before the kubelet SIGKILLs it.
+      terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -41,7 +43,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: tape
-          image: ghcr.io/faberline/tape:0.5.0
+          image: ghcr.io/faberline/tape:0.6.0
           imagePullPolicy: IfNotPresent
           command: ["tape", "serve"]
           ports:

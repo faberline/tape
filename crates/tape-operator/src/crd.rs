@@ -3,7 +3,7 @@
 //! One `Tape` object declares a tape deployment's HA topology. The spec
 //! flattens the shared [`service_k8s::ClusterSpec`] (image + sharding/replication
 //! knobs + per-pod resources) and adds tape's own runtime knobs (durable
-//! journal disk tier, drain window, log level, and the opt-in bearer-auth
+//! journal disk tier, shutdown budget, log level, and the opt-in bearer-auth
 //! wiring). tape is a **single raft group**: `shardCount` exists in the
 //! shared shape but defaults to 1 and the render pins it —
 //! `replicasPerShard` is the only scale knob (1 = single node, 3 = raft HA).
@@ -53,8 +53,10 @@ pub struct TapeSpec {
     #[serde(default)]
     pub storage_class: Option<String>,
 
-    /// Graceful drain window on SIGTERM (seconds); tracks
-    /// `terminationGracePeriodSeconds`. Defaults to 10 (`TAPE_GRACE_SECS`).
+    /// Shutdown budget on SIGTERM (seconds): the readiness drain, the raft
+    /// leadership handoff and the listener drains finish within it. The pod's
+    /// `terminationGracePeriodSeconds` is this plus 5. Defaults to 10
+    /// (`TAPE_GRACE_SECS`).
     #[serde(default = "default_grace_secs")]
     pub grace_secs: u64,
 

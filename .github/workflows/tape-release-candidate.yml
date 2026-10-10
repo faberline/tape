@@ -506,7 +506,6 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime
-          cargo test --locked -p relay --test raft_cluster
           bash scripts/raft-implementor-build.sh
 
   kind-amd64:

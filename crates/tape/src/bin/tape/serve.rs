@@ -1,8 +1,10 @@
 //! `tape serve`: resolve auth, the durable backend, and (in replica mode) the
-//! raft group, then run the HTTP server with a graceful drain.
+//! raft group, then run the HTTP server until the shutdown sequence in
+//! [`shutdown`] completes.
 
 mod provision;
 mod reprobe;
+mod shutdown;
 mod store;
 
 use std::path::PathBuf;
@@ -20,6 +22,7 @@ use tape_storage::wal;
 use crate::offline::load_journal;
 use provision::ensure_subscriptions;
 use reprobe::spawn_storage_full_reprobe;
+use shutdown::{shutdown_on_signal, PublicHttp, ServerTask};
 pub(crate) use store::{resolve_journal_store, JournalStoreKind};
 
 #[derive(clap::Args, Debug)]
@@ -31,10 +34,17 @@ pub(crate) struct ServeArgs {
     /// Defaults to an empty in-memory journal when unset.
     #[arg(long, env = "TAPE_STORE")]
     pub(crate) store: Option<PathBuf>,
-    /// Graceful-drain window (seconds) held after SIGTERM before the
-    /// listener closes, while `/readyz` reports 503 so k8s stops routing.
+    /// Total shutdown budget (seconds) after SIGTERM: the readiness drain,
+    /// the raft leadership handoff and the listener drains all finish
+    /// within it. Set the pod's `terminationGracePeriodSeconds` a few
+    /// seconds above it.
     #[arg(long, env = "TAPE_GRACE_SECS", default_value_t = 10)]
     pub(crate) grace_secs: u64,
+    /// Seconds after SIGTERM that the node keeps accepting requests while
+    /// `/readyz` reports 503, so endpoints move off it before writes stop.
+    /// Capped by `--grace-secs`.
+    #[arg(long, env = "TAPE_DRAIN_DELAY_SECS", default_value_t = 5)]
+    pub(crate) drain_delay_secs: u64,
     /// Log output format. Kubernetes uses `json` for the shared
     /// `axiom.service.log.v1` collector contract; local development defaults
     /// to the human-readable formatter.
@@ -93,8 +103,8 @@ pub(crate) enum LogFormat {
 
 /// Run the tape HTTP server: load the journal from `--store` (or start
 /// empty), serve the shared service shell (standard probes merged with the
-/// `/topics` data plane) over HTTP/1.1 + h2c on one port, with a
-/// SIGTERM-aware graceful drain (`--grace-secs`).
+/// `/topics` data plane) over HTTP/1.1 + h2c on one port, until SIGTERM
+/// runs the shutdown sequence within `--grace-secs`.
 pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
     let log_format = match args.log_format {
         LogFormat::Pretty => service_http::LogFormat::Pretty,
@@ -319,38 +329,28 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
             let peer_listener = tokio::net::TcpListener::bind(&peer_bind)
                 .await
                 .with_context(|| format!("bind authenticated raft peer listener {peer_bind}"))?;
-            let (shutdown, shutdown_rx) = tokio::sync::oneshot::channel();
             tracing::info!(
                 addr = %peer_bind,
                 tls_generation = transport.generation(),
                 "tape raft peer mTLS listening"
             );
-            let serve = tokio::spawn(async move {
-                transport
-                    .serve(peer_listener, router, async move {
-                        let _ = shutdown_rx.await;
-                    })
-                    .await
-            });
-            Some((shutdown, serve))
+            Some(ServerTask::spawn(move |stop| async move {
+                transport.serve(peer_listener, router, stop).await
+            }))
         }
         (None, None) => None,
         _ => unreachable!("peer transport and router are configured together"),
     };
 
-    let grace = Duration::from_secs(args.grace_secs);
-    let drain_state = state.clone();
-    service_http::serve(
-        listener,
-        app,
-        service_http::shutdown_with_drain(move || drain_state.start_drain(), grace),
+    let http = PublicHttp::spawn(listener, app);
+    shutdown_on_signal(
+        state,
+        http,
+        peer_server,
+        Duration::from_secs(args.grace_secs),
+        Duration::from_secs(args.drain_delay_secs),
     )
-    .await;
-    if let Some((shutdown, serve)) = peer_server {
-        let _ = shutdown.send(());
-        serve.await.context("raft peer listener task panicked")??;
-    }
-    Ok(())
+    .await
 }
 
 /// Reuse the public listener's host portion for the dedicated peer port.

@@ -33,6 +33,7 @@ mod tests;
 
 pub use bootstrap::{data_dir_has_existing_state, prepare_bootstrap_seed};
 pub use host::TapeRaft;
+pub use raft_runtime::{HostShutdownReport, LeadershipHandoff, ShutdownPhase};
 pub use state_machine::TapeStateMachine;
 
 /// How many applied entries between host snapshots (log compaction; arms

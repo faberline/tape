@@ -37,6 +37,10 @@ const KIND: &str = "Tape";
 const CLIENT_PORT: i32 = 7137;
 const RAFT_PORT: i32 = 7138;
 const COMPONENT: &str = "server";
+/// Seconds the kubelet waits beyond `graceSecs` before it SIGKILLs a pod.
+/// `graceSecs` is tape's whole shutdown budget, so this slack is what lets
+/// the sequence finish and the process exit on its own.
+pub const TERMINATION_SLACK_SECS: u64 = 5;
 /// Component label for the scheduled-backup CronJob (#2574), kept distinct
 /// from `server` so its pods are never selected by the serving Services nor
 /// counted against the PDB.
@@ -281,7 +285,7 @@ fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value {
 
     // tape runtime env layered on top of the downward-API quartet +
     // TAPE_PEER_SERVICE the helper injects: bind-all on the serve port, the
-    // /data disk tier, the drain window, and the resolved auth mode.
+    // /data disk tier, the shutdown budget, and the resolved auth mode.
     //
     // TAPE_AUTH is unconditional and comes from the mode, never from whether a
     // registry source happens to be set (#2765). Deriving it from the source
@@ -364,7 +368,7 @@ fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value {
         })),
         pod_security_context: Some(render::restricted_pod_security_context()),
         container_security_context: Some(render::restricted_container_security_context()),
-        termination_grace_period_seconds: Some(s.grace_secs),
+        termination_grace_period_seconds: Some(s.grace_secs + TERMINATION_SLACK_SECS),
         readiness_probe: Some(json!({
             "httpGet": { "path": "/readyz", "port": "http" },
             "initialDelaySeconds": 2, "periodSeconds": 5, "timeoutSeconds": 3, "failureThreshold": 60,

@@ -3,6 +3,7 @@
 
 mod backup;
 mod cli;
+mod connect;
 mod dockerfile;
 mod issue;
 mod k8s;

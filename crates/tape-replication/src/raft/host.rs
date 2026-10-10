@@ -9,9 +9,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use axum::Router;
 use raft_runtime::{
-    ClusterTopology, FsyncPolicy, HostConfig, Index, Membership, NodeId, PeerTransport, RaftHost,
-    RaftStateMachine, RaftStore, SnapshotPolicy,
+    ClusterTopology, FsyncPolicy, HostConfig, HostShutdownReport, Index, Membership, NodeId,
+    PeerTransport, RaftHost, RaftStateMachine, RaftStore, SnapshotPolicy,
 };
+use server_lifecycle::ShutdownDeadline;
 
 use super::{TapeEnvelope, TapeStateMachine};
 use tape_shared_kernel::{
@@ -173,6 +174,20 @@ impl TapeRaft {
     /// and peer listener are torn down.
     pub async fn shutdown(&self) -> Result<()> {
         self.host.shutdown().await
+    }
+
+    /// Refuse new proposals; in-flight ones still commit. True only for the
+    /// first call. Public ingress should already be draining.
+    pub fn quiesce_proposals(&self) -> bool {
+        self.host.quiesce_proposals()
+    }
+
+    /// Shut the host down within `deadline`: quiesce, hand leadership to a
+    /// caught-up voter, stop the background tasks and drain peer RPCs. The
+    /// peer listener may close gracefully only when the report says
+    /// `peer_listener_close_safe`; a repeat call joins the first one.
+    pub async fn shutdown_within(&self, deadline: ShutdownDeadline) -> HostShutdownReport {
+        self.host.shutdown_within(deadline).await
     }
 
     /// Peer raft RPCs + leader forwarding + `/raftz`. The h2c compatibility

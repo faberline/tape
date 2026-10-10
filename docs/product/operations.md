@@ -67,8 +67,9 @@ gate. This area spans the README capabilities `backup-and-seed`,
 - Problem: none open as shipped.
 - Who: operators and their alerting.
 - Promise: `/healthz`, `/readyz`, `/metrics`, `/openapi.json`, and `/docs`
-  on the data-plane port; readiness flips to 503 on drain; request counters,
-  latency sums, topic offset and subscription lag gauges; OTLP traces; a
+  on the data-plane port; readiness flips to 503 on SIGTERM, and the whole
+  shutdown, including the raft leadership handoff, fits one
+  `TAPE_GRACE_SECS` budget; request counters, latency sums, topic offset and subscription lag gauges; OTLP traces; a
   bounded stability run survives repeated restarts without losing history.
 - Limits today: no oldest-unacked-age, delivery-attempt, or dead-letter
   counter, because there is no per-message delivery state (closed by the

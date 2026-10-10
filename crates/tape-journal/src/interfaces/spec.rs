@@ -69,6 +69,16 @@ tape checkpoint put orders worker-a --offset 1
 tape subscription create orders worker-a
 ```
 
+To reach a node in a cluster, `tape connect` port-forwards to its Service and
+runs a command with `TAPE_URL` set to the forwarded address:
+
+```text
+tape connect --namespace apps --cr tape -- sh -c 'curl -s "$TAPE_URL/readyz"'
+```
+
+It injects no credential; with `TAPE_AUTH=required` the command passes its own
+bearer token.
+
 Subscription creation is intrinsically caller-driven pull; Tape has no push,
 lease, consumer-group, or bidirectional consume mode. Serving supports durable
 Raft replication, operator-managed Kubernetes deployment, and external replay

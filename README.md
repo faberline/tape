@@ -119,6 +119,7 @@ readback oracle for the current acceptance scripts.
 | Typed clients | [`clients/README.md`](clients/README.md) |
 | Serve flags, environment, ports, probes, runbooks | [`docs/deployment-handoff.md`](docs/deployment-handoff.md) |
 | Kubernetes custom resource | `tape k8s crd render`; the operator and instance layers come from `tape k8s operator render` and `tape k8s instance render`. |
+| Reaching an in-cluster node | `tape connect --namespace <ns> --cr <name> -- <command>` port-forwards to the Service and runs the command with `TAPE_URL` set; `tape connect --help`. |
 | Backup destinations | `tape backup --help` lists the accepted schemes: `file://`, `s3://` (feature `backup`), and `gs://`. |
 
 ## Capabilities
@@ -143,7 +144,7 @@ source below states its direct contribution.
 | Backup and seed | `backup-and-seed` | Export a whole-journal snapshot to a sink and restore it into an empty node. | `tape`, `core/service-backup`, `core/storage-durable` |
 | Security hardening | `security-hardening` | Gate data-plane routes by per-topic grants, bound request admission, and keep management audit redacted. | `tape`, `core/service-auth`, `core/service-http`, `core/peer-tls` |
 | Kubernetes-native deployment | `kubernetes-native-deployment` | Reconcile a `Tape` custom resource, or apply the direct-install base, into stable Kubernetes workloads. | `tape`, `core/service-k8s`, `external:kubernetes` |
-| Operations and observability | `operations-observability` | Expose health, readiness, metrics, traces, and graceful drain on one port. | `tape`, `core/service-http`, `core/metrics-prometheus` |
+| Operations and observability | `operations-observability` | Expose health, readiness, metrics, traces, and graceful drain on one port. | `tape`, `core/service-http`, `core/server-lifecycle`, `core/metrics-prometheus` |
 | API, CLI, and clients | `api-cli-clients` | Publish one discoverable HTTP contract and generate typed clients from it. | `tape`, `core/service-http`, `core/transport-h2c`, `core/openapi-codegen`, `core/cli-std` |
 | Local performance ceiling | `local-performance-ceiling` | Keep append, replay, and checkpoint latency inside tape's own release-mode budget. | `tape` |
 
@@ -268,14 +269,17 @@ evidence; it does not define the current contract.
 
 - ID: `operations-observability`
 - Promise: Serve `/healthz`, `/readyz`, `/metrics`, `/openapi.json`, and
-  `/docs` on the data-plane port; flip readiness to 503 on drain; emit
+  `/docs` on the data-plane port; flip readiness to 503 on SIGTERM and
+  finish the shutdown, raft handoff included, within one grace budget; emit
   request counters, latency sums, topic offset and subscription lag gauges;
   export OTLP traces; survive repeated restarts without losing history.
 - Sources:
-  - [`tape`](./) defines the tape metric families, the drain window, and
+  - [`tape`](./) defines the tape metric families, the shutdown sequence, and
     the stateful restart behaviour.
   - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
     probe routes, `Server-Timing`, structured logs, and OTLP wiring.
+  - [`core/server-lifecycle`](https://github.com/faberline/core/blob/v0.4.14/crates/server-lifecycle/README.md)
+    provides the one shutdown deadline the drain and the raft handoff share.
   - [`core/metrics-prometheus`](https://github.com/faberline/core/blob/v0.4.14/crates/metrics-prometheus/README.md)
     provides the Prometheus text exposition.
 - Gate: `cargo test -p tape --test it -- http_transport:: shared_otlp_tracing:: long_running_stability::`
@@ -297,7 +301,8 @@ evidence; it does not define the current contract.
   - [`core/openapi-codegen`](https://github.com/faberline/core/blob/v0.4.14/crates/openapi-codegen/README.md) provides
     the in-binary client generator.
   - [`core/cli-std`](https://github.com/faberline/core/blob/v0.4.14/crates/cli-std/README.md) provides the standard
-    command set and output conventions.
+    command set, output conventions, and the `kubectl port-forward`
+    lifecycle behind `tape connect`.
 - Gate: `cargo test -p tape --test it -- spec_route_parity:: spec_generated_clients:: cli_contract::`
 
 ### Local performance ceiling

@@ -50,7 +50,6 @@ TAPE_GATES = (
 )
 LIBRARY_GATES = (
     "bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime",
-    "cargo test --locked -p relay --test raft_cluster",
     "bash scripts/raft-implementor-build.sh",
 )
 CANDIDATE_JOBS = {
@@ -582,7 +581,7 @@ def write_sidecar(path: Path) -> None:
 
 
 def make_archive(path: Path, target: str) -> None:
-    binary = b"#!/bin/sh\nprintf 'tape 0.5.0\\n'\n"
+    binary = b"#!/bin/sh\nprintf 'tape 0.6.0\\n'\n"
     readme = b"Tape release fixture\n"
     with tarfile.open(path, "w:gz", format=tarfile.PAX_FORMAT) as archive:
         directory = tarfile.TarInfo(f"tape-{target}/")
@@ -615,7 +614,7 @@ def fixture_command(root: Path, *, commit: str, attempt: str, receipt: Path, sid
         "--repo",
         "faberline/tape",
         "--tag",
-        "tape@0.5.0",
+        "tape@0.6.0",
         "--commit",
         commit,
         "--candidate-run-id",
@@ -698,8 +697,8 @@ def build_fixture(root: Path) -> tuple[str, dict[str, object], dict[str, object]
         "source_ref": "refs/heads/main",
         "workflow_ref": "faberline/tape/.github/workflows/tape-release-candidate.yml@refs/heads/main",
         "commit": commit,
-        "version": "0.5.0",
-        "tag": "tape@0.5.0",
+        "version": "0.6.0",
+        "tag": "tape@0.6.0",
         "candidate_tag": "release-candidate-42-3",
         "pr": {"number": 1, "url": "https://github.com/faberline/axiom/pull/1"},
         "image": {

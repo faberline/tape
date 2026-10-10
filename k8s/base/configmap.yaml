@@ -9,7 +9,8 @@ metadata:
 data:
   # h2c + HTTP/1.1 client API listener.
   TAPE_BIND: "0.0.0.0:7137"
-  # SIGTERM drain window; matches the StatefulSet's grace period.
+  # Whole SIGTERM shutdown budget; the StatefulSet's terminationGracePeriodSeconds
+  # is this plus 5.
   TAPE_GRACE_SECS: "30"
   # Sift's node collector accepts the shared versioned JSONL contract.
   TAPE_LOG_FORMAT: "json"

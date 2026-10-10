@@ -14,6 +14,7 @@ axum.workspace = true
 peer-tls.workspace = true
 raft-runtime.workspace = true
 serde.workspace = true
+server-lifecycle.workspace = true
 serde_json.workspace = true
 tape-shared-kernel.workspace = true
 tracing.workspace = true
