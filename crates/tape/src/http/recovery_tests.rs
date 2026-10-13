@@ -1,6 +1,6 @@
-//! Single-node startup provisioning against a WAL-backed state: what it
-//! commits must survive recovery, and a recovered subscription is not
-//! committed twice.
+//! Single-node startup provisioning against a WAL-backed state and a legacy
+//! `--store` file: what it commits must survive a reload, and a recovered
+//! subscription is not committed twice.
 
 use std::sync::Arc;
 
@@ -78,4 +78,36 @@ async fn recovered_startup_subscription_does_not_append_a_second_wal_frame() {
         before,
         "an already recovered subscription must not append a second WAL frame"
     );
+}
+
+#[tokio::test]
+async fn startup_subscription_survives_a_reload_of_a_legacy_store_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let store_path = dir.path().join("journal.json");
+    let state = AppState::new(
+        tape_shared_kernel::TapeJournal::default(),
+        Some(store_path.clone()),
+        8 * 1024 * 1024,
+    );
+
+    let outcome = state
+        .provision_startup_subscription("orders".into(), "billing".into())
+        .await
+        .expect("legacy store write succeeds");
+    assert!(matches!(
+        outcome,
+        TapeOutcome::SubscriptionCreated(Ok(subscription)) if subscription.topic == "orders" && subscription.name == "billing"
+    ));
+    drop(state);
+
+    let bytes = std::fs::read(&store_path).expect("startup provisioning wrote the store file");
+    let reloaded: tape_shared_kernel::TapeJournal =
+        serde_json::from_slice(&bytes).expect("store file is a TapeJournal");
+    let subscriptions = reloaded.subscriptions("orders");
+    assert_eq!(
+        subscriptions.len(),
+        1,
+        "a startup-created subscription must survive a reload of the --store file"
+    );
+    assert_eq!(subscriptions[0].name, "billing");
 }
