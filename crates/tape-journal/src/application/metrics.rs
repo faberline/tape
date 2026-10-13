@@ -1,6 +1,6 @@
-//! tape request observability: per-op request counts + latency and the
-//! ENOSPC degraded-mode series, rendered into the Prometheus exposition
-//! served at `/metrics`.
+//! tape request observability: per-op request counts + latency, the ENOSPC
+//! degraded-mode series, and the raft leader-known gauge, rendered into the
+//! Prometheus exposition served at `/metrics`.
 //!
 //! Built on the shared `metrics-prometheus` primitives (`Latency` — a
 //! lock-free `sum`/`count` counter pair — plus the text-format encoder
@@ -11,10 +11,15 @@
 
 use metrics_prometheus::{Counter, Gauge, Latency, Sample};
 
+/// #2579: the `raft_leader_known` value meaning "no raft poll has published a
+/// result" — this process is not in raft mode, or the poller has not run yet.
+/// [`TapeMetrics::render`] omits the series while it holds this value.
+const NOT_RAFT: u64 = u64::MAX;
+
 /// Per-op request metrics for the tape data plane. One [`Latency`]
 /// (count + latency-ms sum) per op family; `count` doubles as the request
 /// counter the `tape_<op>_requests_total` sample exposes.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TapeMetrics {
     pub append: Latency,
     pub replay: Latency,
@@ -38,6 +43,35 @@ pub struct TapeMetrics {
     /// A node that flaps in and out of degraded mode is invisible in the gauge
     /// alone; this counter is what makes that visible.
     pub storage_full_errors_total: Counter,
+    /// #2579: `NOT_RAFT` means no raft poll has published a result yet; `0`
+    /// means the node is in raft mode and the last poll found no elected
+    /// leader; `1` means the node is in raft mode and the last poll found a
+    /// leader (this node or a peer).
+    pub raft_leader_known: Gauge,
+}
+
+/// The gauge starts at the sentinel value, not at `0`.
+///
+/// A derived `Default` would leave the gauge at `0`, and `0` is the value
+/// `TapeRaftLeaderAbsent` fires on — so a default constructed from a process
+/// that never entered the raft branch would look like a leaderless raft group.
+/// The sentinel must be set by every construction route, which is why the
+/// derive was dropped rather than the sentinel being set in `new()` alone.
+impl Default for TapeMetrics {
+    fn default() -> Self {
+        let metrics = Self {
+            append: Default::default(),
+            replay: Default::default(),
+            checkpoint_get: Default::default(),
+            checkpoint_put: Default::default(),
+            other: Default::default(),
+            storage_degraded: Default::default(),
+            storage_full_errors_total: Default::default(),
+            raft_leader_known: Default::default(),
+        };
+        metrics.raft_leader_known.set(NOT_RAFT);
+        metrics
+    }
 }
 
 impl TapeMetrics {
@@ -68,6 +102,17 @@ impl TapeMetrics {
     /// #2573: `true` while this node is in ENOSPC degraded read-only mode.
     pub fn is_storage_degraded(&self) -> bool {
         self.storage_degraded.get() == 1
+    }
+
+    /// #2579: publish the latest raft-leader observation for scrape-time
+    /// rendering.
+    pub fn set_raft_leader_known(&self, known: bool) {
+        self.raft_leader_known.set(if known { 1 } else { 0 });
+    }
+
+    /// #2579: read the latest raft-leader observation published by the poller.
+    pub fn get_raft_leader_known(&self) -> u64 {
+        self.raft_leader_known.get()
     }
 
     /// Map a matched axum route pattern to its op family. Unknown routes
@@ -103,7 +148,7 @@ impl TapeMetrics {
     /// Render the Prometheus text exposition (0.0.4) for the recorded
     /// request metrics, through the shared `metrics_prometheus` encoder.
     pub fn render(&self) -> String {
-        metrics_prometheus::render(&[
+        let mut samples = vec![
             Sample::new(
                 "tape_append_requests_total",
                 "counter",
@@ -207,7 +252,17 @@ impl TapeMetrics {
                 "Total genuine ENOSPC hits observed on the journal persist path.",
                 self.storage_full_errors_total.get(),
             ),
-        ])
+        ];
+        if self.raft_leader_known.get() != NOT_RAFT {
+            samples.push(Sample::new(
+                "tape_raft_leader_known",
+                "gauge",
+                "1 while the last raft poll saw a leader; 0 while the last raft poll found no \
+                 elected leader.",
+                self.raft_leader_known.get(),
+            ));
+        }
+        metrics_prometheus::render(&samples)
     }
 }
 
@@ -289,5 +344,34 @@ mod tests {
         let degraded = m.render();
         assert!(degraded.contains("tape_storage_degraded 1"));
         assert!(degraded.contains("tape_storage_full_errors_total 1"));
+    }
+
+    /// #2579 — a process that never entered the raft branch publishes no
+    /// leader-known series, so `TapeRaftLeaderAbsent` has nothing to fire on.
+    #[test]
+    fn fresh_metrics_render_omits_the_raft_leader_known_series() {
+        let m = TapeMetrics::new();
+        let out = m.render();
+        assert!(!out.contains("tape_raft_leader_known"));
+        assert!(!out.contains("# TYPE tape_raft_leader_known gauge"));
+    }
+
+    /// #2579 — once the poller publishes, both readings render, including the
+    /// `0` the alert fires on.
+    #[test]
+    fn raft_leader_known_gauge_tracks_known_and_unknown_states() {
+        let m = TapeMetrics::new();
+
+        m.set_raft_leader_known(true);
+        let known = m.render();
+        assert!(known.contains("# TYPE tape_raft_leader_known gauge"));
+        assert!(known.contains("tape_raft_leader_known 1"));
+        assert_eq!(m.get_raft_leader_known(), 1);
+
+        m.set_raft_leader_known(false);
+        let unknown = m.render();
+        assert!(unknown.contains("# TYPE tape_raft_leader_known gauge"));
+        assert!(unknown.contains("tape_raft_leader_known 0"));
+        assert_eq!(m.get_raft_leader_known(), 0);
     }
 }

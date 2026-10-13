@@ -3,6 +3,7 @@
 //! [`shutdown`] completes.
 
 mod provision;
+mod raft_leader;
 mod reprobe;
 mod shutdown;
 mod store;
@@ -21,6 +22,7 @@ use tape_storage::wal;
 
 use crate::offline::load_journal;
 use provision::ensure_subscriptions;
+use raft_leader::spawn_raft_leader_poller;
 use reprobe::spawn_storage_full_reprobe;
 use shutdown::{shutdown_on_signal, PublicHttp, ServerTask};
 pub(crate) use store::{resolve_journal_store, JournalStoreKind};
@@ -304,7 +306,9 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
             peer_router = Some(raft.router());
             peer_transport = Some(transport);
         }
+        let raft_for_poller = raft.clone();
         state.set_raft(raft);
+        spawn_raft_leader_poller(state.metrics(), raft_for_poller);
     }
 
     // Ensure CR-declared subscriptions after journal/raft is ready but before listener starts.
