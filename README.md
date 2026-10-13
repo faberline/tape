@@ -73,7 +73,10 @@ behaviour.
    ```
 
 5. Acknowledge by advancing the cursor to `next_offset`. Until this call, a
-   repeated pull returns the same events.
+   repeated pull returns the same events. Ack does not check that the offset
+   you send was pulled: acking past events you never pulled skips them
+   permanently, because the cursor only moves forward. Send the `next_offset`
+   of the batch you just processed.
 
    ```bash
    curl -sS -X POST http://127.0.0.1:7137/topics/orders/subscriptions/billing/ack \

@@ -235,6 +235,12 @@ impl TapeJournal {
     /// reused as-is. Per-message ack ids and in-flight leases arrive with the
     /// `subscription-ack-and-competing-subscribers` outcome in `ROADMAP.md`
     /// and supersede this cumulative cursor rather than sit beside it.
+    ///
+    /// The acked offset is not verified against pulled events. The checkpoint
+    /// guards enforce only that `offset <= end_offset` and `offset >= current_offset`.
+    /// Acking forward past unpulled events skips them permanently because cursors
+    /// are monotonic and cannot rewind. Callers must self-enforce pull-before-ack
+    /// by acking the `next_offset` returned by `pull_subscription`.
     pub fn ack_subscription_at(
         &mut self,
         topic: &str,

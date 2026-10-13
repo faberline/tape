@@ -108,6 +108,7 @@ pub(super) fn openapi() -> Value {
             "/topics/{topic}/subscriptions/{subscription}/ack": {
                 "post": {
                     "summary": "Advance a pull subscription cursor",
+                    "description": "Advance a pull subscription cursor to an in-range offset. The acked offset is not verified against pulled events; checkpoint guards verify only that the offset is monotonic and within the journal end. Acking past unpulled events skips them permanently. Consumers must self-enforce pull-before-ack by providing the next_offset returned by a prior pull_subscription call.",
                     "parameters": [topic_param(), subscription_param()],
                     "requestBody": json_body("PullSubscriptionAckRequest"),
                     "responses": mutating_schema("ConsumerCheckpoint")
@@ -220,7 +221,11 @@ pub(super) fn schemas() -> Value {
             "type": "object",
             "required": ["offset"],
             "properties": {
-                "offset": {"type": "integer", "minimum": 0}
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The target checkpoint offset to set. Correct clients send the next_offset returned by the pull batch just processed to avoid skipping unpulled events."
+                }
             }
         },
         "CheckpointRequest": {
