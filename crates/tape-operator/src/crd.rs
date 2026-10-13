@@ -249,7 +249,8 @@ pub struct TapeStatus {
     #[serde(default)]
     pub message: String,
     /// Kubernetes-convention convergence conditions (#3054): `Ready`,
-    /// `Progressing`, `StorageHealthy`, `BackupConfigured`. This is the
+    /// `Progressing`, `StorageHealthy`, `BackupConfigured`, and (#3071)
+    /// `BackupSucceeded`. This is the
     /// surface `kubectl wait --for=condition=Ready`, Argo CD health
     /// assessment, and Flux readiness gates read; `phase` is unchanged and
     /// still populated, so nothing already consuming it breaks.

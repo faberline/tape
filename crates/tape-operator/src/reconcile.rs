@@ -4,11 +4,13 @@
 //! (`service_k8s::run` drives the watch + leader-gated server-side apply over
 //! kube-rs). tape supplies only its [`ManagedService`] impl — what to render,
 //! which children a previous spec rendered but this one no longer wants, which
-//! workload to poll for readiness, and the `Tape` status subresource
-//! (flat fields + per-concern conditions) to write.
+//! workload to poll for readiness, the one extra fact to observe before
+//! projecting status (the backup CronJob's run history), and the `Tape` status
+//! subresource (flat fields + per-concern conditions) to write.
 
-use kube::ResourceExt;
+use kube::{Api, Client, ResourceExt};
 use serde_json::json;
+use service_k8s::service::ReconcilePlan;
 use service_k8s::{ConditionFact, ConditionStatus, ManagedService, ReadinessTarget, ReadyFacts};
 
 use super::crd::Tape;
@@ -20,6 +22,47 @@ impl ManagedService for Tape {
 
     fn render(&self) -> Vec<serde_json::Value> {
         render::render(self)
+    }
+
+    /// #3071: render as usual, then read the backup CronJob's status
+    /// subresource so [`Self::conditions`] can say whether the last scheduled
+    /// run actually succeeded. Reading stays here, in the async plan; the
+    /// decision is [`backup_run_fact`], a pure function.
+    ///
+    /// A failed or missing read is not an error: it packs no facts, and the
+    /// condition reports `Unknown`/`NotObserved` rather than failing the
+    /// whole reconcile over an observation.
+    fn reconcile_plan(
+        &self,
+        client: Client,
+    ) -> impl std::future::Future<Output = anyhow::Result<ReconcilePlan>> + Send {
+        let children = self.render();
+        let name = self.name_any();
+        let namespace = self.namespace().unwrap_or_else(|| "default".to_string());
+        let backup_configured = self.spec.backup.is_some();
+
+        async move {
+            let backup_cron_job = if backup_configured {
+                let cron_jobs: Api<k8s_openapi::api::batch::v1::CronJob> =
+                    Api::namespaced(client, &namespace);
+                let cron_job_name = format!("{name}-backup");
+                match cron_jobs.get(&cron_job_name).await {
+                    Ok(cj) => cj.status.map(|status| CronJobStatusFacts {
+                        active: !status.active.as_deref().unwrap_or_default().is_empty(),
+                        last_schedule: status.last_schedule_time,
+                        last_successful: status.last_successful_time,
+                    }),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let context = serde_json::to_value(TapeContext { backup_cron_job })
+                .unwrap_or(serde_json::Value::Null);
+
+            Ok(ReconcilePlan { children, context })
+        }
     }
 
     /// #3054: prune the objects tape conditionally renders (the observability
@@ -57,8 +100,8 @@ impl ManagedService for Tape {
     /// Clock-free by construction: the caller stamps `lastTransitionTime`,
     /// which is what keeps this side of the projection deterministic (see the
     /// module doc's no-I/O `status_patch` contract).
-    fn conditions(&self, ready: &ReadyFacts, _context: &serde_json::Value) -> Vec<ConditionFact> {
-        self.observe(ready).conditions(self)
+    fn conditions(&self, ready: &ReadyFacts, context: &serde_json::Value) -> Vec<ConditionFact> {
+        self.observe(ready).conditions(self, context)
     }
 
     /// #3054: the conditions already persisted on this object, so the shared
@@ -101,8 +144,9 @@ impl Observation {
     }
 
     /// The clock-free condition facts for this observation, in printed order:
-    /// `Ready`, `Progressing`, `StorageHealthy`, `BackupConfigured`.
-    fn conditions(&self, tape: &Tape) -> Vec<ConditionFact> {
+    /// `Ready`, `Progressing`, `StorageHealthy`, `BackupConfigured`,
+    /// `BackupSucceeded`.
+    fn conditions(&self, tape: &Tape, context: &serde_json::Value) -> Vec<ConditionFact> {
         let replicas = self.replicas_message();
         let ready = if self.replicas_ready() {
             ConditionFact::new(
@@ -142,18 +186,18 @@ impl Observation {
         // (`TapeMetrics::is_storage_degraded`) and leaves it only as the
         // `tape_storage_degraded` gauge; `/readyz` deliberately stays green
         // while degraded — serving reads is the whole point of "degraded
-        // read-only" — so `ReadyFacts` carries no trace either; and tape
-        // implements no `reconcile_plan`, so `conditions`'s `context`
-        // argument is always `Value::Null`.
+        // read-only" — so `ReadyFacts` carries no trace either; and tape's
+        // `reconcile_plan` observes only the backup CronJob (#3071), so
+        // `conditions`'s `context` carries no storage fact.
         //
         // A condition reporting `False` for a reason unrelated to real
         // storage health is worse than one that admits it has not looked, so
         // this reports `Unknown`/`NotObserved` and names where the fact *is*
         // visible today rather than inventing a probe, an HTTP scrape, or any
         // other proxy signal. #3054's own Out of Scope excluded that work
-        // ("any genuinely new probe is separate work"); it is tracked as
-        // #3071, which adds the `reconcile_plan` observation path this
-        // condition would project from.
+        // ("any genuinely new probe is separate work"); #3071 added the
+        // `reconcile_plan` observation path this condition would project
+        // from, but nothing yet feeds it a storage fact.
         let storage_healthy = ConditionFact::new(
             "StorageHealthy",
             ConditionStatus::Unknown,
@@ -179,7 +223,17 @@ impl Observation {
             ),
         };
 
-        vec![ready, progressing, storage_healthy, backup_configured]
+        let ctx: TapeContext = serde_json::from_value(context.clone()).unwrap_or_default();
+        let backup_succeeded =
+            backup_run_fact(tape.spec.backup.is_some(), ctx.backup_cron_job.as_ref());
+
+        vec![
+            ready,
+            progressing,
+            storage_healthy,
+            backup_configured,
+            backup_succeeded,
+        ]
     }
 }
 
@@ -206,6 +260,88 @@ impl Tape {
             phase,
         }
     }
+}
+
+/// Facts extracted from a backup CronJob's status subresource (#3071).
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CronJobStatusFacts {
+    /// `status.active` is non-empty: a run is in flight right now.
+    pub active: bool,
+    /// `status.lastScheduleTime`.
+    pub last_schedule: Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>,
+    /// `status.lastSuccessfulTime`.
+    pub last_successful: Option<k8s_openapi::apimachinery::pkg::apis::meta::v1::Time>,
+}
+
+/// Opaque observation context returned by [`Tape::reconcile_plan`] (#3071).
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TapeContext {
+    /// `None` when no backup is configured or its CronJob status was not read.
+    pub backup_cron_job: Option<CronJobStatusFacts>,
+}
+
+/// Pure computation of the `BackupSucceeded` condition from spec and observed
+/// CronJob facts (#3071).
+///
+/// Precedence order: unset spec -> `Unknown`/`NotConfigured`; CronJob
+/// unobserved -> `Unknown`/`NotObserved`; a run in flight ->
+/// `Unknown`/`RunInProgress`; never triggered -> `Unknown`/`NotYetRun`; last
+/// success at or after last schedule -> `True`/`LastRunSucceeded`; otherwise
+/// `False`/`LastRunFailed`. A run in progress beats a previous success.
+pub fn backup_run_fact(configured: bool, observed: Option<&CronJobStatusFacts>) -> ConditionFact {
+    if !configured {
+        return ConditionFact::new(
+            "BackupSucceeded",
+            ConditionStatus::Unknown,
+            "NotConfigured",
+            "spec.backup is unset",
+        );
+    }
+
+    let Some(facts) = observed else {
+        return ConditionFact::new(
+            "BackupSucceeded",
+            ConditionStatus::Unknown,
+            "NotObserved",
+            "CronJob status was not observed",
+        );
+    };
+
+    if facts.active {
+        return ConditionFact::new(
+            "BackupSucceeded",
+            ConditionStatus::Unknown,
+            "RunInProgress",
+            "backup run is currently in progress",
+        );
+    }
+
+    let Some(last_sched) = &facts.last_schedule else {
+        return ConditionFact::new(
+            "BackupSucceeded",
+            ConditionStatus::Unknown,
+            "NotYetRun",
+            "backup schedule has not triggered yet",
+        );
+    };
+
+    if let Some(last_succ) = &facts.last_successful {
+        if last_succ >= last_sched {
+            return ConditionFact::new(
+                "BackupSucceeded",
+                ConditionStatus::True,
+                "LastRunSucceeded",
+                "last backup run completed successfully",
+            );
+        }
+    }
+
+    ConditionFact::new(
+        "BackupSucceeded",
+        ConditionStatus::False,
+        "LastRunFailed",
+        "last backup run failed or did not complete",
+    )
 }
 
 /// `tape k8s operator run` — run the reconcile controller on the shared

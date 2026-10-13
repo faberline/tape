@@ -192,7 +192,7 @@ spec:
             properties:
               conditions:
                 description: |-
-                  Kubernetes-convention convergence conditions (#3054): `Ready`, `Progressing`, `StorageHealthy`, `BackupConfigured`. This is the surface `kubectl wait --for=condition=Ready`, Argo CD health assessment, and Flux readiness gates read; `phase` is unchanged and still populated, so nothing already consuming it breaks.
+                  Kubernetes-convention convergence conditions (#3054): `Ready`, `Progressing`, `StorageHealthy`, `BackupConfigured`, and (#3071) `BackupSucceeded`. This is the surface `kubectl wait --for=condition=Ready`, Argo CD health assessment, and Flux readiness gates read; `phase` is unchanged and still populated, so nothing already consuming it breaks.
 
                   `lastTransitionTime` is stamped by the reconcile loop, not here — see [`super::reconcile`]'s no-I/O `status_patch` contract.
                 items:
