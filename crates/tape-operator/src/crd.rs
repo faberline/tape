@@ -3,7 +3,7 @@
 //! One `Tape` object declares a tape deployment's HA topology. The spec
 //! flattens the shared [`service_k8s::ClusterSpec`] (image + sharding/replication
 //! knobs + per-pod resources) and adds tape's own runtime knobs (durable
-//! journal disk tier, shutdown budget, log level, and the opt-in bearer-auth
+//! journal disk tier, shutdown budget, log level and format, and the opt-in bearer-auth
 //! wiring). tape is a **single raft group**: `shardCount` exists in the
 //! shared shape but defaults to 1 and the render pins it —
 //! `replicasPerShard` is the only scale knob (1 = single node, 3 = raft HA).
@@ -64,6 +64,14 @@ pub struct TapeSpec {
     /// Unset means the server default (`info`).
     #[serde(default)]
     pub log_level: Option<String>,
+
+    /// Log output format for the serving container (`TAPE_LOG_FORMAT`).
+    ///
+    /// A closed enum for the same reason `AuthMode` is one: a typo in a
+    /// free-form string would fall back at boot instead of being rejected at
+    /// `kubectl apply` (#2582).
+    #[serde(default)]
+    pub log_format: LogFormat,
 
     /// Request-auth mode for the data plane: `required` (the default — supply
     /// a token registry via `tokensSecret` or `tokensSecretProviderClass`) or
@@ -256,6 +264,33 @@ fn default_storage() -> String {
 }
 fn default_grace_secs() -> u64 {
     10
+}
+
+/// Log output format for the serving container (`TAPE_LOG_FORMAT`).
+///
+/// A closed enum for the same reason `AuthMode` is one: a typo in a
+/// free-form string would fall back at boot instead of being rejected at
+/// `kubectl apply` (#2582).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    /// Human-readable formatter. The escape hatch for reading one pod's logs
+    /// interactively during an incident.
+    Pretty,
+    /// The default in-cluster: the shared `axiom.service.log.v1` collector
+    /// contract expects JSON.
+    #[default]
+    Json,
+}
+
+impl LogFormat {
+    /// The `TAPE_LOG_FORMAT` value the serving binary expects (`pretty` | `json`).
+    pub fn as_env(self) -> &'static str {
+        match self {
+            LogFormat::Pretty => "pretty",
+            LogFormat::Json => "json",
+        }
+    }
 }
 
 /// Whether the data-plane API requires a bearer token.

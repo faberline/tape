@@ -88,6 +88,16 @@ spec:
               imagePullPolicy:
                 nullable: true
                 type: string
+              logFormat:
+                default: json
+                description: |-
+                  Log output format for the serving container (`TAPE_LOG_FORMAT`).
+
+                  A closed enum for the same reason `AuthMode` is one: a typo in a free-form string would fall back at boot instead of being rejected at `kubectl apply` (#2582).
+                enum:
+                - pretty
+                - json
+                type: string
               logLevel:
                 description: Log level (`trace|debug|info|warn|error`), injected as `RUST_LOG`. Unset means the server default (`info`).
                 nullable: true
