@@ -266,7 +266,7 @@ pub(crate) fn payload(bytes: usize) -> Value {
     })
 }
 
-fn percentile(samples: &[u128], q: f64) -> u128 {
+pub(crate) fn percentile(samples: &[u128], q: f64) -> u128 {
     let idx = (((samples.len() - 1) as f64) * q).round() as usize;
     samples[idx]
 }

@@ -56,6 +56,8 @@ rig = { git = "https://github.com/faberline/rig", rev = "1fbe487eb4a94d745447227
 # Third-party. kube-rs versions mirror the other faberline users so the
 # lockfile stays single-versioned.
 anyhow = "1.0"
+# Benchmark-only: tape-bench's `jetstream-benchmark` feature.
+async-nats = "0.38"
 axum = { version = "0.8", features = ["ws"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "string", "env"] }

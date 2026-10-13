@@ -1,6 +1,6 @@
 [package]
 name = "tape-bench"
-description = "tape benchmarks: the local append/replay/checkpoint benchmark, the durable group-commit benchmark, and the release perf gate"
+description = "tape benchmarks: the local append/replay/checkpoint benchmark, the durable group-commit benchmark, the release perf gate, and the feature-gated durable-v1 JetStream comparison client"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -31,6 +31,14 @@ tape-storage.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+# Benchmark-only NATS client for the durable-v1 Tape-versus-JetStream tester
+# (`--features jetstream-benchmark`). Never a dependency of the `tape` serving
+# crates, so the serving binary and image never link it.
+async-nats = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+
+[features]
+jetstream-benchmark = ["dep:async-nats", "dep:futures"]
 
 # Release-mode perf gate: `cargo test --release -p tape-bench --test tape_perf_gate`.
 [[test]]

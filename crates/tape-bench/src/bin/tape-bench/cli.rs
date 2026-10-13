@@ -18,6 +18,12 @@ enum Command {
     /// varying connection counts and report the durable throughput scaling
     /// ratio (highest sampled connection count vs. the lowest).
     Durable(DurableArgs),
+    /// Drive one fixed durable-v1 cell against a real Tape or JetStream endpoint.
+    #[cfg(feature = "jetstream-benchmark")]
+    JetstreamClient(crate::jetstream::ClientArgs),
+    /// Run the complete durable-v1 cell matrix and emit one JSON object per line.
+    #[cfg(feature = "jetstream-benchmark")]
+    JetstreamSuite(crate::jetstream::SuiteArgs),
 }
 
 #[derive(clap::Args)]
@@ -60,6 +66,10 @@ pub(crate) fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Run(args) => run(args),
         Command::Durable(args) => durable(args),
+        #[cfg(feature = "jetstream-benchmark")]
+        Command::JetstreamClient(args) => crate::jetstream::client(args),
+        #[cfg(feature = "jetstream-benchmark")]
+        Command::JetstreamSuite(args) => crate::jetstream::suite(args),
     }
 }
 
