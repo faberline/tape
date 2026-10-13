@@ -254,7 +254,9 @@ source below states its direct contribution.
   pair with status conditions; ship a direct-install base for a durable
   singleton; provision topics and subscriptions declaratively. The CRD
   versioning policy, CRD-first upgrade order, and journal rollback contract
-  are in [`docs/deployment-handoff.md`](docs/deployment-handoff.md) section 3e.
+  are in [`docs/deployment-handoff.md`](docs/deployment-handoff.md) section 3e;
+  capacity planning, on-disk layout, per-event storage formulas, and PVC
+  sizing are in section 3f.
 - Sources:
   - [`tape`](./) defines the CRD, defaults, topology policy, conditions,
     render verbs, direct-install base, and provisioning.
@@ -330,7 +332,7 @@ evidence; it does not define the current contract.
 | [STATUS.md](STATUS.md) | Current support per Cloud Pub/Sub surface, with limits and gates |
 | [ROADMAP.md](ROADMAP.md) | Future outcomes and explicit non-goals |
 | [Generated clients](clients/README.md) | Client generation, language matrix, connection inputs, and current limits |
-| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract |
+| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract, PVC sizing |
 | [Node drain and PodDisruptionBudget](docs/runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](docs/benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Tape edit rules and required verification commands |
