@@ -11,9 +11,44 @@ destination without copying tracker state.
 
 Tape's peer for feature parity is Google Cloud Pub/Sub. Each near-term outcome
 below closes one group of STATUS rows toward that checklist; the later outcomes
-follow once subscriptions carry per-message state.
+follow once subscriptions carry per-message state. The first two outcomes are
+the exception: they align tape's shared-library wiring with lumen's — same
+libraries, same reasons, same shape — and belong to no Pub/Sub checklist group.
 
 ## Near-term outcomes
+
+### Kubernetes-delegated authentication
+
+- ID: `kubernetes-delegated-authentication`
+- Outcome: With auth required in-cluster, tape authenticates callers by
+  TokenReview and authorizes by SubjectAccessReview, mapping topic read,
+  write, and admin operations onto Kubernetes resource attributes as lumen's
+  `service_auth::k8s` mode does, and tape stops holding any credential.
+- Boundary: The static token registry and its Secret retire rather than
+  staying as a fallback mode. Probes stay tokenless and `--auth off` keeps
+  every route tokenless. The auth story for a non-Kubernetes deployment is an
+  open question this outcome must settle, not silently drop.
+- Completion evidence: End-to-end cases prove a TokenReview-authenticated
+  caller is admitted per its SubjectAccessReview verdict, a refused verdict
+  gets the shared 403 envelope, the registry mount and its loader are gone,
+  and probes still answer tokenless.
+- Tracking: Not assigned.
+
+### Ungated Kubernetes render
+
+- ID: `ungated-kubernetes-render`
+- Outcome: `tape k8s crd` and the render verbs work in the default build,
+  with `service-k8s` linked unconditionally in its render-only shape as lumen
+  links it, while `tape k8s operator run` stays behind the `operator`
+  feature.
+- Boundary: The reconcile controller and its kube-rs client stay
+  feature-gated; no rendered object changes. The serving image gains render
+  code paths but no kube client.
+- Completion evidence: An end-to-end case runs the CRD and render verbs
+  against a default-features build and diffs their output against the
+  operator-feature build byte for byte, and proves `tape k8s operator run`
+  still refuses without the feature.
+- Tracking: Not assigned.
 
 ### Subscription ack and competing subscribers
 

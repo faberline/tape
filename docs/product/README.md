@@ -54,6 +54,8 @@ Boundaries that every section inherits:
 
 | Horizon | Outcome | Section |
 |---|---|---|
+| H1 | `kubernetes-delegated-authentication` | [operations.md](operations.md) § Kubernetes-delegated authentication |
+| H1 | `ungated-kubernetes-render` | [operations.md](operations.md) § Ungated Kubernetes render |
 | H1 | `subscription-ack-and-competing-subscribers` | [subscriptions.md](subscriptions.md) § Subscription ack and competing subscribers |
 | H1 | `push-subscriptions` | [subscriptions.md](subscriptions.md) § Push subscriptions |
 | H1 | `seek-snapshot-and-retention` | [retention-seek-and-snapshots.md](retention-seek-and-snapshots.md) § Seek, snapshot, and retention |
@@ -68,10 +70,13 @@ Boundaries that every section inherits:
 | H2 | `quotas-and-scale-transition` | [operations.md](operations.md) § Quotas and scale transition |
 
 H1 is ordered by dependency, not by value: `deterministic-failover` and
-`pubsub-rebaseline` first, because the subscription epic has to prove its
-lease table across a failover it can observe, and every other epic edits
-identity strings the rebaseline regenerates. Then the subscription epic, then
-push, seek, ordering, and filters, which all build on the lease table.
+`pubsub-rebaseline` first, because the subscription outcome has to prove its
+lease table across a failover it can observe, and every other outcome edits
+identity strings the rebaseline regenerates. Then the subscription outcome,
+then push, seek, ordering, and filters, which all build on the lease table.
+The two shared-library parity outcomes — `kubernetes-delegated-authentication`
+and `ungated-kubernetes-render` — stand outside that chain: they align tape's
+wiring with lumen's and can land first, independently of it.
 
 ## Section index
 
@@ -94,6 +99,8 @@ push, seek, ordering, and filters, which all build on the lease table.
 | Multi-shard topology | replication-and-availability.md | outcome | ROADMAP `multi-shard-topology` |
 | Whole-journal backup and cold seed | operations.md | shipped, limited | STATUS `backup-to-sink`, `cold-seed-bootstrap`, `management-audit` |
 | Grants and bounded admission | operations.md | shipped, limited | STATUS `per-topic-authorization`, `flow-control-quotas` |
+| Kubernetes-delegated authentication | operations.md | outcome | ROADMAP `kubernetes-delegated-authentication` |
+| Ungated Kubernetes render | operations.md | outcome | ROADMAP `ungated-kubernetes-render` |
 | Kubernetes operator and direct install | operations.md | shipped, limited | STATUS `k8s-deployment-assets`, `k8s-operator`, `kind-cluster-acceptance`, `gke-zonal-acceptance` |
 | Health, metrics, traces, and drain | operations.md | shipped | STATUS `standard-operational-endpoints`, `otlp-tracing`, `bounded-stability-run` |
 | Local performance ceiling | operations.md | shipped | STATUS `local-performance-ceiling` |
