@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: nats-durable-v1}
+spec:
+  serviceName: nats
+  replicas: 1
+  selector: {matchLabels: {app: nats}}
+  template:
+    metadata: {labels: {app: nats}}
+    spec:
+      nodeSelector: {benchmark-role: nats}
+      containers:
+        - name: nats
+          image: NATS_IMAGE_DIGEST
+          args: [-js, -sd, /data]
+          resources: {requests: {cpu: 2, memory: 8Gi}, limits: {cpu: 2, memory: 8Gi}}
+          volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {storageClassName: standard, accessModes: [ReadWriteOnce], resources: {requests: {storage: 50Gi}}}

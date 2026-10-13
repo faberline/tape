@@ -104,6 +104,7 @@ wiring with lumen's and can land first, independently of it.
 | Kubernetes operator and direct install | operations.md | shipped, limited | STATUS `k8s-deployment-assets`, `k8s-operator`, `kind-cluster-acceptance`, `gke-zonal-acceptance` |
 | Health, metrics, traces, and drain | operations.md | shipped | STATUS `standard-operational-endpoints`, `otlp-tracing`, `bounded-stability-run` |
 | Local performance ceiling | operations.md | shipped | STATUS `local-performance-ceiling` |
+| Durable JetStream competitiveness | operations.md | outcome | ROADMAP `durable-jetstream-competitive` |
 | Quotas and scale transition | operations.md | outcome | ROADMAP `quotas-and-scale-transition` |
 | One discoverable HTTP contract | api-and-clients.md | shipped | STATUS `generated-clients` |
 | Pub/Sub rebaseline | api-and-clients.md | outcome | ROADMAP `pubsub-rebaseline` |
@@ -111,4 +112,4 @@ wiring with lumen's and can land first, independently of it.
 Non-goals are not sections. Each file ends with the non-goals that a reader of
 that area would otherwise assume, pointing at the ROADMAP entry that gives the
 reason: `streaming-pull`, `exactly-once-delivery`, `export-subscriptions`,
-`peer-broker-benchmarks`, `pubsub-wire-compatibility`.
+`pubsub-wire-compatibility`.

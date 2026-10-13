@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tape-durable-v1
+spec:
+  serviceName: tape
+  replicas: 1
+  selector: {matchLabels: {app: tape}}
+  template:
+    metadata: {labels: {app: tape}}
+    spec:
+      nodeSelector: {benchmark-role: tape}
+      containers:
+        - name: tape
+          image: TAPE_IMAGE_DIGEST
+          args: [serve, --data-dir, /var/lib/tape, --bind, 0.0.0.0:7137]
+          resources: {requests: {cpu: 2, memory: 8Gi}, limits: {cpu: 2, memory: 8Gi}}
+          readinessProbe:
+            httpGet: {path: /readyz, port: 7137}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12
+          volumeMounts: [{name: data, mountPath: /var/lib/tape}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 50Gi}}}
