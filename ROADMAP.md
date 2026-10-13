@@ -36,7 +36,7 @@ follow once subscriptions carry per-message state.
   dead-letter topic, that the lease table survives leader failover, and that
   an oldest-unacked-age metric is exposed. The existing cumulative-cursor
   cases are rewritten against the lease model, not deleted.
-- Tracking: [Milestone #117](https://github.com/faberline/tape/milestone/117)
+- Tracking: [Milestone #4](https://github.com/faberline/tape/milestone/4)
 
 ### Push subscriptions
 
@@ -52,7 +52,7 @@ follow once subscriptions carry per-message state.
   that a 2xx acks the message, that a 5xx redelivers after the configured
   backoff, that a receiver outage leaves the message pullable, and that the
   push token is redacted from logs and metrics.
-- Tracking: [Milestone #118](https://github.com/faberline/tape/milestone/118)
+- Tracking: [Milestone #10](https://github.com/faberline/tape/milestone/10)
 
 ### Seek, snapshot, and retention
 
@@ -71,7 +71,7 @@ follow once subscriptions carry per-message state.
   age with a protected floor, and that every retired route answers 404 while
   the route inventory, the committed OpenAPI snapshot, and the generated
   clients agree.
-- Tracking: [Milestone #119](https://github.com/faberline/tape/milestone/119)
+- Tracking: [Milestone #11](https://github.com/faberline/tape/milestone/11)
 
 ### Ordering keys
 
@@ -86,7 +86,7 @@ follow once subscriptions carry per-message state.
   several publishers, pulls with several competing callers, forces a
   redelivery, and proves per-key order held while unkeyed messages
   interleaved freely.
-- Tracking: [Milestone #120](https://github.com/faberline/tape/milestone/120)
+- Tracking: [Milestone #12](https://github.com/faberline/tape/milestone/12)
 
 ### Attributes and filters
 
@@ -101,7 +101,7 @@ follow once subscriptions carry per-message state.
   pull and push, that a filtered subscription receives only matching messages,
   that a filter change applies to messages published after it, and that the
   filtered-out messages do not appear as lag.
-- Tracking: [Milestone #121](https://github.com/faberline/tape/milestone/121)
+- Tracking: [Milestone #13](https://github.com/faberline/tape/milestone/13)
 
 ### Deterministic failover
 
@@ -116,7 +116,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: Every `raft_cluster` and `raft_failover` case is green
   twenty consecutive times with a single test thread on a loaded host, and no
   case carries a shared deadline constant.
-- Tracking: [Milestone #115](https://github.com/faberline/tape/milestone/115)
+- Tracking: [Milestone #18](https://github.com/faberline/tape/milestone/18)
 
 ### Pub/Sub rebaseline
 
@@ -132,7 +132,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: The route-parity, generated-client, backup-destination,
   and operator render gates pass against the regenerated snapshot and the new
   runbook path, and the deployment handoff page is no longer tracked.
-- Tracking: [Milestone #116](https://github.com/faberline/tape/milestone/116)
+- Tracking: [Milestone #3](https://github.com/faberline/tape/milestone/3)
 
 ## Later outcomes
 
@@ -148,7 +148,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: End-to-end cases prove create, list, and delete of a
   schema, a conforming publish accepted, a non-conforming publish refused
   without an offset, and a revision change applying to later publishes only.
-- Tracking: [Milestone #122](https://github.com/faberline/tape/milestone/122)
+- Tracking: [Milestone #14](https://github.com/faberline/tape/milestone/14)
 
 ### Resource lifecycle parity
 
@@ -162,7 +162,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: End-to-end cases prove each route, that a batch
   reports per-message offsets, that an expired subscription disappears, and
   that a detached subscription stops receiving messages.
-- Tracking: [Milestone #123](https://github.com/faberline/tape/milestone/123)
+- Tracking: [Milestone #15](https://github.com/faberline/tape/milestone/15)
 
 ### Live replica membership
 
@@ -176,7 +176,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: An operator case scales one to three and three to one
   while a publisher keeps appending, and proves no committed message is lost
   and no surviving member restarts.
-- Tracking: [Milestone #124](https://github.com/faberline/tape/milestone/124)
+- Tracking: [Milestone #1](https://github.com/faberline/tape/milestone/1)
 
 ### Multi-shard topology
 
@@ -188,7 +188,7 @@ follow once subscriptions carry per-message state.
   API. Cross-shard transactions are outside this outcome.
 - Completion evidence: An operator case renders and reconciles a two-shard
   instance, and an end-to-end case proves keyed order across a shard split.
-- Tracking: [Milestone #125](https://github.com/faberline/tape/milestone/125)
+- Tracking: [Milestone #16](https://github.com/faberline/tape/milestone/16)
 
 ### Quotas and scale transition
 
@@ -200,7 +200,7 @@ follow once subscriptions carry per-message state.
 - Completion evidence: End-to-end cases prove a quota refusal with the shared
   error envelope, and the GCP acceptance script proves a replica-count
   transition under load with no committed loss.
-- Tracking: [Milestone #126](https://github.com/faberline/tape/milestone/126)
+- Tracking: [Milestone #17](https://github.com/faberline/tape/milestone/17)
 
 ## Non-goals
 

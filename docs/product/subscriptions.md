@@ -31,7 +31,7 @@ checklist; four of the seven H1 outcomes land here.
   `declarative-subscription-provisioning`, `per-topic-authorization`,
   `delivery-metrics`.
 
-## Subscription ack and competing subscribers (Milestone #117)
+## Subscription ack and competing subscribers (Milestone #4)
 
 - Problem: a subscriber cannot acknowledge one message, cannot share a
   subscription across workers, never gets a message back after a crash, and
@@ -56,9 +56,9 @@ checklist; four of the seven H1 outcomes land here.
   subscriptions; depends on
   [replication-and-availability.md](replication-and-availability.md)
   § Deterministic failover for the failover proof.
-- Outcome: `subscription-ack-and-competing-subscribers`. Tracking: [Milestone #117](https://github.com/faberline/tape/milestone/117)
+- Outcome: `subscription-ack-and-competing-subscribers`. Tracking: [Milestone #4](https://github.com/faberline/tape/milestone/4)
 
-## Push subscriptions (Milestone #118)
+## Push subscriptions (Milestone #10)
 
 - Problem: a subscriber has to poll; tape cannot call it.
 - Who: subscribers exposing an HTTPS endpoint; operators handling the token.
@@ -81,9 +81,9 @@ checklist; four of the seven H1 outcomes land here.
   creates. Confirmed on 2026-08-27: push stays a promise rather than becoming
   a non-goal, because the `streaming-pull` non-goal argues from pull and push
   being the two delivery paths.
-- Outcome: `push-subscriptions`. Tracking: [Milestone #118](https://github.com/faberline/tape/milestone/118)
+- Outcome: `push-subscriptions`. Tracking: [Milestone #10](https://github.com/faberline/tape/milestone/10)
 
-## Ordering keys (Milestone #120)
+## Ordering keys (Milestone #12)
 
 - Problem: `key` is stored and returned but delivery ignores it, so two
   messages for one entity can reach two workers in either order.
@@ -100,9 +100,9 @@ checklist; four of the seven H1 outcomes land here.
   semantics; the publish half is already in
   [topics-and-publishing.md](topics-and-publishing.md) § Durable single
   publish.
-- Outcome: `ordering-keys`. Tracking: [Milestone #120](https://github.com/faberline/tape/milestone/120)
+- Outcome: `ordering-keys`. Tracking: [Milestone #12](https://github.com/faberline/tape/milestone/12)
 
-## Attributes and filters (Milestone #121)
+## Attributes and filters (Milestone #13)
 
 - Problem: a message carries no metadata beyond `key`, and a subscription
   receives every message on its topic whether it wants it or not.
@@ -119,7 +119,7 @@ checklist; four of the seven H1 outcomes land here.
   creation.
 - Neighbours: extends Named pull subscriptions and Push subscriptions on the
   delivery side, Durable single publish on the publish side.
-- Outcome: `attributes-and-filters`. Tracking: [Milestone #121](https://github.com/faberline/tape/milestone/121)
+- Outcome: `attributes-and-filters`. Tracking: [Milestone #13](https://github.com/faberline/tape/milestone/13)
 
 ## Non-goals in this area
 
