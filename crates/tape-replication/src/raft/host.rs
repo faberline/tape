@@ -20,6 +20,10 @@ use tape_shared_kernel::{
     TapeOutcome,
 };
 
+/// How long a proposer waits, after the host reports its index completed,
+/// for this node to apply the entry carrying its own proposal id.
+const PROPOSAL_OUTCOME_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// One running raft group over a tape journal -- the single-group wrapper the
 /// serve path (and tests) hold. Dropping it aborts the host's tick/pump tasks.
 pub struct TapeRaft {
@@ -283,18 +287,38 @@ impl TapeRaft {
     }
 
     /// Propose `command` and claim the outcome once THIS node applied it
-    /// (read-your-write): first by its stable proposal id, which survives
-    /// ambiguous retries, then by index. `None` means it aged out.
+    /// (read-your-write), by its stable proposal id only. `None` means the
+    /// proposal's own entry never applied here within
+    /// [`PROPOSAL_OUTCOME_WAIT`].
+    ///
+    /// Never claim by index: the host can report an index as completed
+    /// after the entry this node proposed there was truncated and replaced
+    /// by another leader's, and the outcome at that index then belongs to
+    /// a different proposal. Handing it back would acknowledge a write that
+    /// never committed with another write's event.
     async fn propose_and_claim(
         &self,
         command: TapeCommand,
     ) -> Result<(Index, Option<TapeOutcome>)> {
         let (index, proposal_id) = self.propose(command).await?;
-        let outcome = self
-            .sm
-            .proposal_outcome(&proposal_id)
-            .or_else(|| self.sm.claim_outcome(index));
-        Ok((index, outcome))
+        Ok((index, self.wait_proposal_outcome(&proposal_id).await))
+    }
+
+    /// Wait for this node to apply the entry carrying `proposal_id`. The
+    /// host reports completion by index, so the proposal's own entry can
+    /// still be in flight, or gone for good if it was truncated.
+    async fn wait_proposal_outcome(&self, proposal_id: &ProposalId) -> Option<TapeOutcome> {
+        let mut applied = self.host.applied_watch();
+        let deadline = tokio::time::Instant::now() + PROPOSAL_OUTCOME_WAIT;
+        loop {
+            if let Some(outcome) = self.sm.proposal_outcome(proposal_id) {
+                return Some(outcome);
+            }
+            match tokio::time::timeout_at(deadline, applied.changed()).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) | Err(_) => return self.sm.proposal_outcome(proposal_id),
+            }
+        }
     }
 
     async fn propose(&self, command: TapeCommand) -> Result<(Index, ProposalId)> {

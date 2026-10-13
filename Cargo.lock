@@ -4413,6 +4413,7 @@ dependencies = [
  "serde_json",
  "server-lifecycle",
  "tape-shared-kernel",
+ "tokio",
  "tracing",
 ]
 

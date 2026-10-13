@@ -137,6 +137,13 @@ async fn sigterm_leader_hands_off_leadership_and_exits_cleanly() {
     let resp = append(&client, &new_leader, 3).await;
     assert!(resp.status().is_success(), "append 3 failed after handoff");
     for base in &survivor_urls {
-        wait_replayed(&client, base, &[1, 2, 3], "post-handoff convergence").await;
+        wait_replayed(
+            &client,
+            base,
+            &survivor_refs,
+            &[1, 2, 3],
+            "post-handoff convergence",
+        )
+        .await;
     }
 }

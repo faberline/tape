@@ -8,7 +8,9 @@ use std::net::TcpListener;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use futures::{StreamExt, TryStreamExt};
+use tape_shared_kernel::TapeEvent;
 
 // Each observed state transition receives this budget when its wait starts.
 // Never pass an earlier phase's deadline into a later health, election, or
@@ -193,6 +195,14 @@ async fn replayed_ns(client: &reqwest::Client, base: &str) -> Result<Vec<i64>, S
     let events = body["events"]
         .as_array()
         .ok_or_else(|| "replay response has no events array".to_string())?;
+    let mut seen_ids = std::collections::HashSet::new();
+    for event in events {
+        if let Some(id) = event.get("id").and_then(|v| v.as_str()) {
+            if !seen_ids.insert(id) {
+                return Err(format!("duplicate envelope event id observed: {id}"));
+            }
+        }
+    }
     events
         .iter()
         .map(|event| {
@@ -204,44 +214,170 @@ async fn replayed_ns(client: &reqwest::Client, base: &str) -> Result<Vec<i64>, S
 }
 
 fn event_diagnostic(events: &[i64]) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut duplicates = Vec::new();
+    for &id in events {
+        if !seen.insert(id) {
+            duplicates.push(id);
+        }
+    }
     format!(
-        "observed_count={}, first={:?}, last={:?}",
+        "observed_count={}, first={:?}, last={:?}, duplicates_count={}, duplicate_samples={:?}",
         events.len(),
         events.first(),
         events.last(),
+        duplicates.len(),
+        duplicates.iter().take(5).copied().collect::<Vec<_>>(),
     )
 }
 
-/// Poll one replica until it holds every expected event. A replica starts
+async fn capture_raft_diagnostic(
+    client: &reqwest::Client,
+    timed_out_base: &str,
+    known_replicas: &[&str],
+) -> String {
+    let mut diagnostics = Vec::new();
+    for &replica in known_replicas {
+        let (applied_index, detail) = match client.get(format!("{replica}/raftz")).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                match resp.text().await {
+                    Ok(body) if status.is_success() => {
+                        let applied_index = serde_json::from_str::<serde_json::Value>(&body)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("applied_index").and_then(|idx| {
+                                    idx.as_u64()
+                                        .or_else(|| idx.as_str().and_then(|s| s.parse().ok()))
+                                })
+                            });
+                        (
+                            applied_index,
+                            format!("status={status}, body={}", body.trim()),
+                        )
+                    }
+                    Ok(body) => (None, format!("status={status}, body={}", body.trim())),
+                    Err(err) => (None, format!("status={status}, body_err={err}")),
+                }
+            }
+            Err(err) => (None, format!("error={err}")),
+        };
+        diagnostics.push((replica.to_string(), applied_index, detail));
+    }
+
+    let timed_out_index = diagnostics
+        .iter()
+        .find(|(r, _, _)| r == timed_out_base)
+        .and_then(|(_, idx, _)| *idx);
+
+    let classification = if let Some(t_idx) = timed_out_index {
+        let peer_lag = diagnostics.iter().any(|(r, idx, _)| {
+            r != timed_out_base
+                && match *idx {
+                    Some(p_idx) => t_idx < p_idx,
+                    None => false,
+                }
+        });
+        if peer_lag {
+            "applied-index lag"
+        } else {
+            let all_have_index =
+                !diagnostics.is_empty() && diagnostics.iter().all(|(_, idx, _)| idx.is_some());
+            let all_equal = all_have_index
+                && diagnostics
+                    .iter()
+                    .all(|(_, idx, _)| *idx == timed_out_index);
+            if all_equal {
+                "state-machine replay mismatch"
+            } else {
+                "applied-index evidence unavailable"
+            }
+        }
+    } else {
+        "applied-index evidence unavailable"
+    };
+
+    let mut diag_parts = Vec::new();
+    for (replica, idx, detail) in &diagnostics {
+        let role = if replica == timed_out_base {
+            "timed-out"
+        } else {
+            "peer"
+        };
+        let idx_repr = match idx {
+            Some(i) => i.to_string(),
+            None => "unavailable".to_string(),
+        };
+        diag_parts.push(format!(
+            "replica={replica} role={role} applied_index={idx_repr} {detail}"
+        ));
+    }
+
+    format!(
+        "raft_diagnostic: classification={classification}; {}",
+        diag_parts.join("; ")
+    )
+}
+
+/// Poll one replica until it holds every expected event with exact count,
+/// exact expected event set, and no duplicate event IDs. A replica starts
 /// with its own budget, so an earlier replica's catch-up cannot spend time
 /// from a later one.
 pub(crate) async fn wait_replayed(
     client: &reqwest::Client,
     base: &str,
+    known_replicas: &[&str],
     expected: &[i64],
     phase: &str,
 ) {
     let deadline = phase_deadline();
     let mut observed = Vec::new();
+    let expected_set: std::collections::BTreeSet<i64> = expected.iter().copied().collect();
     loop {
         let last_error = match replayed_ns(client, base).await {
             Ok(events) => {
-                let has_all = expected.iter().all(|event| events.contains(event));
+                let mut seen = std::collections::HashSet::new();
+                let mut duplicates = Vec::new();
+                for &id in &events {
+                    if !seen.insert(id) {
+                        duplicates.push(id);
+                    }
+                }
+                let observed_set: std::collections::BTreeSet<i64> =
+                    events.iter().copied().collect();
+                let exact_count = events.len() == expected.len();
+                let exact_set = observed_set == expected_set;
+                let no_duplicates = duplicates.is_empty();
+
                 observed = events;
-                if has_all {
+                if exact_count && exact_set && no_duplicates {
                     return;
                 }
-                None
+                if !no_duplicates {
+                    Some(format!("duplicate event IDs: {duplicates:?}"))
+                } else if !exact_count {
+                    Some(format!(
+                        "count mismatch: observed={}, expected={}",
+                        observed.len(),
+                        expected.len()
+                    ))
+                } else {
+                    let missing: Vec<i64> =
+                        expected_set.difference(&observed_set).copied().collect();
+                    Some(format!("missing expected event IDs: {missing:?}"))
+                }
             }
             Err(error) => Some(error),
         };
-        assert!(
-            Instant::now() < deadline,
-            "{phase}: {base} did not converge; expected_count={}, {}, last_error={}",
-            expected.len(),
-            event_diagnostic(&observed),
-            last_error.as_deref().unwrap_or("none"),
-        );
+        if Instant::now() >= deadline {
+            let diagnostic = capture_raft_diagnostic(client, base, known_replicas).await;
+            panic!(
+                "{phase}: {base} did not converge; expected_count={}, {}, last_error={}; {diagnostic}",
+                expected.len(),
+                event_diagnostic(&observed),
+                last_error.as_deref().unwrap_or("none"),
+            );
+        }
         tokio::time::sleep(REPLAY_POLL_INTERVAL).await;
     }
 }
@@ -327,6 +463,7 @@ async fn kill_9_leader_survivors_reelect_with_no_committed_event_loss() {
         wait_replayed(
             &client,
             base,
+            &base_refs,
             &[1, 2, 3],
             "post-kill replication convergence",
         )
@@ -375,8 +512,20 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
             async move {
                 let response = append(&client, &base, n as i64).await;
                 let status = response.status();
-                anyhow::ensure!(status.is_success(), "append {n} via {base}: {status}");
-                Ok::<_, anyhow::Error>(())
+                if !status.is_success() {
+                    let body = response.text().await.unwrap_or_default();
+                    anyhow::bail!("append {n} via {base}: {status} {body}");
+                }
+                let event: TapeEvent = response
+                    .json()
+                    .await
+                    .with_context(|| format!("append {n} via {base}: decode TapeEvent"))?;
+                anyhow::ensure!(
+                    event.payload.get("n").and_then(serde_json::Value::as_i64) == Some(n as i64),
+                    "append {n} via {base}: payload.n mismatch, got {:?}",
+                    event.payload,
+                );
+                Ok::<_, anyhow::Error>((n as i64, event))
             }
         })
         .buffer_unordered(CONCURRENCY)
@@ -398,14 +547,62 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
         panic!("phase=concurrent-ingress append failure: {error:#}");
     }
 
+    let appended_events = writes.unwrap();
+    assert_eq!(
+        appended_events.len(),
+        EVENTS,
+        "must have received exactly {EVENTS} append responses",
+    );
+    let mut response_identities = std::collections::HashSet::new();
+    for (n, event) in &appended_events {
+        assert_eq!(
+            event.payload.get("n").and_then(serde_json::Value::as_i64),
+            Some(*n),
+            "typed returned event payload must have submitted payload.n value",
+        );
+        let identity = (event.topic.clone(), event.offset);
+        assert!(
+            response_identities.insert(identity.clone()),
+            "duplicate response event identity observed: {identity:?}",
+        );
+    }
+    assert_eq!(
+        response_identities.len(),
+        EVENTS,
+        "append responses must contain {EVENTS} distinct (topic, offset) identities",
+    );
+
     let expected: Vec<i64> = (0..EVENTS).map(|event| event as i64).collect();
     for base in &base_urls {
         wait_replayed(
             &client,
             base,
+            &base_refs,
             &expected,
             "concurrent-ingress replication convergence",
         )
         .await;
+
+        let replayed = replayed_ns(&client, base)
+            .await
+            .expect("replay after convergence");
+        assert_eq!(
+            replayed.len(),
+            expected.len(),
+            "replica {base} must have exact event count",
+        );
+        let mut seen = std::collections::HashSet::new();
+        for id in &replayed {
+            assert!(
+                seen.insert(*id),
+                "replica {base} has duplicate event ID {id}",
+            );
+        }
+        let replayed_set: std::collections::BTreeSet<i64> = replayed.into_iter().collect();
+        let expected_set: std::collections::BTreeSet<i64> = expected.iter().copied().collect();
+        assert_eq!(
+            replayed_set, expected_set,
+            "replica {base} must match exact expected event set",
+        );
     }
 }

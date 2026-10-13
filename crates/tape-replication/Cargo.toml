@@ -17,6 +17,7 @@ serde.workspace = true
 server-lifecycle.workspace = true
 serde_json.workspace = true
 tape-shared-kernel.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 
 [lints]
