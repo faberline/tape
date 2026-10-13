@@ -256,7 +256,7 @@ source below states its direct contribution.
   versioning policy, CRD-first upgrade order, and journal rollback contract
   are in [`docs/deployment-handoff.md`](docs/deployment-handoff.md) section 3e;
   capacity planning, on-disk layout, per-event storage formulas, and PVC
-  sizing are in section 3f.
+  sizing are in section 3f; the per-topic quota boundary is in section 3g.
 - Sources:
   - [`tape`](./) defines the CRD, defaults, topology policy, conditions,
     render verbs, direct-install base, and provisioning.
@@ -332,7 +332,7 @@ evidence; it does not define the current contract.
 | [STATUS.md](STATUS.md) | Current support per Cloud Pub/Sub surface, with limits and gates |
 | [ROADMAP.md](ROADMAP.md) | Future outcomes and explicit non-goals |
 | [Generated clients](clients/README.md) | Client generation, language matrix, connection inputs, and current limits |
-| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract, PVC sizing |
+| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract, PVC sizing, per-topic quota boundary |
 | [Node drain and PodDisruptionBudget](docs/runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](docs/benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Tape edit rules and required verification commands |

@@ -194,6 +194,28 @@ Unmeasured boundaries requiring headroom:
 
 See `### Disk-full runbook (#2573)` for remediation if disk capacity is exhausted.
 
+### 3g. Per-topic quotas (boundary)
+
+While `### 3f` bounds whole-instance disk capacity, per-topic quotas would govern per-topic throughput, payload size, or event count limits. Tape has none today.
+
+**Current State:**
+Request admission in Tape is keyed by request class and caller, never by topic:
+* **Boot wiring:** `AdmissionConfig::from_env("TAPE")?.controller("tape.read", "tape.write", "tape.admin")` (`crates/tape/src/bin/tape/serve.rs`) registers exactly three fixed admission classes. Admission is off unless at least one of `TAPE_ADMISSION_READ_CAPACITY`, `TAPE_ADMISSION_WRITE_CAPACITY`, or `TAPE_ADMISSION_ADMIN_CAPACITY` is set; `TAPE_ADMISSION_REFILL_SECS` and `TAPE_ADMISSION_MAX_KEYS` tune the shared token buckets.
+* **Class selection:** The admission closure in `crates/tape/src/http/router.rs` routes `/admin/` to `tape.admin`, `GET` to `tape.read`, and every other method to `tape.write`. The bucket key is the request's `Authorization` header, or `anonymous` when there is none.
+
+Every topic funnels into the same three classes; there is no per-topic capacity slot anywhere in this closure. With `TAPE_ADMISSION_WRITE_CAPACITY=2` and a one-hour refill, two tokenless appends to topic `a` succeeded and the next append to topic `b` was refused with `429 rate_limited`, while a read of `b` still answered `200`: one caller's appends to different topics draw on one bucket.
+
+The other limits are no finer. The request body limit (`body_limit_bytes`) is one value for the whole instance. Retention (`### 3f`) is set per topic but bounds how many events are kept, not how fast they arrive or how large each one is.
+
+**Boundary:**
+Per-topic and per-subscription quotas are an open roadmap outcome (`quotas-and-scale-transition`, see [product/operations.md](product/operations.md) § Quotas and scale transition), not shipped behaviour. The admission classes cannot express them as they stand. `AdmissionController` lives in core's `service-http` crate, and supporting per-topic quotas there needs either (a) dynamically named classes at runtime (e.g. `"tape.write.{topic}"`, which requires `AdmissionConfig` to accept classes not known when the environment is parsed) or (b) a single class holding a per-key (per-topic) capacity map instead of one capacity. Both land in the shared library, not in this repository.
+
+**Operator-side Workaround:**
+Every existing control lever (the three admission classes, the body limit, and PVC size from `### 3f`) applies per Tape service instance, not per topic. The only way to give one topic a different effective quota than another today is to run a separate Tape CR (separate instance) per topic or topic group needing distinct limits, applying the sizing formulas in `### 3f` per instance. Because admission buckets per caller, giving each producer its own token also gives it its own write bucket, which bounds that producer across every topic it writes, not any one topic.
+
+**Forward Pointer:**
+When per-topic limits are built, the change starts in `service-http`'s `AdmissionConfig`/`AdmissionController` (a per-key or wildcard capacity map), owned as a shared-library update, and is then wired through the admission closure in `crates/tape/src/http/router.rs`.
+
 ---
 
 ## 4. Environment variables
