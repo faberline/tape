@@ -92,7 +92,7 @@ pub const fn llm_api_md() -> &'static str {
 The initial service contract is intentionally compact:
 
 - `POST /topics/{topic}/append` appends an event envelope and returns its offset.
-- `GET /topics/{topic}/replay?from_offset=N&from_timestamp_ms=T&limit=L` replays history.
+- `GET /topics/{topic}/replay?from_offset=N&from_timestamp_ms=T&limit=L` replays history without moving consumer cursors. No admin rewind verb exists; to reprocess bad data, replay with explicit from_offset or use a new subscription name (a different name is a different checkpoint key starting at 0).
 - `GET /topics/{topic}/replay/stream?from_offset=N&from_timestamp_ms=T&limit=L` downloads the same read-only history as compact validated frames over h2c.
 - `POST`/`GET /topics/{topic}/subscriptions` declare topic delivery resources.
 - `GET`/`DELETE /topics/{topic}/subscriptions/{subscription}` declare one resource.

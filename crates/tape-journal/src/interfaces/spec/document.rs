@@ -42,6 +42,7 @@ pub(super) fn openapi() -> Value {
             "/topics/{topic}/replay": {
                 "get": {
                     "summary": "Replay topic history by offset or timestamp",
+                    "description": "Replay topic history by offset or timestamp without mutating checkpoints. No admin rewind verb exists: checkpoints are strictly monotonic. To reprocess history, callers must replay with an explicit from_offset (caller tracks progress) or use a new subscription name (a different name starts with a fresh checkpoint at 0).",
                     "parameters": [
                         topic_param(),
                         query_param("from_offset", "integer"),
