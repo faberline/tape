@@ -35,3 +35,4 @@ mod service_auth;
 mod shared_otlp_tracing;
 mod spec_generated_clients;
 mod spec_route_parity;
+mod subscription_config;

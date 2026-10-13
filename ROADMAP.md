@@ -143,8 +143,7 @@ libraries, same reasons, same shape — and belong to no Pub/Sub checklist group
 - ID: `deterministic-failover`
 - Outcome: The replication and failover cases observe each step through their
   own readiness and leadership surfaces instead of one shared wall-clock
-  deadline, and the follower-forwarded append case passes against the shared
-  runtime's JSON publish handler.
+  deadline, and reruns green on a loaded host.
 - Boundary: This is test-harness and runtime-adapter work; it changes no
   public contract. It is the prerequisite for proving that a lease table
   survives failover in the subscription outcome.

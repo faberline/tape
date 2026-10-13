@@ -14,7 +14,7 @@ today, supports it with a named limit, or has not built it yet.
 
 Today tape ships durable single-message publish, named pull subscriptions that
 each advance one cumulative cursor, per-topic retention, Raft replication with
-peer mTLS (one replication case currently red, see [STATUS](STATUS.md)), whole-journal backup and cold seed, a Kubernetes operator, and
+peer mTLS, whole-journal backup and cold seed, a Kubernetes operator, and
 generated TypeScript, Python, and Rust clients. Per-message acknowledgement,
 competing subscribers, push delivery, seek and snapshots, ordering keys,
 message filtering, and schema validation are ROADMAP outcomes, not shipped
@@ -193,10 +193,8 @@ source below states its direct contribution.
 - Promise: Elect a leader among three members, replicate every append,
   forward writes from followers, catch a fresh member up by snapshot, survive
   a leader kill without committed loss, and restart a single member onto its
-  applied floor. One follower-forwarding case is currently red against the
-  shared runtime's JSON publish handler; the [STATUS](STATUS.md) row
-  `raft-replication` names it and the `deterministic-failover` outcome owns
-  the repair.
+  applied floor. A follower answers a direct publish with 421 and the
+  leader's id before it judges the request body.
 - Sources:
   - [`tape`](./) defines the replicated command set, the applied-floor
     recovery, and the peer mTLS listener that keeps raft routes off the public
