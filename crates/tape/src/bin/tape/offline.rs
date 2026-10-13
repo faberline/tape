@@ -15,7 +15,8 @@ use tape_shared_kernel::TapeJournal;
 pub(crate) struct AppendArgs {
     /// Topic name.
     pub(crate) topic: String,
-    /// Optional partitioning/idempotency key carried in the event envelope.
+    /// Opaque caller-supplied label carried on the event envelope and returned on replay.
+    /// Tape never reads key for partitioning, routing, or deduplication; append is at-least-once.
     #[arg(long)]
     pub(crate) key: Option<String>,
     /// JSON payload or a string payload when the value is not valid JSON.
