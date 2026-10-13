@@ -105,7 +105,7 @@ spec:
               observability:
                 default: false
                 description: |-
-                  Emit a `ServiceMonitor` + `PrometheusRule` alongside the workload (#2575), carrying the same four SLO alerts the hand-maintained `k8s/components/observability` kustomize component ships — including #2485's seed-failure and consumer-liveness runbooks.
+                  Emit a `ServiceMonitor` + `PrometheusRule` alongside the workload (#2575), carrying the same alerts the hand-maintained `k8s/components/observability` kustomize component ships — including #2485's seed-failure and consumer-liveness runbooks.
 
                   Opt-in, and default-off on purpose: both are `monitoring.coreos.com/v1` kinds, so a cluster without the Prometheus Operator CRDs installed would reject them. Leaving it off keeps a vanilla cluster installable; turning it on there is a reconcile error the operator reports, not a surprise the CR author meets at install time. Same shape and default as lumen's `spec.observability`.
                 type: boolean

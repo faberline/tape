@@ -151,7 +151,7 @@ pub struct TapeSpec {
     pub topics: Option<Vec<TapeTopicSpec>>,
 
     /// Emit a `ServiceMonitor` + `PrometheusRule` alongside the workload
-    /// (#2575), carrying the same four SLO alerts the hand-maintained
+    /// (#2575), carrying the same alerts the hand-maintained
     /// `k8s/components/observability` kustomize component ships — including
     /// #2485's seed-failure and consumer-liveness runbooks.
     ///
