@@ -205,7 +205,8 @@ pub struct TapeBackupSpec {
 
     /// Name of a Secret holding a bearer token with `admin` on `*`, projected
     /// into the CronJob as `TAPE_BACKUP_TOKEN` (key `token`). Required when
-    /// the instance runs `auth: required`; omit for `auth: disabled`.
+    /// the instance runs `auth: required` (enforced by CEL rule on the spec);
+    /// omit for `auth: disabled`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_token_secret: Option<String>,
 }
@@ -354,6 +355,18 @@ const ONE_TOKEN_SOURCE_MESSAGE: &str =
      spec.tokensSecretProviderClass (a Secret Manager CSI projection); with both set there is no \
      way to tell which registry is actually being served";
 
+/// The CEL rule rejecting a backup schedule that can only ever 401: a
+/// `spec.backup` with no `adminTokenSecret` on an instance running
+/// `auth: required` (#3058). Presence tests only, for the same reason as
+/// [`ONE_TOKEN_SOURCE_RULE`].
+const BACKUP_NEEDS_ADMIN_TOKEN_RULE: &str =
+    "!(has(self.backup) && self.auth == 'required' && !has(self.backup.adminTokenSecret))";
+
+const BACKUP_NEEDS_ADMIN_TOKEN_MESSAGE: &str =
+    "set spec.backup.adminTokenSecret when spec.auth is required, or the scheduled \
+     backup runs authenticate with no token and every run fails 401 while the instance \
+     keeps reporting Ready";
+
 /// The `Tape` CustomResourceDefinition as YAML, for `kubectl apply`.
 ///
 /// The schema is normalized to be Kubernetes-OpenAPI compatible: schemars
@@ -372,6 +385,15 @@ pub fn crd_yaml() -> String {
     assert!(
         attached > 0,
         "the one-token-source rule must reach the spec schema; the generated CRD changed shape"
+    );
+    let attached = service_k8s::crd::add_spec_validation_rule(
+        &mut crd,
+        BACKUP_NEEDS_ADMIN_TOKEN_RULE,
+        BACKUP_NEEDS_ADMIN_TOKEN_MESSAGE,
+    );
+    assert!(
+        attached > 0,
+        "the backup-admin-token rule must reach the spec schema; the generated CRD changed shape"
     );
     let yaml = serde_yaml::to_string(&crd).expect("CRD serializes");
     service_k8s::crd::quote_yaml_1_1_boolean_like_strings(&yaml)
