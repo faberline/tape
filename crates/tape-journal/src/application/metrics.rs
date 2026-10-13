@@ -1,6 +1,7 @@
 //! tape request observability: per-op request counts + latency, the ENOSPC
-//! degraded-mode series, and the raft leader-known gauge, rendered into the
-//! Prometheus exposition served at `/metrics`.
+//! degraded-mode series, the raft leader-known gauge, and the auth registry
+//! reload series, rendered into the Prometheus exposition served at
+//! `/metrics`.
 //!
 //! Built on the shared `metrics-prometheus` primitives (`Latency` — a
 //! lock-free `sum`/`count` counter pair — plus the text-format encoder
@@ -9,7 +10,10 @@
 //! `track` middleware over the `/topics` data plane, so the journal hot path
 //! never carries a metrics probe.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use metrics_prometheus::{Counter, Gauge, Latency, Sample};
+use tape_access::RegistryReloadRecorder;
 
 /// #2579: the `raft_leader_known` value meaning "no raft poll has published a
 /// result" — this process is not in raft mode, or the poller has not run yet.
@@ -48,6 +52,12 @@ pub struct TapeMetrics {
     /// leader; `1` means the node is in raft mode and the last poll found a
     /// leader (this node or a peer).
     pub raft_leader_known: Gauge,
+    /// #2580: total auth registry reload failures observed while the last
+    /// known-good registry kept serving.
+    pub auth_registry_reload_failures_total: Counter,
+    /// #2580: unix time in seconds of the last successful auth registry
+    /// reload.
+    pub auth_registry_reload_success_unixtime: Gauge,
 }
 
 /// The gauge starts at the sentinel value, not at `0`.
@@ -68,6 +78,8 @@ impl Default for TapeMetrics {
             storage_degraded: Default::default(),
             storage_full_errors_total: Default::default(),
             raft_leader_known: Default::default(),
+            auth_registry_reload_failures_total: Default::default(),
+            auth_registry_reload_success_unixtime: Default::default(),
         };
         metrics.raft_leader_known.set(NOT_RAFT);
         metrics
@@ -108,6 +120,23 @@ impl TapeMetrics {
     /// rendering.
     pub fn set_raft_leader_known(&self, known: bool) {
         self.raft_leader_known.set(if known { 1 } else { 0 });
+    }
+
+    /// #2580: record a successful auth registry reload by publishing the
+    /// current unix-second timestamp.
+    pub fn record_auth_registry_reload_success(&self) {
+        self.auth_registry_reload_success_unixtime.set(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_secs())
+                .unwrap_or_default(),
+        );
+    }
+
+    /// #2580: record a failed auth registry reload while continuing to serve
+    /// the previously loaded registry.
+    pub fn record_auth_registry_reload_failure(&self) {
+        self.auth_registry_reload_failures_total.incr();
     }
 
     /// #2579: read the latest raft-leader observation published by the poller.
@@ -252,6 +281,19 @@ impl TapeMetrics {
                 "Total genuine ENOSPC hits observed on the journal persist path.",
                 self.storage_full_errors_total.get(),
             ),
+            Sample::new(
+                "tape_auth_registry_reload_failures_total",
+                "counter",
+                "Total auth registry reload failures observed while serving the last known-good \
+                 registry.",
+                self.auth_registry_reload_failures_total.get(),
+            ),
+            Sample::new(
+                "tape_auth_registry_reload_success_unixtime",
+                "gauge",
+                "Unix time in seconds of the last successful auth registry reload.",
+                self.auth_registry_reload_success_unixtime.get(),
+            ),
         ];
         if self.raft_leader_known.get() != NOT_RAFT {
             samples.push(Sample::new(
@@ -263,6 +305,19 @@ impl TapeMetrics {
             ));
         }
         metrics_prometheus::render(&samples)
+    }
+}
+
+/// #2580: the auth verifier's reload outcomes land on the same `TapeMetrics`
+/// `/metrics` renders — `AppState::with_auth` hands the verifier
+/// `state.metrics()`.
+impl RegistryReloadRecorder for TapeMetrics {
+    fn reload_succeeded(&self) {
+        self.record_auth_registry_reload_success();
+    }
+
+    fn reload_failed(&self) {
+        self.record_auth_registry_reload_failure();
     }
 }
 
@@ -344,6 +399,35 @@ mod tests {
         let degraded = m.render();
         assert!(degraded.contains("tape_storage_degraded 1"));
         assert!(degraded.contains("tape_storage_full_errors_total 1"));
+    }
+
+    /// #2580 — the alert reads these series, so pin that they render; an
+    /// alert-file test alone proves only that the alert mentions them.
+    #[test]
+    fn render_exposes_auth_registry_reload_series() {
+        let m = TapeMetrics::new();
+        let clean = m.render();
+        assert!(clean.contains("# TYPE tape_auth_registry_reload_failures_total counter"));
+        assert!(clean.contains("tape_auth_registry_reload_failures_total 0"));
+        assert!(clean.contains("# TYPE tape_auth_registry_reload_success_unixtime gauge"));
+        assert!(clean.contains("tape_auth_registry_reload_success_unixtime 0"));
+
+        m.record_auth_registry_reload_failure();
+        let after_fail = m.render();
+        assert!(after_fail.contains("tape_auth_registry_reload_failures_total 1"));
+
+        m.record_auth_registry_reload_success();
+        let after_success = m.render();
+        let line = after_success
+            .lines()
+            .find(|l| l.starts_with("tape_auth_registry_reload_success_unixtime "))
+            .expect("the success gauge must render as its own sample line");
+        let value: u64 = line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|v| v.parse().ok())
+            .expect("the gauge sample must carry a parseable value");
+        assert!(value > 0);
     }
 
     /// #2579 — a process that never entered the raft branch publishes no

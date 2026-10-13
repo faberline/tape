@@ -9,7 +9,7 @@
 //! default. The registry is loaded through the real file loader from a temp
 //! `token-registry.json`.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::http::{header, HeaderMap};
 use serde_json::json;
@@ -17,6 +17,7 @@ use service_auth::{Role, Verifier};
 
 use tape::http::{router, AppState};
 use tape_access::AuthConfig;
+use tape_journal::application::TapeMetrics;
 use tape_shared_kernel::TapeJournal;
 
 /// producer has a write grant on `orders`, worker has a read grant on
@@ -60,7 +61,7 @@ async fn start_server(auth: Option<AuthConfig>) -> SocketAddr {
 
 #[test]
 fn tape_auth_adapter_rotates_the_shared_registry_without_restart() {
-    let verifier = required_auth().verifier();
+    let verifier = required_auth().verifier(Arc::new(TapeMetrics::new()));
     let mut before = HeaderMap::new();
     before.insert(
         header::AUTHORIZATION,
@@ -79,6 +80,49 @@ fn tape_auth_adapter_rotates_the_shared_registry_without_restart() {
     let principal = verifier.authenticate(&after).unwrap();
     assert_eq!(principal.subject(), Some("next"));
     assert!(principal.ensure("orders", Role::Admin).is_ok());
+}
+
+/// #2580 — a rejected registry-file reload keeps the last known-good
+/// registry serving and is counted, and only an applied reload moves the
+/// success timestamp. Runs the real file loader against the real
+/// `TapeMetrics`.
+#[test]
+fn registry_reload_metrics_follow_real_file_reload_failures() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("token-registry.json");
+    std::fs::write(
+        &path,
+        r#"{"writer-token":{"subject":"producer","roles":{"orders":"write"}}}"#,
+    )
+    .unwrap();
+
+    let cfg = AuthConfig::resolve("required", Some(path.to_str().unwrap()), None).unwrap();
+    let metrics = Arc::new(TapeMetrics::new());
+    let verifier = cfg.verifier(metrics.clone());
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::AUTHORIZATION,
+        "Bearer writer-token".parse().unwrap(),
+    );
+    let principal = verifier.authenticate(&headers).unwrap();
+    assert!(principal.ensure("orders", Role::Write).is_ok());
+
+    verifier.reload_file(&path).unwrap();
+    let success_after_good = metrics.auth_registry_reload_success_unixtime.get();
+    assert!(success_after_good > 0);
+    assert_eq!(metrics.auth_registry_reload_failures_total.get(), 0);
+
+    std::fs::write(&path, r#"{"broken": "#).unwrap();
+    assert!(verifier.reload_file(&path).is_err());
+    assert_eq!(metrics.auth_registry_reload_failures_total.get(), 1);
+
+    let principal = verifier.authenticate(&headers).unwrap();
+    assert!(principal.ensure("orders", Role::Write).is_ok());
+    assert_eq!(
+        metrics.auth_registry_reload_success_unixtime.get(),
+        success_after_good
+    );
 }
 
 fn url(addr: SocketAddr, path: &str) -> String {

@@ -47,8 +47,8 @@ use anyhow::{bail, Result};
 use std::sync::Arc;
 
 use service_auth::{
-    AuditedRoleMapPrincipal, AuthError, ReloadableRoleMapVerifier, Role, TokenClaims,
-    TracingAuthEventSink,
+    AuditedRoleMapPrincipal, AuthError, AuthEvent, AuthEventSink, ReloadableRoleMapVerifier, Role,
+    TokenClaims, TracingAuthEventSink,
 };
 
 /// Auth-mode env var (`off`|`disabled`|`required`), surfaced as `--auth`.
@@ -57,6 +57,50 @@ pub const AUTH_MODE_ENV: &str = "TAPE_AUTH";
 pub const TOKEN_REGISTRY_FILE_ENV: &str = "TAPE_TOKEN_REGISTRY_FILE";
 /// Legacy/dev inline token-registry JSON (never the production path).
 pub const LEGACY_TOKENS_ENV: &str = "TAPE_TOKENS";
+
+/// #2580: where a registry reload outcome is counted. A failed reload is the
+/// one auth failure that looks like success from the outside — the verifier
+/// keeps serving the last known-good registry — so it has to be published.
+/// tape's request metrics implement this; the trait keeps this crate free of
+/// a dependency on the journal context that owns them.
+pub trait RegistryReloadRecorder: Send + Sync + std::fmt::Debug {
+    /// A reload was applied.
+    fn reload_succeeded(&self);
+    /// A reload was rejected and the last known-good registry kept serving.
+    fn reload_failed(&self);
+}
+
+/// #2580: the auth event sink tape's verifier runs. It counts
+/// `AuthEvent::RegistryReload` outcomes through a [`RegistryReloadRecorder`]
+/// and delegates every event onward to the shared `TracingAuthEventSink`, so
+/// the audit log is unchanged.
+#[derive(Debug)]
+pub struct TapeAuthEventSink {
+    recorder: Arc<dyn RegistryReloadRecorder>,
+    tracing: TracingAuthEventSink,
+}
+
+impl TapeAuthEventSink {
+    pub fn new(recorder: Arc<dyn RegistryReloadRecorder>) -> Self {
+        Self {
+            recorder,
+            tracing: TracingAuthEventSink,
+        }
+    }
+}
+
+impl AuthEventSink for TapeAuthEventSink {
+    fn record(&self, event: &AuthEvent) {
+        if let AuthEvent::RegistryReload { applied, .. } = event {
+            if *applied {
+                self.recorder.reload_succeeded();
+            } else {
+                self.recorder.reload_failed();
+            }
+        }
+        self.tracing.record(event);
+    }
+}
 
 /// Resolved auth settings: the mode plus the token→claims registry.
 #[derive(Debug, Clone)]
@@ -104,11 +148,12 @@ impl AuthConfig {
 
     /// The verifier the data-plane `auth_middleware` runs: the shared static
     /// role-map over this registry (the `open()` shape when auth is off).
-    pub fn verifier(&self) -> ReloadableRoleMapVerifier {
+    /// Registry reload outcomes are counted through `recorder` (#2580).
+    pub fn verifier(&self, recorder: Arc<dyn RegistryReloadRecorder>) -> ReloadableRoleMapVerifier {
         ReloadableRoleMapVerifier::with_sink(
             self.required,
             self.tokens.clone(),
-            Arc::new(TracingAuthEventSink),
+            Arc::new(TapeAuthEventSink::new(recorder)),
         )
     }
 }
@@ -131,4 +176,51 @@ pub fn authorize(
             denied.subject, denied.needed, denied.resource
         ))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[derive(Debug, Default)]
+    struct Counts {
+        succeeded: AtomicU64,
+        failed: AtomicU64,
+    }
+
+    impl RegistryReloadRecorder for Counts {
+        fn reload_succeeded(&self) {
+            self.succeeded.fetch_add(1, Ordering::Relaxed);
+        }
+        fn reload_failed(&self) {
+            self.failed.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn reload(applied: bool) -> AuthEvent {
+        AuthEvent::RegistryReload {
+            applied,
+            revision: 1,
+            entries: 1,
+            failure: None,
+        }
+    }
+
+    /// #2580 — each reload outcome lands on its own count, and only reload
+    /// events count.
+    #[test]
+    fn sink_counts_registry_reload_outcomes() {
+        let counts = Arc::new(Counts::default());
+        let sink = TapeAuthEventSink::new(counts.clone());
+
+        sink.record(&reload(true));
+        assert_eq!(counts.succeeded.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.failed.load(Ordering::Relaxed), 0);
+
+        sink.record(&reload(false));
+        sink.record(&reload(false));
+        assert_eq!(counts.succeeded.load(Ordering::Relaxed), 1);
+        assert_eq!(counts.failed.load(Ordering::Relaxed), 2);
+    }
 }

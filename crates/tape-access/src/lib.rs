@@ -4,5 +4,6 @@
 mod authorization;
 
 pub use authorization::{
-    authorize, AuthConfig, AUTH_MODE_ENV, LEGACY_TOKENS_ENV, TOKEN_REGISTRY_FILE_ENV,
+    authorize, AuthConfig, RegistryReloadRecorder, TapeAuthEventSink, AUTH_MODE_ENV,
+    LEGACY_TOKENS_ENV, TOKEN_REGISTRY_FILE_ENV,
 };
