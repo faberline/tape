@@ -15,9 +15,13 @@ pub struct ProposalId {
     pub sequence: u64,
 }
 
-/// Whole-journal snapshot tagged with the raft applied index. A full-state
-/// snapshot (not a live/un-acked subset like relay's) is correct here because
-/// tape's journal never trims history.
+/// Whole-journal snapshot tagged with the raft applied index. It carries the
+/// full state machine, not a live/un-acked subset like relay's: every event
+/// still retained, plus next offsets, checkpoints, subscriptions, and
+/// retention policies. Retention does trim history, but only while applying
+/// a replicated command (`TapeJournal::append_at`, `put_retention`), so every
+/// replica trims at the same index and a snapshot taken after it already
+/// reflects the trim.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JournalSnapshot {
     pub up_to: u64,
