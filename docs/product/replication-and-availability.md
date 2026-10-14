@@ -23,7 +23,7 @@ change.
 - Neighbours: none; first section of the area.
 - Status rows: `raft-replication`, `raft-peer-mtls`, `leader-failover`.
 
-## Deterministic failover (Milestone #18)
+## Deterministic failover
 
 - Problem: the flaky failover case above means the group's promise is
   measured by a clock, not by the group's own state, and
@@ -41,7 +41,7 @@ change.
 - Neighbours: repairs Replicated group with peer mTLS; prerequisite for
   [subscriptions.md](subscriptions.md) § Subscription ack and competing
   subscribers.
-- Outcome: `deterministic-failover`. Tracking: [Milestone #18](https://github.com/faberline/tape/milestone/18)
+- Outcome: `deterministic-failover`. Tracking: not assigned.
 
 ## Live replica membership (Milestone #1)
 
