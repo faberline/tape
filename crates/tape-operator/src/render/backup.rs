@@ -76,7 +76,7 @@ pub(super) fn backup_cron_job(tape: &Tape, cx: &RenderCtx) -> Option<Value> {
         None => vec![],
     };
 
-    Some(render::cron_job(render::CronJob {
+    let mut cron = render::cron_job(render::CronJob {
         cx,
         name: &cron_name,
         component: BACKUP_COMPONENT,
@@ -99,5 +99,12 @@ pub(super) fn backup_cron_job(tape: &Tape, cx: &RenderCtx) -> Option<Value> {
         memory: "128Mi",
         successful_jobs_history_limit: 3,
         failed_jobs_history_limit: 3,
-    }))
+    });
+    // The backup pod lands on the same nodes as the serving pods: on a
+    // tainted, dedicated pool it would otherwise stay Pending forever.
+    super::apply_pod_placement(
+        &mut cron["spec"]["jobTemplate"]["spec"]["template"]["spec"],
+        tape,
+    );
+    Some(cron)
 }
