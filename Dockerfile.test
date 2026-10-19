@@ -20,16 +20,34 @@
 #   dist/linux/amd64/tape
 #   dist/linux/arm64/tape
 #
-#   docker buildx build -f Dockerfile.test \
+#   docker buildx build -f Dockerfile.test --target server \
 #     --platform linux/amd64,linux/arm64 \
 #     -t ghcr.io/<owner>/tape:sha-<git12> --push .
+#
+# A second target, `test-client`, is the GKE test Job's image
+# (faberline/aw docs/standards/rust-tests.md): the `it` test binary, built
+# for the same musl target, as /usr/local/bin/tape-it, plus kubectl for the
+# suites' cluster steps. `.github/workflows/gke-test.yml` stages it at
+#   dist/linux/amd64/tape-it
+# and pushes ghcr.io/<owner>/tape-test-client:sha-<git12>. Neither target
+# compiles anything.
+
+# kubectl for the test client: the upstream static binary, pinned to the
+# multi-arch index.
+FROM registry.k8s.io/kubectl:v1.33.4@sha256:261a9ed843eb68e3d50da132245e2221d75ca19504130e47bd32788c0ff339a0 AS kubectl
+
+FROM gcr.io/distroless/static-debian12:nonroot AS test-client
+ARG TARGETARCH=amd64
+COPY --from=kubectl /bin/kubectl /usr/local/bin/kubectl
+COPY --chown=65532:65532 dist/linux/${TARGETARCH}/tape-it /usr/local/bin/tape-it
+ENTRYPOINT ["/usr/local/bin/tape-it"]
 
 # distroless static runtime — only the binary + CA certs, nonroot. Identical
 # to Dockerfile.release's runtime stage: static-debian12 ships no
 # glibc/libgcc, so this only works with the fully static musl binaries the
 # workflow builds. :nonroot = uid 65532. A single tokio binary handles
 # SIGTERM itself and spawns no children, so no tini/init shim is required.
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot AS server
 ARG TARGETARCH=amd64
 COPY --chown=65532:65532 dist/linux/${TARGETARCH}/tape /usr/local/bin/tape
 # 7137 = client API. No CMD, matching Dockerfile.release: every deployment
