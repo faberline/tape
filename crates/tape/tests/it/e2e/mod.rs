@@ -9,6 +9,7 @@
 //! are `kubectl` calls in the Job's namespace; every check is here in Rust,
 //! and each step prints one `E2E_EVIDENCE {json}` line to stdout.
 
+mod operator_ha;
 mod operator_recovery;
 
 use std::process::Command;
@@ -145,6 +146,57 @@ impl Expected {
         image_digest(image_id)
             .is_some_and(|digest| digest == self.root_digest || digest == self.runtime_digest)
     }
+}
+
+/// Checks that exactly `want` live pods match `label`, that each runs the
+/// expected image in `name`, and that each runtime `imageID` binds it.
+/// Returns the image IDs.
+pub(crate) fn assert_pods_run(
+    expected: &Expected,
+    label: &str,
+    name: &str,
+    want: u64,
+) -> Vec<String> {
+    let pods = kubectl_json(&["get", "pods", "-l", label]);
+    let live: Vec<&Value> = pods["items"]
+        .as_array()
+        .map(|all| {
+            all.iter()
+                .filter(|p| p["metadata"]["deletionTimestamp"].is_null())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(live.len() as u64, want, "pods with {label}");
+    live.iter()
+        .map(|pod| {
+            let pod_name = pod["metadata"]["name"].as_str().unwrap_or_default();
+            assert_eq!(
+                container(&pod["spec"], name)["image"],
+                expected.image.as_str(),
+                "pod {pod_name} container {name} image"
+            );
+            let image_id = pod["status"]["containerStatuses"]
+                .as_array()
+                .and_then(|all| all.iter().find(|s| s["name"] == name))
+                .and_then(|s| s["imageID"].as_str())
+                .unwrap_or_default()
+                .to_owned();
+            assert!(
+                expected.binds(&image_id),
+                "pod {pod_name} container {name} runs imageID {image_id:?}, not {} or {}",
+                expected.root_digest,
+                expected.runtime_digest
+            );
+            image_id
+        })
+        .collect()
+}
+
+pub(crate) fn container<'a>(pod_spec: &'a Value, name: &str) -> &'a Value {
+    pod_spec["containers"]
+        .as_array()
+        .and_then(|all| all.iter().find(|c| c["name"] == name))
+        .unwrap_or_else(|| panic!("no container {name} in {pod_spec}"))
 }
 
 /// The `sha256:` digest of a container status `imageID`, in any of the forms

@@ -11,6 +11,8 @@
 # tape-system into tape) and one Tape CR, `tape`, that the operator turns into
 # StatefulSet/tape, Service/tape (:7137), and the pod tape-0. The direct-install
 # base (../../base) is not deployed here; the kind gate never covered it either.
+# It also grants the test Job's ServiceAccount the node drain of the
+# operator_ha suite (e2e-node-drain.yaml).
 #
 # Every pod runs on pool-tape-server, one pod per node: the 2 operator replicas
 # here and tape-0 through the CR's spec.placement. aw's
@@ -24,6 +26,8 @@ namespace: tape
 resources:
   - operator
   - tape-cr.yaml
+  # The operator_ha suite drains a node of pool-tape-server.
+  - e2e-node-drain.yaml
 
 # `kustomize edit set image` also rewrites the CR's spec.image, so the
 # operator and the server it renders run the same image.

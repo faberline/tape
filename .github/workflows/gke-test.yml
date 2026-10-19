@@ -11,6 +11,7 @@
 # Suites (aw docs/standards/test-cluster.md "Test suites"), one call each, one
 # at a time, each on a fresh deploy:
 #   operator_recovery  k8s/gke-test-job/operator_recovery  replaces scripts/kind-e2e.sh
+#   operator_ha        k8s/gke-test-job/operator_ha        replaces scripts/kind-operator-ha.sh
 # A pull request runs all of them; a dispatch can pick one.
 #
 # GKE runs linux/amd64 only. aw owns the cluster, both pools, and the
@@ -37,7 +38,7 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery]
+        options: [all, operator_recovery, operator_ha]
         default: all
 
 permissions:
@@ -172,9 +173,9 @@ jobs:
           [[ "$runtime_digest" != "$root_digest" ]] || die "runtime child digest must differ from the root index digest"
 
           case "$INPUT_SUITE" in
-            all) suites='["operator_recovery"]' ;;
-            operator_recovery) suites="[\"${INPUT_SUITE}\"]" ;;
-            *) die "suite must be all or operator_recovery, got: $INPUT_SUITE" ;;
+            all) suites='["operator_recovery","operator_ha"]' ;;
+            operator_recovery | operator_ha) suites="[\"${INPUT_SUITE}\"]" ;;
+            *) die "suite must be all, operator_recovery or operator_ha, got: $INPUT_SUITE" ;;
           esac
 
           {

@@ -1,0 +1,44 @@
+# The cluster-wide part of the operator_ha suite's access
+# (k8s/gke-test-job/operator_ha): `kubectl drain` cordons a node, lists the
+# pods on it in every namespace, and evicts them. A test Job folder may hold
+# only namespaced kinds, so the grant lives here, for the suite's
+# ServiceAccount tape/tape-e2e. The suite drains only a node on
+# pool-tape-server, which only tape's pods and DaemonSets can use, and
+# uncordons it after. Cluster-scoped objects outlive the namespace, so both
+# carry faberline.dev/owner-namespace: aw's teardown deletes the cluster RBAC
+# with that label after it deletes the namespace, and the reaper deletes it
+# once the namespace is gone.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tape-e2e-node-drain
+  labels:
+    faberline.dev/owner-namespace: tape
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tape-e2e-node-drain
+  labels:
+    faberline.dev/owner-namespace: tape
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tape-e2e-node-drain
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape
