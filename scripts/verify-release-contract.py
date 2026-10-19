@@ -24,20 +24,21 @@ GKE_MAKER = ROOT / "scripts/make-gke-release-receipt.py"
 GKE_HARNESS = ROOT / "acceptance/gcp/scripts/verify-tape.sh"
 CANDIDATE_VERIFIER = ROOT / "scripts/verify-release-candidate.sh"
 ARTIFACT_VERIFIER = ROOT / "scripts/verify-release-artifacts.sh"
-KIND_SCRIPT = ROOT / "scripts/kind-e2e.sh"
+RECOVERY_SUITE = ROOT / "crates/tape/tests/it/e2e/operator_recovery.rs"
+IMAGE_SUITE = ROOT / "crates/tape/tests/it/e2e/image.rs"
 DOCKERFILE = ROOT / "Dockerfile.release"
 CARGO_TOML = ROOT / "Cargo.toml"
 BENCH_CARGO_TOML = ROOT / "crates/tape-bench/Cargo.toml"
 STATEFULSET = ROOT / "k8s/base/statefulset.yaml"
 OPERATOR_DEPLOYMENT = ROOT / "k8s/operator/deployment.yaml"
 PROMOTION_WORKFLOW_SHA256 = "9c91a905924fe44ac95a60bc6042b6569a47315a822428e2ff57b088a13aad82"
-KIND_SERVER_STATEFULSET_SELECTOR = (
-    "  stateful_image=\"$(kubectl -n \"$NAMESPACE\" get statefulset \"$TAPE_NAME\" "
-    "-o jsonpath='{.spec.template.spec.containers[?(@.name==\"server\")].image}')\""
+SUITE_SERVER_STATEFULSET_CONTAINER = (
+    '    let server = container(&statefulset["spec"]["template"]["spec"], "server");'
 )
-KIND_SERVER_POD_INVENTORY = (
-    '  assert_named_pods_use_candidate "$NAMESPACE" "$SERVER_LABEL" server 1'
+SUITE_SERVER_POD_INVENTORY = (
+    '    let server_ids = assert_pods_run(expected, SERVER_LABEL, "server", 1);'
 )
+GKE_SUITES = "[operator_recovery, operator_ha]"
 
 TAPE_GATES = (
     "python3 scripts/verify-release-contract.py --self-test",
@@ -60,8 +61,9 @@ CANDIDATE_JOBS = {
     "manifest",
     "verify-candidate",
     "verify-libraries",
-    "kind-amd64",
-    "kind-arm64",
+    "test-client",
+    "gke-e2e",
+    "image-arm64",
     "result",
 }
 RESULT_NEEDS = (
@@ -72,8 +74,9 @@ RESULT_NEEDS = (
     "ghcr-image-and-attest",
     "verify-candidate",
     "verify-libraries",
-    "kind-amd64",
-    "kind-arm64",
+    "test-client",
+    "gke-e2e",
+    "image-arm64",
 )
 FINAL_JOBS = {
     "identity": "success",
@@ -83,8 +86,9 @@ FINAL_JOBS = {
     "ghcr-image-and-attest": "success",
     "verify-candidate": "success",
     "verify-libraries": "success",
-    "kind-amd64": "success",
-    "kind-arm64": "success",
+    "test-client": "success",
+    "gke-e2e": "success",
+    "image-arm64": "success",
     "result": "success",
 }
 TARGETS = (
@@ -336,20 +340,51 @@ test = false'''
     return version
 
 
-def assert_kind_candidate_identity(kind: str) -> None:
+def assert_suite_candidate_identity(recovery: str, image: str) -> None:
     for required in (
-        'IMAGE_MODE="${TAPE_E2E_IMAGE_MODE:-local}"',
-        "assert_named_pods_use_candidate",
-        "TAPE_E2E_EXPECTED_RUNTIME_DIGEST",
-        'tape --version',
+        "Expected::from_env()",
+        "assert_pods_run(",
+        "assert_runtime_version(",
+        '"tape", "--version"',
     ):
-        if required not in kind:
-            fail(f"Kind prebuilt identity check lacks {required}")
-    lines = kind.splitlines()
-    if lines.count(KIND_SERVER_STATEFULSET_SELECTOR) != 1:
-        fail("Kind prebuilt identity check lacks operator-rendered server StatefulSet selector")
-    if lines.count(KIND_SERVER_POD_INVENTORY) != 1:
-        fail("Kind prebuilt identity check lacks operator-rendered server pod inventory")
+        if required not in recovery:
+            fail(f"GKE suite identity check lacks {required}")
+    lines = recovery.splitlines()
+    if lines.count(SUITE_SERVER_STATEFULSET_CONTAINER) != 1:
+        fail("GKE suite identity check lacks operator-rendered server StatefulSet container")
+    if lines.count(SUITE_SERVER_POD_INVENTORY) != 1:
+        fail("GKE suite identity check lacks operator-rendered server pod inventory")
+    for required in (
+        'required_env("E2E_STANDALONE_IMAGE")',
+        "Expected::from_env()",
+        "expected.runtime_digest",
+        '"--version"',
+        "assert_version(",
+    ):
+        if required not in image:
+            fail(f"image suite identity check lacks {required}")
+
+
+def assert_gke_e2e(job: str) -> None:
+    pin = re.search(
+        r"^    uses: faberline/aw/\.github/workflows/gke-test\.yml@([0-9a-f]{40})$", job, re.MULTILINE
+    )
+    if not pin:
+        fail("gke-e2e does not call the commit-pinned aw gke-test workflow")
+    if f"      aw-ref: {pin.group(1)}\n" not in job:
+        fail("gke-e2e aw-ref does not match the pinned aw commit")
+    if f"        suite: {GKE_SUITES}\n" not in job:
+        fail(f"gke-e2e does not run exactly the suites {GKE_SUITES}")
+    for required in (
+        "      image: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}\n",
+        "      test-image: ${{ needs.test-client.outputs.image }}\n",
+        "        E2E_EXPECTED_VERSION=${{ needs.identity.outputs.version }}\n",
+        "        E2E_EXPECTED_GIT_SHA=${{ needs.identity.outputs.commit }}\n",
+        "        E2E_EXPECTED_IMAGE=${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}\n",
+        "        E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}\n",
+    ):
+        if required not in job:
+            fail(f"gke-e2e does not bind the prebuilt candidate: {required.strip()}")
 
 
 def parse_needs(job: str) -> tuple[str, ...]:
@@ -365,7 +400,8 @@ def check_contract(candidate: str, promotion: str) -> None:
         "GKE harness": GKE_HARNESS.read_text(),
         "candidate verifier": CANDIDATE_VERIFIER.read_text(),
         "artifact verifier": ARTIFACT_VERIFIER.read_text(),
-        "Kind script": KIND_SCRIPT.read_text(),
+        "GKE recovery suite": RECOVERY_SUITE.read_text(),
+        "image suite": IMAGE_SUITE.read_text(),
         "release Dockerfile": DOCKERFILE.read_text(),
         "Tape Cargo manifest": CARGO_TOML.read_text(),
         "Tape bench Cargo manifest": BENCH_CARGO_TOML.read_text(),
@@ -435,17 +471,16 @@ def check_contract(candidate: str, promotion: str) -> None:
     if '--mode full' not in run_script(step_block(job_block(candidate, "verify-candidate"), "Verify full run-scoped candidate supply chain")):
         fail("candidate does not run full supply-chain verification")
 
-    for job, digest in (("kind-amd64", "amd64_digest"), ("kind-arm64", "arm64_digest")):
-        script = run_script(step_block(job_block(candidate, job), "Run prebuilt candidate kind e2e"))
-        for required in (
-            "TAPE_E2E_IMAGE_MODE=prebuilt",
-            "TAPE_E2E_IMAGE=",
-            "TAPE_E2E_EXPECTED_VERSION=",
-            f"outputs.{digest}",
-            "bash scripts/kind-e2e.sh",
-        ):
-            if required not in script:
-                fail(f"{job} does not bind the prebuilt candidate: {required}")
+    assert_gke_e2e(job_block(candidate, "gke-e2e"))
+    image_step = step_block(job_block(candidate, "image-arm64"), "Run the image suite on the candidate arm64 child")
+    for required in (
+        "E2E_STANDALONE_IMAGE: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}",
+        "E2E_EXPECTED_GIT_SHA: ${{ needs.identity.outputs.commit }}",
+        "E2E_EXPECTED_RUNTIME_DIGEST: ${{ needs.ghcr-image-and-attest.outputs.arm64_digest }}",
+        '"e2e::image::"',
+    ):
+        if required not in image_step:
+            fail(f"image-arm64 does not bind the prebuilt candidate: {required}")
 
     assert_no_rebuild(promotion)
     if promotion.count("--candidate-run-attempt") != 4:
@@ -472,7 +507,6 @@ def check_contract(candidate: str, promotion: str) -> None:
             candidate,
             promotion,
             supporting["GKE receipt maker"],
-            supporting["Kind script"],
             supporting["release Dockerfile"],
         ]
     )
@@ -485,8 +519,7 @@ def check_contract(candidate: str, promotion: str) -> None:
     assert_tape_gke_failover(supporting["GKE harness"], supporting["GKE receipt maker"])
     if '"tape-release-gates":"success"' not in supporting["candidate verifier"] or '"tape-release-gates":"success"' not in supporting["artifact verifier"]:
         fail("candidate verifiers do not require Tape gates")
-    kind = supporting["Kind script"]
-    assert_kind_candidate_identity(kind)
+    assert_suite_candidate_identity(supporting["GKE recovery suite"], supporting["image suite"])
     dockerfile = supporting["release Dockerfile"]
     assert_release_versions(
         supporting["Tape Cargo manifest"],
@@ -797,7 +830,7 @@ def self_test() -> None:
     candidate = CANDIDATE_PATH.read_text()
     promotion = PROMOTION_PATH.read_text()
     original_hashes = {
-        path: sha256(path) for path in (CANDIDATE_PATH, PROMOTION_PATH, KIND_SCRIPT)
+        path: sha256(path) for path in (CANDIDATE_PATH, PROMOTION_PATH, RECOVERY_SUITE, IMAGE_SUITE)
     }
     check_contract(candidate, promotion)
 
@@ -825,6 +858,32 @@ def self_test() -> None:
         ),
         "missing-library-gate": (
             replace_once(candidate, "          bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime\n", "          # bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime\n", "missing-library-gate"),
+            promotion,
+        ),
+        "gke-e2e-aw-ref-drift": (
+            replace_once(candidate, "      aw-ref: edb3802d18d39d205bd0ada8431ecc97c6938c14\n", "      aw-ref: main\n", "gke-e2e-aw-ref-drift"),
+            promotion,
+        ),
+        "gke-e2e-root-digest-swap": (
+            replace_once(
+                candidate,
+                "        E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}\n",
+                "        E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.root_digest }}\n",
+                "gke-e2e-root-digest-swap",
+            ),
+            promotion,
+        ),
+        "gke-e2e-drops-a-suite": (
+            replace_once(candidate, f"        suite: {GKE_SUITES}\n", "        suite: [operator_recovery]\n", "gke-e2e-drops-a-suite"),
+            promotion,
+        ),
+        "image-arm64-amd64-child": (
+            replace_once(
+                candidate,
+                "          E2E_EXPECTED_RUNTIME_DIGEST: ${{ needs.ghcr-image-and-attest.outputs.arm64_digest }}\n",
+                "          E2E_EXPECTED_RUNTIME_DIGEST: ${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}\n",
+                "image-arm64-amd64-child",
+            ),
             promotion,
         ),
         "missing-result-binding": (
@@ -1022,31 +1081,39 @@ def self_test() -> None:
             continue
         fail(f"negative control passed: {name}")
 
-    kind = KIND_SCRIPT.read_text()
-    assert_kind_candidate_identity(kind)
-    kind_mutations = {
-        "kind-statefulset-server-selector": (
+    recovery = RECOVERY_SUITE.read_text()
+    image_suite = IMAGE_SUITE.read_text()
+    assert_suite_candidate_identity(recovery, image_suite)
+    suite_mutations = {
+        "suite-statefulset-server-container": (
             replace_once(
-                kind,
-                KIND_SERVER_STATEFULSET_SELECTOR,
-                KIND_SERVER_STATEFULSET_SELECTOR.replace('name=="server"', 'name=="tape"'),
-                "kind-statefulset-server-selector",
+                recovery,
+                SUITE_SERVER_STATEFULSET_CONTAINER,
+                SUITE_SERVER_STATEFULSET_CONTAINER.replace('"server")', '"tape")'),
+                "suite-statefulset-server-container",
             ),
-            "Kind prebuilt identity check lacks operator-rendered server StatefulSet selector",
+            image_suite,
+            "GKE suite identity check lacks operator-rendered server StatefulSet container",
         ),
-        "kind-server-pod-inventory": (
+        "suite-server-pod-inventory": (
             replace_once(
-                kind,
-                KIND_SERVER_POD_INVENTORY,
-                KIND_SERVER_POD_INVENTORY.replace(" server 1", " tape 1"),
-                "kind-server-pod-inventory",
+                recovery,
+                SUITE_SERVER_POD_INVENTORY,
+                SUITE_SERVER_POD_INVENTORY.replace('"server", 1', '"tape", 1'),
+                "suite-server-pod-inventory",
             ),
-            "Kind prebuilt identity check lacks operator-rendered server pod inventory",
+            image_suite,
+            "GKE suite identity check lacks operator-rendered server pod inventory",
+        ),
+        "image-suite-skips-runtime-digest": (
+            recovery,
+            image_suite.replace("expected.runtime_digest", "expected.root_digest"),
+            "image suite identity check lacks expected.runtime_digest",
         ),
     }
-    for name, (mutation, expected) in kind_mutations.items():
+    for name, (mutation, image_mutation, expected) in suite_mutations.items():
         try:
-            assert_kind_candidate_identity(mutation)
+            assert_suite_candidate_identity(mutation, image_mutation)
         except ContractError as error:
             if str(error) != expected:
                 fail(f"negative control {name} failed for the wrong reason: {error}")
@@ -1165,7 +1232,7 @@ def self_test() -> None:
     for path, before in original_hashes.items():
         if sha256(path) != before:
             fail(f"self-test did not restore {path.relative_to(ROOT)} byte for byte")
-    print("release contract self-test passed: positive fixture plus 39 negative mutations")
+    print("release contract self-test passed: positive fixture plus 44 negative mutations")
 
 
 def main() -> None:

@@ -26,8 +26,9 @@ FINAL_JOBS = {
     "ghcr-image-and-attest": "success",
     "verify-candidate": "success",
     "verify-libraries": "success",
-    "kind-amd64": "success",
-    "kind-arm64": "success",
+    "test-client": "success",
+    "gke-e2e": "success",
+    "image-arm64": "success",
     "result": "success",
 }
 PASS_FIELDS = (

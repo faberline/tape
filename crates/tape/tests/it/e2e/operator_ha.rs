@@ -26,7 +26,8 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::{
-    assert_pods_run, endpoint, evidence, kubectl, kubectl_json, try_kubectl, wait_for, Expected,
+    assert_pods_run, assert_version, endpoint, evidence, kubectl, kubectl_json, try_kubectl,
+    wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_ha";
@@ -43,6 +44,8 @@ const SERVER_POOL: &str = "tape-server";
 /// A replacement replica may wait for pool-tape-server to add a node.
 const REPLICAS_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const LEASE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+/// tape-0 may also wait for pool-tape-server to add a node.
+const SERVER_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const RECONCILE_TIMEOUT: Duration = Duration::from_secs(90);
 /// A warm standby takes the Lease within a few renew periods; slower than
 /// this and the second replica is not earning its keep.
@@ -56,8 +59,8 @@ const MIN_HEARTBEAT_SAMPLES: usize = 3;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "e2e: needs E2E_ENDPOINT"]
 async fn leader_election_survives_a_leader_delete_and_a_node_drain() {
-    // The suite talks to the operator, not to tape; the endpoint is still
-    // required, so a run outside the test Job fails instead of skipping.
+    // The suite talks to the operator, and to tape only for its `/version`;
+    // the operator runs the same binary from the same image.
     let tape_endpoint = endpoint();
     let expected = Expected::from_env();
     let http = reqwest::Client::builder()
@@ -76,9 +79,6 @@ async fn leader_election_survives_a_leader_delete_and_a_node_drain() {
             "tape_endpoint": tape_endpoint,
             "image": expected.image,
             "version": expected.version,
-            // tape reports no git sha at runtime yet, so this is the
-            // workflow's input, tied to the image only through its tag.
-            "git_sha": expected.git_sha,
             "pods": pods.iter().map(|p| &p.name).collect::<Vec<_>>(),
             "nodes": nodes,
             "operator_image_ids": image_ids,
@@ -106,6 +106,15 @@ async fn leader_election_survives_a_leader_delete_and_a_node_drain() {
         &format!("StatefulSet/{TAPE} from the operator"),
         LEASE_TIMEOUT,
         || try_kubectl(&["get", "statefulset", TAPE]).map(drop),
+    );
+
+    // The tape the operator rendered is the build under test.
+    wait_healthy(&http, &tape_endpoint, SERVER_TIMEOUT).await;
+    let version = assert_version(&http, &tape_endpoint, &expected).await;
+    evidence(
+        SUITE,
+        "server reports the expected build",
+        json!({ "endpoint": tape_endpoint, "git_sha": expected.git_sha, "version": version }),
     );
 
     // AC2: delete the leader; the Lease moves and the new holder applies.

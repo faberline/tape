@@ -16,6 +16,7 @@ pub(super) fn openapi() -> Value {
             "/metrics": {"get": {"summary": "Prometheus metrics", "responses": ok_text()}},
             "/openapi.json": {"get": {"summary": "OpenAPI document", "responses": ok_json()}},
             "/docs": {"get": {"summary": "Swagger UI", "responses": ok_text()}},
+            "/version": {"get": {"summary": "Build provenance: version, git sha, build time, target", "responses": ok_json()}},
             "/admin/backup": {
                 "get": {
                     "summary": "Download an admin-gated whole-journal snapshot",

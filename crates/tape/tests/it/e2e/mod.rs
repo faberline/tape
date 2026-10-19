@@ -8,7 +8,12 @@
 //! `k8s/overlays/gke-test` (`.github/workflows/gke-test.yml`). Cluster actions
 //! are `kubectl` calls in the Job's namespace; every check is here in Rust,
 //! and each step prints one `E2E_EVIDENCE {json}` line to stdout.
+//!
+//! The suite `image` is the one exception (rust-tests.md rule 6): it starts
+//! the image under test with `docker` on the runner, from
+//! `E2E_STANDALONE_IMAGE`, for the architecture GKE does not run.
 
+mod image;
 mod operator_ha;
 mod operator_recovery;
 
@@ -96,7 +101,7 @@ pub(crate) fn wait_for<T>(
 pub(crate) struct Expected {
     /// Version `tape --version` reports, for example `0.6.0`.
     pub(crate) version: String,
-    /// First 8 hex of the commit the image was built from.
+    /// The commit the image was built from: 8 to 40 lowercase hex.
     pub(crate) git_sha: String,
     /// `ghcr.io/faberline/tape@sha256:<root index digest>`.
     pub(crate) image: String,
@@ -113,8 +118,8 @@ impl Expected {
         let image = required_env("E2E_EXPECTED_IMAGE");
         let runtime_digest = required_env("E2E_EXPECTED_RUNTIME_DIGEST");
         assert!(
-            git_sha.len() == 8 && is_lower_hex(&git_sha),
-            "E2E_EXPECTED_GIT_SHA must be 8 lowercase hex, got {git_sha}"
+            is_sha(&git_sha),
+            "E2E_EXPECTED_GIT_SHA must be 8 to 40 lowercase hex, got {git_sha}"
         );
         let root_digest = image
             .strip_prefix("ghcr.io/faberline/tape@")
@@ -146,6 +151,113 @@ impl Expected {
         image_digest(image_id)
             .is_some_and(|digest| digest == self.root_digest || digest == self.runtime_digest)
     }
+}
+
+/// Polls `{base}/healthz` every 2 seconds until it answers 2xx, and fails
+/// the test after `timeout`.
+pub(crate) async fn wait_healthy(http: &reqwest::Client, base: &str, timeout: Duration) {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let last = match http.get(format!("{base}/healthz")).send().await {
+            Ok(response) if response.status().is_success() => return,
+            Ok(response) => response.status().to_string(),
+            Err(err) => err.to_string(),
+        };
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "{base}/healthz not healthy within {timeout:?}; last saw: {last}"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+/// Reads `{base}/version` and checks that the running server is the build
+/// under test: its version is the expected one, and its stamped git sha is
+/// the expected commit. Returns the response for the evidence line.
+pub(crate) async fn assert_version(
+    http: &reqwest::Client,
+    base: &str,
+    expected: &Expected,
+) -> Value {
+    let response = http
+        .get(format!("{base}/version"))
+        .send()
+        .await
+        .unwrap_or_else(|err| panic!("GET {base}/version: {err}"));
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|err| panic!("GET {base}/version: {err}"));
+    assert!(status.is_success(), "GET {base}/version: {status} {body}");
+    assert_eq!(
+        body["version"],
+        expected.version.as_str(),
+        "{base}/version version: {body}"
+    );
+    let git_sha = body["git_sha"].as_str().unwrap_or_default();
+    assert!(
+        stamps(git_sha, &expected.git_sha),
+        "{base}/version git_sha {git_sha:?} is not the commit {}: {body}",
+        expected.git_sha
+    );
+    body
+}
+
+/// Whether a stamped `git_sha` names the commit `want`. Either side is the
+/// short sha or the full one (`TAPE_SOURCE_REVISION`), so one is a prefix of
+/// the other.
+fn stamps(git_sha: &str, want: &str) -> bool {
+    is_sha(git_sha) && is_sha(want) && (git_sha.starts_with(want) || want.starts_with(git_sha))
+}
+
+/// 8 to 40 lowercase hex: a short or a full git sha.
+fn is_sha(value: &str) -> bool {
+    (8..=40).contains(&value.len()) && is_lower_hex(value)
+}
+
+/// Appends `{"id": id}` to `topic` and checks the echoed payload.
+pub(crate) async fn append(http: &reqwest::Client, base: &str, topic: &str, id: &str) {
+    let response = http
+        .post(format!("{base}/topics/{topic}/append"))
+        .json(&json!({ "payload": { "id": id } }))
+        .send()
+        .await
+        .unwrap_or_else(|err| panic!("append {id}: {err}"));
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|err| panic!("append {id}: {err}"));
+    assert!(status.is_success(), "append {id}: {status} {body}");
+    assert_eq!(
+        body["payload"]["id"], id,
+        "append {id} echoes the payload: {body}"
+    );
+}
+
+/// Replays `topic` from the start and checks the payload ids, in order.
+pub(crate) async fn assert_replay(http: &reqwest::Client, base: &str, topic: &str, want: &[&str]) {
+    let response = http
+        .get(format!("{base}/topics/{topic}/replay"))
+        .send()
+        .await
+        .unwrap_or_else(|err| panic!("replay: {err}"));
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|err| panic!("replay: {err}"));
+    assert!(status.is_success(), "replay: {status} {body}");
+    let ids: Vec<&str> = body["events"]
+        .as_array()
+        .map(|all| {
+            all.iter()
+                .filter_map(|e| e["payload"]["id"].as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(ids, want, "replay of {topic}: {body}");
 }
 
 /// Checks that exactly `want` live pods match `label`, that each runs the
@@ -237,4 +349,18 @@ fn image_digest_reads_every_runtime_form() {
     }
     assert_eq!(image_digest("ghcr.io/faberline/tape:0.6.0"), None);
     assert_eq!(image_digest("sha256:ABC"), None);
+}
+
+#[test]
+fn stamps_accepts_the_short_and_the_full_sha() {
+    let full = "0123456789abcdef0123456789abcdef01234567";
+    assert!(stamps(&full[..8], "01234567"));
+    assert!(stamps(full, "01234567"));
+    assert!(stamps(&full[..8], full));
+    assert!(stamps(full, full));
+    assert!(!stamps("unknown", "01234567"));
+    assert!(!stamps("0123456", "0123456"));
+    assert!(!stamps("89abcdef", "01234567"));
+    assert!(!stamps("0123456789ABCDEF", "01234567"));
+    assert!(!stamps("89abcdef", full));
 }

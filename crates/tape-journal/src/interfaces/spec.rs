@@ -34,6 +34,7 @@ pub fn routes_json() -> String {
             {"method": "GET", "path": "/metrics", "purpose": "Prometheus metrics"},
             {"method": "GET", "path": "/openapi.json", "purpose": "machine OpenAPI"},
             {"method": "GET", "path": "/docs", "purpose": "Swagger UI"},
+            {"method": "GET", "path": "/version", "purpose": "build provenance: version and git sha"},
             {"method": "GET", "path": "/admin/backup", "purpose": "admin-gated whole-journal snapshot"},
             {"method": "POST", "path": "/topics/{topic}/append", "purpose": "append event envelopes"},
             {"method": "GET", "path": "/topics/{topic}/replay", "purpose": "replay by offset or timestamp"},
@@ -101,7 +102,7 @@ The initial service contract is intentionally compact:
 - `PUT /topics/{topic}/consumers/{consumer}/checkpoint` advances a replay cursor.
 - `GET /topics/{topic}/consumers/{consumer}/checkpoint` reads the replay cursor.
 - `GET /admin/backup` returns an admin-gated whole-journal snapshot.
-- `/healthz`, `/readyz`, `/metrics`, `/openapi.json`, and `/docs` are the standard service endpoints.
+- `/healthz`, `/readyz`, `/metrics`, `/openapi.json`, and `/docs` are the standard service endpoints; `/version` reports the build's version and git sha.
 
 Use `tape spec --format routes` for the route inventory and `tape spec --format
 openapi-yaml` when an agent needs a readable OpenAPI-shaped contract.

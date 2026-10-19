@@ -7,7 +7,8 @@ use std::sync::Arc;
 use axum::http::{header, Method, StatusCode};
 use axum::middleware::{from_fn, from_fn_with_state, Next};
 use axum::response::{IntoResponse, Response};
-use axum::Router;
+use axum::routing::get;
+use axum::{Json, Router};
 use service_auth::ReloadableRoleMapVerifier;
 use service_http::MetricsProvider;
 
@@ -37,6 +38,19 @@ pub fn router_without_raft_routes_with_admission(
     admission: Option<service_http::AdmissionController>,
 ) -> Router {
     router_with_admission(state, admission).layer(from_fn(reject_public_raft_routes))
+}
+
+/// `GET /version`: build provenance. `version` is the crate version;
+/// `git_sha` is the commit `build.rs` stamped (the full SHA when
+/// `TAPE_SOURCE_REVISION` is set, else the short one, else `unknown`), and
+/// `built_at` and `target` describe the build.
+async fn version() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "git_sha": env!("TAPE_GIT_SHA"),
+        "built_at": env!("TAPE_BUILT_AT"),
+        "target": env!("TAPE_TARGET"),
+    }))
 }
 
 async fn reject_public_raft_routes(request: axum::extract::Request, next: Next) -> Response {
@@ -105,7 +119,9 @@ pub fn router_with_admission(
     // while draining.
     let probe_state = Arc::new(service);
     let metrics: Arc<dyn MetricsProvider> = probe_state.clone();
-    let probes = service_http::standard_probe_routes(probe_state, Some(metrics), openapi);
+    let probes = service_http::standard_probe_routes(probe_state, Some(metrics), openapi)
+        // Build provenance, tokenless like the probes.
+        .route("/version", get(version));
 
     let app = probes
         .merge(data_plane)

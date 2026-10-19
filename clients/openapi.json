@@ -91,6 +91,23 @@
         }
       }
     },
+    "/version": {
+      "get": {
+        "summary": "Build provenance: version, git sha, build time, target",
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/backup": {
       "get": {
         "summary": "Download an admin-gated whole-journal snapshot",

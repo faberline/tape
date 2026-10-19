@@ -508,41 +508,108 @@ jobs:
           bash scripts/faberline-core-test.sh service-k8s storage-durable service-backup raft-core raft-runtime
           bash scripts/raft-implementor-build.sh
 
-  kind-amd64:
-    name: kind e2e (amd64)
-    needs: [identity, verify-candidate, verify-libraries, ghcr-image-and-attest]
+  test-client:
+    name: build candidate test-client image
+    needs: [identity]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      packages: write
+    outputs:
+      image: ${{ steps.digest.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.identity.outputs.commit }}
           fetch-depth: 0
-      - name: Assert native x86_64 runner architecture
-        shell: bash
-        run: test "$(uname -m)" = x86_64
-      - name: Install verified kind v0.32.0
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL https://github.com/kubernetes-sigs/kind/releases/download/v0.32.0/kind-linux-amd64 -o /tmp/kind
-          echo '50030de23cf40a18505f20426f6a8506bedf13c6e509244bd1fa9463721b0f54  /tmp/kind' | sha256sum -c -
-          chmod +x /tmp/kind
-          sudo mv /tmp/kind /usr/local/bin/kind
-      - name: Run prebuilt candidate kind e2e
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-musl
+      - name: Install musl toolchain
         shell: bash
         run: |
           set -euo pipefail
-          TAPE_E2E_IMAGE_MODE=prebuilt \
-          TAPE_E2E_IMAGE="${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}" \
-          TAPE_E2E_EXPECTED_VERSION="${{ needs.identity.outputs.version }}" \
-          TAPE_E2E_EXPECTED_RUNTIME_DIGEST="${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}" \
-          bash scripts/kind-e2e.sh
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: tape-candidate-test-client
+      - name: Build the candidate test binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe="$(cargo test --release --locked --target x86_64-unknown-linux-musl \
+              -p tape --features "operator backup self-update issue" \
+              --test it --no-run --message-format=json \
+            | jq -r 'select(.profile.test == true and .target.name == "it") | .executable')"
+          [[ -n "$exe" && -x "$exe" ]] || { echo "::error::no test binary for it"; exit 1; }
+          mkdir -p dist/linux/amd64
+          cp "$exe" dist/linux/amd64/tape-it
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and push the candidate test-client image
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile.test
+          target: test-client
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ghcr.io/faberline/tape-test-client:release-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Record pushed test-client digest
+        id: digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::bad digest: $DIGEST"; exit 1; }
+          echo "image=ghcr.io/faberline/tape-test-client@${DIGEST}" >> "$GITHUB_OUTPUT"
 
-  kind-arm64:
-    name: kind e2e (arm64)
+  # The candidate's amd64 child on the shared GKE test cluster, one suite per
+  # call (faberline/aw docs/standards/test-cluster.md). Every check, image
+  # identity included, is in the Rust suite crates/tape/tests/it/e2e/<suite>.rs.
+  # The aw workflow is pinned by commit, and aw-ref names the same commit.
+  gke-e2e:
+    name: GKE e2e (${{ matrix.suite }})
+    needs: [identity, verify-candidate, verify-libraries, ghcr-image-and-attest, test-client]
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        suite: [operator_recovery, operator_ha]
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
+    uses: faberline/aw/.github/workflows/gke-test.yml@edb3802d18d39d205bd0ada8431ecc97c6938c14
+    with:
+      image: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
+      image-name: ghcr.io/faberline/tape
+      namespace: tape
+      test-job: k8s/gke-test-job/${{ matrix.suite }}
+      test-image: ${{ needs.test-client.outputs.image }}
+      test-image-name: tape-test-client
+      test-env: |
+        E2E_EXPECTED_VERSION=${{ needs.identity.outputs.version }}
+        E2E_EXPECTED_GIT_SHA=${{ needs.identity.outputs.commit }}
+        E2E_EXPECTED_IMAGE=${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
+        E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}
+      evidence-suffix: ${{ matrix.suite }}
+      aw-ref: edb3802d18d39d205bd0ada8431ecc97c6938c14
+
+  # GKE runs linux/amd64 only. The Rust suite e2e::image starts the
+  # candidate's arm64 child with docker on GitHub's arm64 runner.
+  image-arm64:
+    name: image e2e (arm64)
     needs: [identity, verify-candidate, verify-libraries, ghcr-image-and-attest]
     runs-on: ubuntu-24.04-arm
     permissions:
@@ -556,27 +623,36 @@ jobs:
       - name: Assert native aarch64 runner architecture
         shell: bash
         run: test "$(uname -m)" = aarch64
-      - name: Install verified kind v0.32.0
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: tape-candidate-image-e2e-aarch64
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Run the image suite on the candidate arm64 child
         shell: bash
+        env:
+          E2E_STANDALONE_IMAGE: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
+          E2E_EXPECTED_VERSION: ${{ needs.identity.outputs.version }}
+          E2E_EXPECTED_GIT_SHA: ${{ needs.identity.outputs.commit }}
+          E2E_EXPECTED_IMAGE: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
+          E2E_EXPECTED_RUNTIME_DIGEST: ${{ needs.ghcr-image-and-attest.outputs.arm64_digest }}
         run: |
           set -euo pipefail
-          curl -fsSL https://github.com/kubernetes-sigs/kind/releases/download/v0.32.0/kind-linux-arm64 -o /tmp/kind
-          echo 'b92cd615e97585de8ddade28ed5cd7feb4248d717c233eea5b03c37298900f5d  /tmp/kind' | sha256sum -c -
-          chmod +x /tmp/kind
-          sudo mv /tmp/kind /usr/local/bin/kind
-      - name: Run prebuilt candidate kind e2e
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAPE_E2E_IMAGE_MODE=prebuilt \
-          TAPE_E2E_IMAGE="${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}" \
-          TAPE_E2E_EXPECTED_VERSION="${{ needs.identity.outputs.version }}" \
-          TAPE_E2E_EXPECTED_RUNTIME_DIGEST="${{ needs.ghcr-image-and-attest.outputs.arm64_digest }}" \
-          bash scripts/kind-e2e.sh
+          cargo test --locked -p tape --features "operator backup self-update issue" \
+              --test it -- --ignored --test-threads=1 "e2e::image::" 2>&1 | tee image-e2e.log
+          grep -Eq '^test result: ok\. [1-9][0-9]* passed' image-e2e.log \
+            || { echo "::error::the filter e2e::image:: ran no test"; exit 1; }
 
   result:
     name: final candidate receipt
-    needs: [identity, build, tape-release-gates, manifest, ghcr-image-and-attest, verify-candidate, verify-libraries, kind-amd64, kind-arm64]
+    needs: [identity, build, tape-release-gates, manifest, ghcr-image-and-attest, verify-candidate, verify-libraries, test-client, gke-e2e, image-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -629,7 +705,7 @@ jobs:
           set -euo pipefail
           cd candidate
           jq -e '.schema == "cclab.tape.candidate-manifest.v1"' candidate-manifest.json >/dev/null
-          jq -c '. + {jobs:{identity:"${{ needs.identity.result }}",build:"${{ needs.build.result }}","tape-release-gates":"${{ needs.tape-release-gates.result }}",manifest:"${{ needs.manifest.result }}","ghcr-image-and-attest":"${{ needs.ghcr-image-and-attest.result }}","verify-candidate":"${{ needs.verify-candidate.result }}","verify-libraries":"${{ needs.verify-libraries.result }}","kind-amd64":"${{ needs.kind-amd64.result }}","kind-arm64":"${{ needs.kind-arm64.result }}",result:"success"}}' candidate-manifest.json > final-candidate-manifest.json
+          jq -c '. + {jobs:{identity:"${{ needs.identity.result }}",build:"${{ needs.build.result }}","tape-release-gates":"${{ needs.tape-release-gates.result }}",manifest:"${{ needs.manifest.result }}","ghcr-image-and-attest":"${{ needs.ghcr-image-and-attest.result }}","verify-candidate":"${{ needs.verify-candidate.result }}","verify-libraries":"${{ needs.verify-libraries.result }}","test-client":"${{ needs.test-client.result }}","gke-e2e":"${{ needs.gke-e2e.result }}","image-arm64":"${{ needs.image-arm64.result }}",result:"success"}}' candidate-manifest.json > final-candidate-manifest.json
           if command -v sha256sum >/dev/null 2>&1; then sha256sum final-candidate-manifest.json > final-candidate-manifest.json.sha256; else shasum -a 256 final-candidate-manifest.json > final-candidate-manifest.json.sha256; fi
       - name: Verify final receipt as local fixture only
         shell: bash

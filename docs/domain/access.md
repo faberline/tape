@@ -39,7 +39,7 @@ needs `read`.
 ## Invariants
 
 - The probe routes (`/healthz`, `/readyz`, `/metrics`, `/openapi.json`,
-  `/docs`) never get the auth layer.
+  `/docs`) and `/version` never get the auth layer.
 - This context never parses or logs a bearer token; audit events go through
   `service_auth::TracingAuthEventSink`. `crates/tape/tests/it/audit_contract.rs` checks
   the source for this.

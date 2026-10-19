@@ -8,7 +8,8 @@
 //! `.route("<path>", <methods>)` literal from `journal/interfaces/http.rs` and diffs the
 //! (method, path) set against `spec::routes_json()` in BOTH directions.
 //! The five standard probe routes come from the shared `service-http`
-//! shell rather than `journal/interfaces/http.rs` literals and are injected explicitly.
+//! shell, and `/version` from the tape router, rather than
+//! `journal/interfaces/http.rs` literals, so they are injected explicitly.
 
 use std::collections::BTreeSet;
 
@@ -72,8 +73,16 @@ fn router_routes_from_source() -> BTreeSet<(String, String)> {
         rest = &rest[end..];
     }
     // The one-port operational surface is merged from the shared
-    // `service_http::standard_probe_routes` shell, not `.route()` literals.
-    for probe in ["/healthz", "/readyz", "/metrics", "/openapi.json", "/docs"] {
+    // `service_http::standard_probe_routes` shell, not `.route()` literals;
+    // `/version` is added next to them in `crates/tape/src/http/router.rs`.
+    for probe in [
+        "/healthz",
+        "/readyz",
+        "/metrics",
+        "/openapi.json",
+        "/docs",
+        "/version",
+    ] {
         out.insert(("GET".to_string(), probe.to_string()));
     }
     out
