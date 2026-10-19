@@ -50,7 +50,7 @@ spec:
             - /usr/local/bin/tape-it
             - --ignored
             - --test-threads=1
-            - e2e::operator_recovery::
+            - "e2e::operator_recovery::"
           env:
             - name: E2E_ENDPOINT
               value: http://tape:7137
