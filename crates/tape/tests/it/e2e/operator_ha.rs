@@ -47,6 +47,8 @@ const LEASE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 /// tape-0 may also wait for pool-tape-server to add a node.
 const SERVER_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const RECONCILE_TIMEOUT: Duration = Duration::from_secs(90);
+/// The metrics Service may wait out one replica being replaced.
+const SERVICE_TIMEOUT: Duration = Duration::from_secs(3 * 60);
 /// A warm standby takes the Lease within a few renew periods; slower than
 /// this and the second replica is not earning its keep.
 const HANDOVER_LIMIT: Duration = Duration::from_secs(90);
@@ -95,12 +97,8 @@ async fn leader_election_survives_a_leader_delete_and_a_node_drain() {
     );
 
     // AC4: the Service resolves, and every replica is its own target.
-    let addresses = assert_service_scrapeable(&http, pods.len()).await;
-    evidence(
-        SUITE,
-        "AC4 metrics Service scrapeable",
-        json!({ "service": METRICS_SERVICE, "endpoints": addresses }),
-    );
+    let service = wait_for_service_scrapeable(&http, pods.len()).await;
+    evidence(SUITE, "AC4 metrics Service scrapeable", service);
 
     wait_for(
         &format!("StatefulSet/{TAPE} from the operator"),
@@ -289,17 +287,53 @@ async fn wait_for_one_leader(http: &reqwest::Client, holder: &str) -> Value {
 }
 
 /// A Service whose selector matches nothing gives a connection error, not
-/// an empty body. Returns the endpoint addresses.
-async fn assert_service_scrapeable(http: &reqwest::Client, replicas: usize) -> Vec<String> {
+/// an empty body. Bounded retry: a pool-tape-server node can still be
+/// re-registering after its scale-up, and a replica on it goes away between
+/// the gauge check and this scrape. Each attempt waits for every replica to
+/// be Ready again, then needs a scrape through the Service and an endpoint
+/// for each Ready replica. Returns the evidence.
+async fn wait_for_service_scrapeable(http: &reqwest::Client, replicas: usize) -> Value {
     let url = format!("http://{METRICS_SERVICE}:{METRICS_PORT}/metrics");
-    let body = scrape(http, &url)
+    let deadline = Instant::now() + SERVICE_TIMEOUT;
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        let pods = wait_for_ready_replicas(replicas);
+        let last = match service_scrape(http, &url, &pods).await {
+            Ok(addresses) => {
+                return json!({
+                    "service": METRICS_SERVICE,
+                    "endpoints": addresses,
+                    "attempts": attempts,
+                });
+            }
+            Err(last) => last,
+        };
+        assert!(
+            Instant::now() < deadline,
+            "AC4: Service/{METRICS_SERVICE}: not scrapeable with an endpoint for each of \
+             the {replicas} replicas within {SERVICE_TIMEOUT:?} ({attempts} attempts); \
+             last saw: {last}"
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+/// One AC4 attempt against the replicas `pods`. Returns the endpoint
+/// addresses.
+async fn service_scrape(
+    http: &reqwest::Client,
+    url: &str,
+    pods: &[OperatorPod],
+) -> Result<Vec<String>, String> {
+    let body = scrape(http, url)
         .await
-        .unwrap_or_else(|err| panic!("AC4: scrape through the Service: {err}"));
-    assert!(
-        sample(&body, "tape_operator_reconcile_total").is_some(),
-        "AC4: the Service scrape has no tape_operator_reconcile_total"
-    );
-    let endpoints = kubectl_json(&["get", "endpoints", METRICS_SERVICE]);
+        .map_err(|err| format!("scrape through the Service: {err}"))?;
+    if sample(&body, "tape_operator_reconcile_total").is_none() {
+        return Err("the Service scrape has no tape_operator_reconcile_total".to_owned());
+    }
+    let endpoints = try_kubectl(&["get", "endpoints", METRICS_SERVICE, "-o", "json"])
+        .map(|out| serde_json::from_str::<Value>(&out).unwrap())?;
     let addresses: Vec<String> = endpoints["subsets"]
         .as_array()
         .into_iter()
@@ -307,12 +341,18 @@ async fn assert_service_scrapeable(http: &reqwest::Client, replicas: usize) -> V
         .flat_map(|s| s["addresses"].as_array().into_iter().flatten())
         .filter_map(|a| a["ip"].as_str().map(str::to_owned))
         .collect();
-    assert!(
-        addresses.len() >= replicas,
-        "AC4: Service/{METRICS_SERVICE} has endpoints {addresses:?}; each of the \
-         {replicas} replicas must be its own scrape target"
-    );
-    addresses
+    let missing: Vec<&str> = pods
+        .iter()
+        .filter(|pod| !addresses.contains(&pod.ip))
+        .map(|pod| pod.name.as_str())
+        .collect();
+    if missing.is_empty() {
+        Ok(addresses)
+    } else {
+        Err(format!(
+            "endpoints {addresses:?} lack {missing:?}; each replica must be its own scrape target"
+        ))
+    }
 }
 
 /// One heartbeat: change the spec, then wait for the change to reach the
