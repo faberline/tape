@@ -115,11 +115,12 @@ single node), `prod` (3-replica raft-HA group, auth required), `template`
 keep the CR name `tape` — `tape serve` derives raft peer DNS as
 `tape-<ordinal>.<peer-service>`.
 
-> **Live proof (#1590):** the disposable Kind gate builds the real image,
-> reconciles a Tape instance through the operator, appends to PVC-backed
-> storage, replaces the pod, and verifies replay from the retained PVC. Raft
-> repeated-leader-loss evidence remains the real h2c integration gate; the Kind
-> proof intentionally covers the operator/PVC replacement boundary.
+> **Live proof (#1590):** the GKE suite `operator_recovery` deploys the image
+> under test, reconciles a Tape instance through the operator, appends to
+> PVC-backed storage, replaces the pod, and verifies replay from the retained
+> PVC. Raft repeated-leader-loss evidence remains the real h2c integration
+> gate; the GKE suite intentionally covers the operator/PVC replacement
+> boundary.
 
 ### 3e. CRD versioning & upgrade order
 

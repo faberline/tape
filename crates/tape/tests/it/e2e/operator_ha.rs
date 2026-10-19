@@ -1,7 +1,7 @@
 //! Suite `operator_ha`: the operator's control plane under voluntary
-//! disruption. It replaces scripts/kind-operator-ha.sh (#3053 AC1-AC4) on the
-//! operator layer of k8s/overlays/gke-test, where each of the two replicas
-//! and tape-0 has a node of its own on pool-tape-server.
+//! disruption (#3053 AC1-AC4), on the operator layer of k8s/overlays/gke-test,
+//! where each of the two replicas and tape-0 has a node of its own on
+//! pool-tape-server.
 //!
 //! - AC1: more than one replica is Ready, on distinct nodes, and exactly one
 //!   holds the Lease; the Lease and each replica's own `tape_operator_leader`

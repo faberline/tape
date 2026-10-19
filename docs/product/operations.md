@@ -51,17 +51,17 @@ gate. This area spans the README capabilities `backup-and-seed`,
   Services, PodDisruptionBudget, ConfigMap, backup CronJob, and observability
   pair with status conditions; auth defaults to required; stale objects are
   pruned. A direct-install base deploys a durable singleton. Topics and
-  subscriptions are provisioned declaratively. The kind script and the GKE
-  acceptance path exercise the assets end to end.
+  subscriptions are provisioned declaratively. The shared GKE test cluster
+  suites and the GKE acceptance path exercise the assets end to end.
 - Limits today: `shardCount` is fixed at 1 and a replica-count change
-  restarts members; the kind and GKE runs are manual, read back through the
-  legacy routes, and prove no scale transition.
+  restarts members; the GKE acceptance run is manual, both GKE paths read
+  back through the legacy routes, and neither proves a scale transition.
 - Non-goals: a regional GKE profile; managed-service billing.
 - Neighbours: extended by
   [replication-and-availability.md](replication-and-availability.md)
   § Live replica membership and § Multi-shard topology.
 - Status rows: `k8s-deployment-assets`, `k8s-operator`,
-  `kind-cluster-acceptance`, `gke-zonal-acceptance`.
+  `gke-test-cluster-acceptance`, `gke-zonal-acceptance`.
 
 ## Health, metrics, traces, and drain
 

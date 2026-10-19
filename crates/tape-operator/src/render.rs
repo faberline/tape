@@ -195,8 +195,8 @@ pub fn render(tape: &Tape) -> Vec<Value> {
 /// `spec.observability` is default-off precisely so a vanilla cluster stays
 /// installable (see its doc comment on `TapeSpec`); pruning on the `false`
 /// branch would reach for that API group in exactly the vanilla case the
-/// default exists to protect, inverting the invariant. Caught by the Kind gate,
-/// which is the only place a missing API group is real. Restoring these two
+/// default exists to protect, inverting the invariant. Caught on a live
+/// cluster, which is the only place a missing API group is real. Restoring these two
 /// targets is blocked on `get_opt` treating a bare 404 as absence (#3079).
 ///
 /// The independent one is that they would not earn it anyway: lumen's

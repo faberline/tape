@@ -266,7 +266,7 @@ source below states its direct contribution.
     network, lease, RBAC, and Secret contracts.
 - Gate: `cargo test -p tape --features operator --test it -- operator:: operator_render_provision_topics::`
 - Gate: `cargo test -p tape --test it -- deploy_cli:: direct_k8s_assets:: network_policy_assets:: observability_assets::`
-- Gate: `bash scripts/kind-e2e.sh`
+- Gate: `gh workflow run gke-test.yml`
 - Gate: `bash acceptance/gcp/scripts/verify-tape.sh`
 
 Release 0.4.11 (2026-07-25, digest-pinned multi-arch GHCR image) passed four

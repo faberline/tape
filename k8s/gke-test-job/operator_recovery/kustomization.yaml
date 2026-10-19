@@ -1,6 +1,6 @@
 # GKE e2e suite `operator_recovery` (crates/tape/tests/it/e2e/operator_recovery.rs):
 # the Tape CR `tape` reconciled by the shipped operator, reached at
-# http://tape:7137. It replaces scripts/kind-e2e.sh.
+# http://tape:7137.
 #
 # faberline/aw's run.sh deploys k8s/overlays/gke-test, waits for the operator
 # rollout, sets this folder's namespace and test image, adds the ConfigMap

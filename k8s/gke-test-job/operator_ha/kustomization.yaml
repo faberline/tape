@@ -1,6 +1,5 @@
 # GKE e2e suite `operator_ha` (crates/tape/tests/it/e2e/operator_ha.rs):
 # the operator's leader election under a leader delete and a node drain.
-# It replaces scripts/kind-operator-ha.sh.
 #
 # faberline/aw's run.sh deploys k8s/overlays/gke-test, waits for the operator
 # rollout, sets this folder's namespace and test image, adds the ConfigMap

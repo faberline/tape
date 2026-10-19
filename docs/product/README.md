@@ -101,7 +101,7 @@ wiring with lumen's and can land first, independently of it.
 | Grants and bounded admission | operations.md | shipped, limited | STATUS `per-topic-authorization`, `flow-control-quotas` |
 | Kubernetes-delegated authentication | operations.md | outcome | ROADMAP `kubernetes-delegated-authentication` |
 | Ungated Kubernetes render | operations.md | outcome | ROADMAP `ungated-kubernetes-render` |
-| Kubernetes operator and direct install | operations.md | shipped, limited | STATUS `k8s-deployment-assets`, `k8s-operator`, `kind-cluster-acceptance`, `gke-zonal-acceptance` |
+| Kubernetes operator and direct install | operations.md | shipped, limited | STATUS `k8s-deployment-assets`, `k8s-operator`, `gke-test-cluster-acceptance`, `gke-zonal-acceptance` |
 | Health, metrics, traces, and drain | operations.md | shipped | STATUS `standard-operational-endpoints`, `otlp-tracing`, `bounded-stability-run` |
 | Local performance ceiling | operations.md | shipped | STATUS `local-performance-ceiling` |
 | Durable JetStream competitiveness | operations.md | outcome | ROADMAP `durable-jetstream-competitive` |
