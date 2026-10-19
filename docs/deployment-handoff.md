@@ -255,6 +255,7 @@ tape-specific):
 | `GET /readyz` | Readiness — `503` from SIGTERM until the process exits. | no |
 | `GET /metrics` | Prometheus text. | no |
 | `GET /openapi.json`, `GET /docs` | OpenAPI 3 + Swagger UI. | no |
+| `GET /version` | Build provenance: `version`, `git_sha`, `built_at`, `target`. | no |
 | `GET /admin/backup` | Stream a whole-journal snapshot. | per `TAPE_AUTH` (needs `admin` role on `*` when `--auth required`) |
 | `POST /topics/{topic}/append` | Append one message envelope; returns the assigned offset after the durable write. | per `TAPE_AUTH` (write) |
 | `POST /topics/{topic}/subscriptions` | Create a named subscription on the topic. | per `TAPE_AUTH` (write) |

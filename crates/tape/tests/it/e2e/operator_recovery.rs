@@ -9,8 +9,8 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use super::{
-    assert_pods_run, container, endpoint, evidence, kubectl, kubectl_json, try_kubectl, wait_for,
-    Expected,
+    append, assert_pods_run, assert_replay, assert_version, container, endpoint, evidence, kubectl,
+    kubectl_json, try_kubectl, wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_recovery";
@@ -50,9 +50,10 @@ async fn replay_survives_the_serving_pod_replacement() {
     );
     assert_identity(&expected, "identity before replacement");
 
-    wait_healthy(&http, &base).await;
-    append(&http, &base, "before-restart").await;
-    assert_replay(&http, &base, &["before-restart"]).await;
+    wait_healthy(&http, &base, RECONCILE_TIMEOUT).await;
+    assert_runtime_version(&http, &base, &expected, "version before replacement").await;
+    append(&http, &base, TOPIC, "before-restart").await;
+    assert_replay(&http, &base, TOPIC, &["before-restart"]).await;
     evidence(
         SUITE,
         "append and replay",
@@ -73,10 +74,11 @@ async fn replay_survives_the_serving_pod_replacement() {
     );
     assert_identity(&expected, "identity after replacement");
 
-    wait_healthy(&http, &base).await;
-    assert_replay(&http, &base, &["before-restart"]).await;
-    append(&http, &base, "after-restart").await;
-    assert_replay(&http, &base, &["before-restart", "after-restart"]).await;
+    wait_healthy(&http, &base, RECONCILE_TIMEOUT).await;
+    assert_runtime_version(&http, &base, &expected, "version after replacement").await;
+    assert_replay(&http, &base, TOPIC, &["before-restart"]).await;
+    append(&http, &base, TOPIC, "after-restart").await;
+    assert_replay(&http, &base, TOPIC, &["before-restart", "after-restart"]).await;
     evidence(
         SUITE,
         "ordered replay across replacement",
@@ -265,12 +267,24 @@ fn assert_identity(expected: &Expected, step: &str) {
             "image": expected.image,
             "runtime_digest": expected.runtime_digest,
             "version": expected.version,
-            // tape reports no git sha at runtime yet, so this is the
-            // workflow's input, tied to the image only through its tag.
-            "git_sha": expected.git_sha,
             "operator_image_ids": operator_ids,
             "server_image_ids": server_ids,
         }),
+    );
+}
+
+/// The serving pod reports the expected version and git sha on `/version`.
+async fn assert_runtime_version(
+    http: &reqwest::Client,
+    base: &str,
+    expected: &Expected,
+    step: &str,
+) {
+    let version = assert_version(http, base, expected).await;
+    evidence(
+        SUITE,
+        step,
+        json!({ "endpoint": base, "git_sha": expected.git_sha, "version": version }),
     );
 }
 
@@ -301,62 +315,4 @@ fn wait_for_condition(kind: &str, want: &str) {
             }
         },
     );
-}
-
-async fn wait_healthy(http: &reqwest::Client, base: &str) {
-    let deadline = tokio::time::Instant::now() + RECONCILE_TIMEOUT;
-    loop {
-        let last = match http.get(format!("{base}/healthz")).send().await {
-            Ok(response) if response.status().is_success() => return,
-            Ok(response) => response.status().to_string(),
-            Err(err) => err.to_string(),
-        };
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "{base}/healthz not healthy within {RECONCILE_TIMEOUT:?}; last saw: {last}"
-        );
-        tokio::time::sleep(Duration::from_secs(2)).await;
-    }
-}
-
-async fn append(http: &reqwest::Client, base: &str, id: &str) {
-    let response = http
-        .post(format!("{base}/topics/{TOPIC}/append"))
-        .json(&json!({ "payload": { "id": id } }))
-        .send()
-        .await
-        .unwrap_or_else(|err| panic!("append {id}: {err}"));
-    let status = response.status();
-    let body: Value = response
-        .json()
-        .await
-        .unwrap_or_else(|err| panic!("append {id}: {err}"));
-    assert!(status.is_success(), "append {id}: {status} {body}");
-    assert_eq!(
-        body["payload"]["id"], id,
-        "append {id} echoes the payload: {body}"
-    );
-}
-
-async fn assert_replay(http: &reqwest::Client, base: &str, want: &[&str]) {
-    let response = http
-        .get(format!("{base}/topics/{TOPIC}/replay"))
-        .send()
-        .await
-        .unwrap_or_else(|err| panic!("replay: {err}"));
-    let status = response.status();
-    let body: Value = response
-        .json()
-        .await
-        .unwrap_or_else(|err| panic!("replay: {err}"));
-    assert!(status.is_success(), "replay: {status} {body}");
-    let ids: Vec<&str> = body["events"]
-        .as_array()
-        .map(|all| {
-            all.iter()
-                .filter_map(|e| e["payload"]["id"].as_str())
-                .collect()
-        })
-        .unwrap_or_default();
-    assert_eq!(ids, want, "replay of {TOPIC}: {body}");
 }

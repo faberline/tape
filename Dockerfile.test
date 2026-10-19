@@ -37,7 +37,7 @@
 FROM registry.k8s.io/kubectl:v1.33.4@sha256:261a9ed843eb68e3d50da132245e2221d75ca19504130e47bd32788c0ff339a0 AS kubectl
 
 FROM gcr.io/distroless/static-debian12:nonroot AS test-client
-ARG TARGETARCH=amd64
+ARG TARGETARCH
 COPY --from=kubectl /bin/kubectl /usr/local/bin/kubectl
 COPY --chown=65532:65532 dist/linux/${TARGETARCH}/tape-it /usr/local/bin/tape-it
 ENTRYPOINT ["/usr/local/bin/tape-it"]
@@ -48,7 +48,7 @@ ENTRYPOINT ["/usr/local/bin/tape-it"]
 # workflow builds. :nonroot = uid 65532. A single tokio binary handles
 # SIGTERM itself and spawns no children, so no tini/init shim is required.
 FROM gcr.io/distroless/static-debian12:nonroot AS server
-ARG TARGETARCH=amd64
+ARG TARGETARCH
 COPY --chown=65532:65532 dist/linux/${TARGETARCH}/tape /usr/local/bin/tape
 # 7137 = client API. No CMD, matching Dockerfile.release: every deployment
 # path names its own verb (the operator renders `command: [tape, serve]`

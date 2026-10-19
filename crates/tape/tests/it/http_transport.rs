@@ -71,6 +71,34 @@ async fn probe_surface_answers_on_serve_port() {
     }
 }
 
+/// `GET /version` is tokenless build provenance: the crate version and the
+/// git sha `build.rs` stamped, which the e2e suites compare with the commit
+/// the image was built from.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn version_reports_build_provenance() {
+    let (addr, _state) = start_server().await;
+    let resp = reqwest::Client::new()
+        .get(url(addr, "/version"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "GET /version");
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
+    let git_sha = body["git_sha"].as_str().expect("git_sha is a string");
+    assert!(
+        git_sha == "unknown"
+            || ((8..=40).contains(&git_sha.len())
+                && git_sha
+                    .bytes()
+                    .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))),
+        "git_sha must be lowercase hex or unknown, got {git_sha:?}"
+    );
+    for field in ["built_at", "target"] {
+        assert!(body[field].is_string(), "{field} must be a string: {body}");
+    }
+}
+
 /// #2490: every response carries a `Server-Timing: app;dur=<ms>` baseline
 /// from the shared `service_http::server_timing_middleware` layer.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
