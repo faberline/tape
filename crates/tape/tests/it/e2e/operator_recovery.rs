@@ -8,7 +8,10 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use super::{endpoint, evidence, kubectl, kubectl_json, try_kubectl, wait_for, Expected};
+use super::{
+    assert_pods_run, container, endpoint, evidence, kubectl, kubectl_json, try_kubectl, wait_for,
+    Expected,
+};
 
 const SUITE: &str = "operator_recovery";
 const TAPE: &str = "tape";
@@ -269,52 +272,6 @@ fn assert_identity(expected: &Expected, step: &str) {
             "server_image_ids": server_ids,
         }),
     );
-}
-
-/// Checks that exactly `want` live pods match `label`, that each runs the
-/// expected image in `name`, and that each runtime `imageID` binds it.
-/// Returns the image IDs.
-fn assert_pods_run(expected: &Expected, label: &str, name: &str, want: u64) -> Vec<String> {
-    let pods = kubectl_json(&["get", "pods", "-l", label]);
-    let live: Vec<&Value> = pods["items"]
-        .as_array()
-        .map(|all| {
-            all.iter()
-                .filter(|p| p["metadata"]["deletionTimestamp"].is_null())
-                .collect()
-        })
-        .unwrap_or_default();
-    assert_eq!(live.len() as u64, want, "pods with {label}");
-    live.iter()
-        .map(|pod| {
-            let pod_name = pod["metadata"]["name"].as_str().unwrap_or_default();
-            assert_eq!(
-                container(&pod["spec"], name)["image"],
-                expected.image.as_str(),
-                "pod {pod_name} container {name} image"
-            );
-            let image_id = pod["status"]["containerStatuses"]
-                .as_array()
-                .and_then(|all| all.iter().find(|s| s["name"] == name))
-                .and_then(|s| s["imageID"].as_str())
-                .unwrap_or_default()
-                .to_owned();
-            assert!(
-                expected.binds(&image_id),
-                "pod {pod_name} container {name} runs imageID {image_id:?}, not {} or {}",
-                expected.root_digest,
-                expected.runtime_digest
-            );
-            image_id
-        })
-        .collect()
-}
-
-fn container<'a>(pod_spec: &'a Value, name: &str) -> &'a Value {
-    pod_spec["containers"]
-        .as_array()
-        .and_then(|all| all.iter().find(|c| c["name"] == name))
-        .unwrap_or_else(|| panic!("no container {name} in {pod_spec}"))
 }
 
 fn find_condition<'a>(conditions: &'a Value, kind: &str) -> &'a Value {

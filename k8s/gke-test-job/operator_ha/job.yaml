@@ -1,0 +1,85 @@
+# One attempt, on pool-tape-client. A retry would run against a server the
+# first attempt already changed and hide the first failure, so a failed pod
+# fails the run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: tape-e2e
+  labels:
+    app: tape-e2e
+spec:
+  backoffLimit: 0
+  # Below run.sh's TEST_JOB_TIMEOUT for ttl-minutes 90 (75m), so the Job
+  # reports Failed itself and its pod's log still says where it stopped.
+  activeDeadlineSeconds: 4200
+  template:
+    metadata:
+      labels:
+        app: tape-e2e
+    spec:
+      restartPolicy: Never
+      serviceAccountName: tape-e2e
+      nodeSelector:
+        faberline.dev/pool: tape-client
+      tolerations:
+        - key: faberline.dev/pool
+          operator: Equal
+          value: tape-client
+          effect: NoSchedule
+      imagePullSecrets:
+        - name: ghcr-pull
+      # One pod per node; the empty selector matches every pod of the
+      # namespace.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector: {}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: test
+          # Replaced by the workflow's test-image (Dockerfile.test, target
+          # test-client).
+          image: tape-test-client
+          command:
+            - /usr/local/bin/tape-it
+            - --ignored
+            - --test-threads=1
+            - "e2e::operator_ha::"
+          env:
+            - name: E2E_ENDPOINT
+              value: http://tape:7137
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # kubectl keeps its discovery cache under $HOME.
+            - name: HOME
+              value: /work
+            - name: TMPDIR
+              value: /work
+          envFrom:
+            - configMapRef:
+                name: gke-test-env
+          # Requests and no limits: the Job has the client node to itself.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 256Mi

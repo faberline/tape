@@ -74,3 +74,89 @@ fn alert_rules_reference_kube_state_and_kubelet_series() {
         );
     }
 }
+
+/// #3053 AC4 — the operator's ServiceMonitor and alerts ship as the opt-in
+/// `operator-monitoring` component, never in the base layer: an
+/// `apply -k k8s/operator` that held a `monitoring.coreos.com` object would
+/// fail on any cluster without prometheus-operator, and take the operator
+/// install down with it. The ClusterRole may still grant that group's verbs;
+/// only installed objects count.
+#[test]
+fn operator_monitoring_is_a_component_and_the_operator_layer_stays_crd_free() {
+    use serde::Deserialize;
+
+    fn kinds(text: &str) -> Vec<(String, String)> {
+        serde_yaml::Deserializer::from_str(text)
+            .map(|doc| Value::deserialize(doc).expect("operator manifest parses"))
+            .filter(|doc| !doc.is_null())
+            .map(|doc| {
+                (
+                    doc["apiVersion"].as_str().unwrap_or_default().to_owned(),
+                    doc["kind"].as_str().unwrap_or_default().to_owned(),
+                )
+            })
+            .collect()
+    }
+
+    let component = yaml(include_str!(
+        "../../../../k8s/components/operator-monitoring/kustomization.yaml"
+    ));
+    assert_eq!(component["kind"], "Component");
+    let mut monitoring = kinds(include_str!(
+        "../../../../k8s/components/operator-monitoring/servicemonitor.yaml"
+    ));
+    monitoring.extend(kinds(include_str!(
+        "../../../../k8s/components/operator-monitoring/prometheusrule.yaml"
+    )));
+    for want in ["ServiceMonitor", "PrometheusRule"] {
+        assert!(
+            monitoring
+                .iter()
+                .any(|(api, kind)| api.starts_with("monitoring.coreos.com/") && kind == want),
+            "operator-monitoring renders no {want}: {monitoring:?}"
+        );
+    }
+
+    let layer = yaml(include_str!("../../../../k8s/operator/kustomization.yaml"));
+    let listed: Vec<&str> = layer["resources"]
+        .as_sequence()
+        .expect("k8s/operator lists resources")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    let files = [
+        (
+            "crd.yaml",
+            include_str!("../../../../k8s/operator/crd.yaml"),
+        ),
+        (
+            "rbac.yaml",
+            include_str!("../../../../k8s/operator/rbac.yaml"),
+        ),
+        (
+            "deployment.yaml",
+            include_str!("../../../../k8s/operator/deployment.yaml"),
+        ),
+        (
+            "service.yaml",
+            include_str!("../../../../k8s/operator/service.yaml"),
+        ),
+        (
+            "pdb.yaml",
+            include_str!("../../../../k8s/operator/pdb.yaml"),
+        ),
+    ];
+    assert_eq!(
+        listed,
+        files.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+        "k8s/operator/kustomization.yaml resources changed; check them here too"
+    );
+    for (name, text) in files {
+        for (api, kind) in kinds(text) {
+            assert!(
+                !api.starts_with("monitoring.coreos.com/"),
+                "k8s/operator/{name} installs {api} {kind}"
+            );
+        }
+    }
+}
