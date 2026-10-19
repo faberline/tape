@@ -10,6 +10,16 @@ resources:
   - ../../../operator
 
 patches:
+  # Cluster-scoped, so they outlive the namespace. aw's teardown and reaper
+  # delete cluster RBAC by this label.
+  - target:
+      group: rbac.authorization.k8s.io
+      kind: ClusterRole|ClusterRoleBinding
+      name: tape-operator
+    patch: |-
+      - op: add
+        path: /metadata/labels/faberline.dev~1owner-namespace
+        value: tape
   # run.sh creates the namespace `tape` itself and rejects any other
   # Namespace object.
   - patch: |-

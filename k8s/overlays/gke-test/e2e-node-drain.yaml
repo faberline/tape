@@ -4,11 +4,16 @@
 # only namespaced kinds, so the grant lives here, for the suite's
 # ServiceAccount tape/tape-e2e. The suite drains only a node on
 # pool-tape-server, which only tape's pods and DaemonSets can use, and
-# uncordons it after. run.sh deletes both objects with the run.
+# uncordons it after. Cluster-scoped objects outlive the namespace, so both
+# carry faberline.dev/owner-namespace: aw's teardown deletes the cluster RBAC
+# with that label after it deletes the namespace, and the reaper deletes it
+# once the namespace is gone.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: tape-e2e-node-drain
+  labels:
+    faberline.dev/owner-namespace: tape
 rules:
   - apiGroups: [""]
     resources: ["nodes"]
@@ -27,6 +32,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: tape-e2e-node-drain
+  labels:
+    faberline.dev/owner-namespace: tape
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
