@@ -1,0 +1,4 @@
+# Lets the images transformer reach the Tape CR's spec.image.
+images:
+  - kind: Tape
+    path: spec/image

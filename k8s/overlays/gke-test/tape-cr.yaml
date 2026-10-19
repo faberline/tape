@@ -1,0 +1,35 @@
+# The Tape instance the e2e suites test: one shard, one replica, so the
+# operator renders StatefulSet/tape with the single pod tape-0 and its PVC
+# data-tape-0. The suites reach it at http://tape:7137.
+apiVersion: tape.dev/v1alpha1
+kind: Tape
+metadata:
+  name: tape
+spec:
+  # Set by the workflow through ../kustomizeconfig.yaml.
+  image: ghcr.io/faberline/tape:REPLACE_ME
+  shardCount: 1
+  replicasPerShard: 1
+  voterCount: 1
+  storage: 1Gi
+  graceSecs: 1
+  logLevel: info
+  # Stated, not omitted: an absent spec.auth defaults to required, and a CR
+  # that asks for auth without a token source renders a pod that fails
+  # startup. The recovery suite tests PVC-retained replay, not auth.
+  auth: disabled
+  # The defaults (1 CPU, 4Gi) do not fit next to the node's system pods on
+  # an e2-standard-2.
+  resources:
+    cpu: 250m
+    memory: 512Mi
+  imagePullSecrets:
+    - name: ghcr-pull
+  placement:
+    nodeSelector:
+      faberline.dev/pool: tape-server
+    tolerations:
+      - key: faberline.dev/pool
+        operator: Equal
+        value: tape-server
+        effect: NoSchedule

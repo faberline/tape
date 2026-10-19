@@ -1,0 +1,37 @@
+# tape on Faberline's shared GKE test cluster (faberline-test), for the
+# cluster e2e suites in crates/tape/tests/it/e2e/ (faberline/aw
+# docs/standards/test-cluster.md).
+#
+# faberline/aw's gke-test workflow renders this overlay, sets the image under
+# test with `kustomize edit set image ghcr.io/faberline/tape=<image>`, applies
+# the CRD first and then everything else in the namespace `tape`, waits for the
+# operator rollout, and runs one suite's Job from k8s/gke-test-job/<suite>.
+#
+# What it deploys: the shipped operator layer (../../operator, moved from
+# tape-system into tape) and one Tape CR, `tape`, that the operator turns into
+# StatefulSet/tape, Service/tape (:7137), and the pod tape-0. The direct-install
+# base (../../base) is not deployed here; the kind gate never covered it either.
+#
+# Every pod runs on pool-tape-server, one pod per node: the 2 operator replicas
+# here and tape-0 through the CR's spec.placement. aw's
+# infra/gke-test/pools.yaml owns both pools; nothing here creates cloud
+# resources.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tape
+
+resources:
+  - operator
+  - tape-cr.yaml
+
+# `kustomize edit set image` also rewrites the CR's spec.image, so the
+# operator and the server it renders run the same image.
+configurations:
+  - kustomizeconfig.yaml
+
+# The workflow replaces REPLACE_ME with the image under test. run.sh fails a
+# render that still has it.
+images:
+  - name: ghcr.io/faberline/tape
+    newTag: REPLACE_ME

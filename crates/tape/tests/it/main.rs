@@ -13,6 +13,7 @@ mod deploy_cli;
 mod direct_k8s_assets;
 mod durable_crash_recovery;
 mod durable_write_path;
+mod e2e;
 mod graceful_shutdown;
 mod http_transport;
 mod jetstream_benchmark_contract;

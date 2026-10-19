@@ -1,0 +1,50 @@
+# The shipped operator layer, fitted to the shared test cluster: in the run's
+# namespace instead of tape-system, on pool-tape-server, pulling with
+# ghcr-pull, one replica per node, and requests without limits.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tape
+
+resources:
+  - ../../../operator
+
+patches:
+  # run.sh creates the namespace `tape` itself and rejects any other
+  # Namespace object.
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: tape-system
+  - target:
+      kind: Deployment
+      name: tape-operator
+    patch: |-
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          faberline.dev/pool: tape-server
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: faberline.dev/pool
+            operator: Equal
+            value: tape-server
+            effect: NoSchedule
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull
+      # One pod per node. The empty selector matches every pod of the
+      # namespace, so tape-0 never shares a node with an operator replica.
+      - op: replace
+        path: /spec/template/spec/affinity
+        value:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector: {}
+      - op: remove
+        path: /spec/template/spec/containers/0/resources/limits
