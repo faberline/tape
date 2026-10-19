@@ -1,0 +1,21 @@
+{
+  "enabledPlugins": {
+    "faberline@faberline": true,
+    "mattpocock-skills@mattpocock": true
+  },
+  "extraKnownMarketplaces": {
+    "faberline": {
+      "source": {
+        "source": "github",
+        "repo": "faberline/aw"
+      }
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills",
+        "ref": "v1.3.1"
+      }
+    }
+  }
+}
