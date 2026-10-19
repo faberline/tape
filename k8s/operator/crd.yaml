@@ -88,6 +88,18 @@ spec:
               imagePullPolicy:
                 nullable: true
                 type: string
+              imagePullSecrets:
+                description: Secrets in the instance's namespace used to pull `image`, copied to `imagePullSecrets` of every pod the operator renders (the serving StatefulSet and the optional backup CronJob). Empty means the node's own registry credentials, the previous behavior.
+                items:
+                  description: A Secret named in the instance's namespace, mirroring the Kubernetes `v1.LocalObjectReference`. Declared here because the CRD schema is derived with `schemars`, which `k8s-openapi`'s types do not implement.
+                  properties:
+                    name:
+                      description: Name of a Secret of type `kubernetes.io/dockerconfigjson` in the instance's namespace.
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               logFormat:
                 default: json
                 description: |-
@@ -109,6 +121,50 @@ spec:
 
                   Opt-in, and default-off on purpose: both are `monitoring.coreos.com/v1` kinds, so a cluster without the Prometheus Operator CRDs installed would reject them. Leaving it off keeps a vanilla cluster installable; turning it on there is a reconcile error the operator reports, not a surprise the CR author meets at install time. Same shape and default as lumen's `spec.observability`.
                 type: boolean
+              placement:
+                description: |-
+                  Which nodes the operator-rendered pods may run on. Unset leaves the scheduler free to pick any node, the previous behavior.
+
+                  The StatefulSet is operator-rendered, so a `kubectl patch` adding a nodeSelector or toleration is reverted on the next reconcile; without this field a tape instance cannot be scheduled onto a tainted, dedicated node pool at all.
+                nullable: true
+                properties:
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: 'Pod `nodeSelector`, e.g. `{ "faberline.dev/pool": "tape-server" }`.'
+                    type: object
+                  tolerations:
+                    description: Pod taint tolerations, so a dedicated node pool can carry a taint that keeps every other workload off it.
+                    items:
+                      description: |-
+                        One entry of `placement.tolerations`, mirroring the Kubernetes `v1.Toleration` fields.
+
+                        Declared here rather than reused from `k8s-openapi` because the CRD schema is derived with `schemars`, which `k8s-openapi`'s types do not implement.
+                      properties:
+                        effect:
+                          description: '`NoSchedule`, `PreferNoSchedule`, or `NoExecute`. Unset tolerates every effect of the matching taint.'
+                          nullable: true
+                          type: string
+                        key:
+                          description: 'The taint key this tolerates. Empty with `operator: Exists` tolerates every taint.'
+                          nullable: true
+                          type: string
+                        operator:
+                          description: '`Exists` or `Equal`. Unset means `Equal` (the Kubernetes default).'
+                          nullable: true
+                          type: string
+                        tolerationSeconds:
+                          description: 'How long the pod stays bound after the node gains a matching taint. Only meaningful with `effect: NoExecute`.'
+                          format: int64
+                          nullable: true
+                          type: integer
+                        value:
+                          description: 'The taint value to match. Only meaningful with `operator: Equal`.'
+                          nullable: true
+                          type: string
+                      type: object
+                    type: array
+                type: object
               replicasPerShard:
                 default: 1
                 description: Starting/minimum members per shard. With startup-static raft-runtime membership this is also the fixed desired value; a future membership controller may plan whole replica layers above this floor.

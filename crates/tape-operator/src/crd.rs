@@ -13,6 +13,8 @@
 //! resolves per-pod peer hosts from the downward-API quartet), so an HA
 //! (`replicasPerShard > 1`) instance's headless Service must match.
 
+use std::collections::BTreeMap;
+
 use kube::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -183,6 +185,82 @@ pub struct TapeSpec {
     /// instead (#2581). `<name>-backup` identity is unaffected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_account_name: Option<String>,
+
+    /// Secrets in the instance's namespace used to pull `image`, copied to
+    /// `imagePullSecrets` of every pod the operator renders (the serving
+    /// StatefulSet and the optional backup CronJob). Empty means the node's
+    /// own registry credentials, the previous behavior.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub image_pull_secrets: Vec<LocalObjectReference>,
+
+    /// Which nodes the operator-rendered pods may run on. Unset leaves the
+    /// scheduler free to pick any node, the previous behavior.
+    ///
+    /// The StatefulSet is operator-rendered, so a `kubectl patch` adding a
+    /// nodeSelector or toleration is reverted on the next reconcile; without
+    /// this field a tape instance cannot be scheduled onto a tainted,
+    /// dedicated node pool at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<TapePlacement>,
+}
+
+/// Node placement for the operator-rendered pods: the serving StatefulSet
+/// and the optional backup CronJob. Layered on top of the operator-owned
+/// one-pod-per-node anti-affinity, which it never replaces.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TapePlacement {
+    /// Pod `nodeSelector`, e.g. `{ "faberline.dev/pool": "tape-server" }`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub node_selector: BTreeMap<String, String>,
+
+    /// Pod taint tolerations, so a dedicated node pool can carry a taint that
+    /// keeps every other workload off it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tolerations: Vec<Toleration>,
+}
+
+/// One entry of `placement.tolerations`, mirroring the Kubernetes
+/// `v1.Toleration` fields.
+///
+/// Declared here rather than reused from `k8s-openapi` because the CRD schema
+/// is derived with `schemars`, which `k8s-openapi`'s types do not implement.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Toleration {
+    /// The taint key this tolerates. Empty with `operator: Exists` tolerates
+    /// every taint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+
+    /// `Exists` or `Equal`. Unset means `Equal` (the Kubernetes default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator: Option<String>,
+
+    /// The taint value to match. Only meaningful with `operator: Equal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+
+    /// `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. Unset tolerates every
+    /// effect of the matching taint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<String>,
+
+    /// How long the pod stays bound after the node gains a matching taint.
+    /// Only meaningful with `effect: NoExecute`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toleration_seconds: Option<i64>,
+}
+
+/// A Secret named in the instance's namespace, mirroring the Kubernetes
+/// `v1.LocalObjectReference`. Declared here because the CRD schema is
+/// derived with `schemars`, which `k8s-openapi`'s types do not implement.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalObjectReference {
+    /// Name of a Secret of type `kubernetes.io/dockerconfigjson` in the
+    /// instance's namespace.
+    pub name: String,
 }
 
 /// Scheduled-backup projection: the shared
