@@ -10,8 +10,8 @@
 #
 # Suites (aw docs/standards/test-cluster.md "Test suites"), one call each, one
 # at a time, each on a fresh deploy:
-#   operator_recovery  k8s/gke-test-job/operator_recovery  replaces scripts/kind-e2e.sh
-#   operator_ha        k8s/gke-test-job/operator_ha        replaces scripts/kind-operator-ha.sh
+#   operator_recovery  k8s/gke-test-job/operator_recovery
+#   operator_ha        k8s/gke-test-job/operator_ha
 # A pull request runs all of them; a dispatch can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a

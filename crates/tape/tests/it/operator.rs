@@ -1241,7 +1241,7 @@ fn prunes_names_nothing_when_a_backup_schedule_is_configured() {
     }
 }
 
-/// The regression guard for the defect the Kind gate caught: a `PruneTarget`
+/// The regression guard for the defect a live cluster caught: a `PruneTarget`
 /// costs a GET on **every** requeue, so naming a kind whose API group the
 /// cluster does not serve fails the entire reconcile — the apply and the status
 /// write included — not just the prune.

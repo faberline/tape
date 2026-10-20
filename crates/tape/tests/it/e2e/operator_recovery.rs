@@ -1,8 +1,8 @@
 //! Suite `operator_recovery`: the Tape CR `tape` of k8s/overlays/gke-test,
 //! reconciled by the shipped operator into StatefulSet/tape and its one pod
-//! tape-0. It replaces scripts/kind-e2e.sh: the candidate image runs in every
-//! pod, an appended event survives the replacement of the serving pod with
-//! its PVC kept, and the CR's status conditions follow spec.backup.
+//! tape-0. The candidate image runs in every pod, an appended event survives
+//! the replacement of the serving pod with its PVC kept, and the CR's status
+//! conditions follow spec.backup.
 
 use std::time::Duration;
 

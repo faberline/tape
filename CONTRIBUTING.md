@@ -28,7 +28,7 @@ line says why.
 | Operator and backup feature targets | `cargo test -p tape --features operator,backup` |
 | Release-mode performance ceiling | `cargo test --release -p tape-bench --test tape_perf_gate` |
 | Product document contract | `uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json` |
-| Local kind acceptance (manual) | `bash scripts/kind-e2e.sh` |
+| Shared GKE test cluster: suites `operator_recovery` and `operator_ha` (runs on pull requests that touch the operator, `k8s/`, or the suites; dispatch by hand otherwise) | `gh workflow run gke-test.yml` |
 
 Run the document contract check after editing `README.md`, `STATUS.md`,
 `ROADMAP.md`, or `clients/README.md`; it resolves every gate above to a
