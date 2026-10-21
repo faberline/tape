@@ -13,7 +13,13 @@
 //! resolves per-pod peer hosts from the downward-API quartet), so an HA
 //! (`replicasPerShard > 1`) instance's headless Service must match.
 
-use std::collections::BTreeMap;
+mod modes;
+mod placement;
+mod schema;
+
+pub use modes::{AuthMode, LogFormat};
+pub use placement::{LocalObjectReference, TapePlacement, Toleration};
+pub use schema::crd_yaml;
 
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -204,65 +210,6 @@ pub struct TapeSpec {
     pub placement: Option<TapePlacement>,
 }
 
-/// Node placement for the operator-rendered pods: the serving StatefulSet
-/// and the optional backup CronJob. Layered on top of the operator-owned
-/// one-pod-per-node anti-affinity, which it never replaces.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct TapePlacement {
-    /// Pod `nodeSelector`, e.g. `{ "faberline.dev/pool": "tape-server" }`.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub node_selector: BTreeMap<String, String>,
-
-    /// Pod taint tolerations, so a dedicated node pool can carry a taint that
-    /// keeps every other workload off it.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tolerations: Vec<Toleration>,
-}
-
-/// One entry of `placement.tolerations`, mirroring the Kubernetes
-/// `v1.Toleration` fields.
-///
-/// Declared here rather than reused from `k8s-openapi` because the CRD schema
-/// is derived with `schemars`, which `k8s-openapi`'s types do not implement.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Toleration {
-    /// The taint key this tolerates. Empty with `operator: Exists` tolerates
-    /// every taint.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub key: Option<String>,
-
-    /// `Exists` or `Equal`. Unset means `Equal` (the Kubernetes default).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operator: Option<String>,
-
-    /// The taint value to match. Only meaningful with `operator: Equal`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
-
-    /// `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. Unset tolerates every
-    /// effect of the matching taint.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effect: Option<String>,
-
-    /// How long the pod stays bound after the node gains a matching taint.
-    /// Only meaningful with `effect: NoExecute`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub toleration_seconds: Option<i64>,
-}
-
-/// A Secret named in the instance's namespace, mirroring the Kubernetes
-/// `v1.LocalObjectReference`. Declared here because the CRD schema is
-/// derived with `schemars`, which `k8s-openapi`'s types do not implement.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LocalObjectReference {
-    /// Name of a Secret of type `kubernetes.io/dockerconfigjson` in the
-    /// instance's namespace.
-    pub name: String,
-}
-
 /// Scheduled-backup projection: the shared
 /// [`service_backup::ScheduledBackupPolicy`] (`schedule`, `destination`,
 /// `retentionSecs`) plus tape's own admin-token wiring.
@@ -344,136 +291,4 @@ fn default_storage() -> String {
 }
 fn default_grace_secs() -> u64 {
     10
-}
-
-/// Log output format for the serving container (`TAPE_LOG_FORMAT`).
-///
-/// A closed enum for the same reason `AuthMode` is one: a typo in a
-/// free-form string would fall back at boot instead of being rejected at
-/// `kubectl apply` (#2582).
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum LogFormat {
-    /// Human-readable formatter. The escape hatch for reading one pod's logs
-    /// interactively during an incident.
-    Pretty,
-    /// The default in-cluster: the shared `axiom.service.log.v1` collector
-    /// contract expects JSON.
-    #[default]
-    Json,
-}
-
-impl LogFormat {
-    /// The `TAPE_LOG_FORMAT` value the serving binary expects (`pretty` | `json`).
-    pub fn as_env(self) -> &'static str {
-        match self {
-            LogFormat::Pretty => "pretty",
-            LogFormat::Json => "json",
-        }
-    }
-}
-
-/// Whether the data-plane API requires a bearer token.
-///
-/// A closed enum, not a flat string: as a `String` every value except the
-/// exact literal `"required"` rendered an open data plane, so `auth: requried`
-/// applied cleanly and the only signal was the *absence* of an env var in a
-/// pod nobody inspects (#2765). The API server now rejects anything outside
-/// this set, naming the field.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum AuthMode {
-    /// Open API (dev / trusted network) — an explicit opt-out, never the
-    /// default. Serialized as `disabled` — NOT `off`, which YAML 1.1
-    /// (kubectl / go-yaml) would parse as the boolean `false` and corrupt the
-    /// CRD enum/default.
-    #[serde(rename = "disabled")]
-    Off,
-    /// Bearer token required; the registry file comes from `tokensSecret` or
-    /// `tokensSecretProviderClass`. The default, so a `Tape` that omits
-    /// `spec.auth` fails startup asking for credentials instead of serving an
-    /// open API silently.
-    #[default]
-    Required,
-}
-
-impl AuthMode {
-    /// The `TAPE_AUTH` value the serving binary expects.
-    ///
-    /// Deliberately *not* the CRD spelling: the wire keeps `off` (see
-    /// `auth::AUTH_MODE_ENV` and `tape serve --auth`), the schema uses
-    /// `disabled`. An env var is never parsed as YAML, so `off` is safe there
-    /// and changing it would break every existing deployment's serving args.
-    pub fn as_env(self) -> &'static str {
-        match self {
-            AuthMode::Off => "off",
-            AuthMode::Required => "required",
-        }
-    }
-}
-/// The CEL rule enforcing that a `Tape` names at most one token source
-/// (#2765).
-///
-/// Presence tests only. Both fields render as `nullable: true`, which reads
-/// like it needs an explicit `!= null` guard — it does not, and adding one
-/// breaks the CRD outright. Kubernetes types a nullable string as plain
-/// `string`, so `self.tokensSecret != null` fails CEL compilation at the API
-/// server ("found no matching overload for '_!=_' applied to '(string,
-/// null)'"), and every local test still passes because they assert on YAML
-/// text, never on the compiled expression. The guard is also unnecessary:
-/// Kubernetes prunes an explicitly-null field before CEL runs, so `has()`
-/// already reports it absent. Lumen shipped the `!= null` shape once and it
-/// installed on no cluster; it was caught only by
-/// `kubectl apply --dry-run=server`. The contract is documented at
-/// `core/crates/service-k8s/src/crd.rs`.
-const ONE_TOKEN_SOURCE_RULE: &str =
-    "!(has(self.tokensSecret) && has(self.tokensSecretProviderClass))";
-
-const ONE_TOKEN_SOURCE_MESSAGE: &str =
-    "set at most one of spec.tokensSecret (a Kubernetes Secret) or \
-     spec.tokensSecretProviderClass (a Secret Manager CSI projection); with both set there is no \
-     way to tell which registry is actually being served";
-
-/// The CEL rule rejecting a backup schedule that can only ever 401: a
-/// `spec.backup` with no `adminTokenSecret` on an instance running
-/// `auth: required` (#3058). Presence tests only, for the same reason as
-/// [`ONE_TOKEN_SOURCE_RULE`].
-const BACKUP_NEEDS_ADMIN_TOKEN_RULE: &str =
-    "!(has(self.backup) && self.auth == 'required' && !has(self.backup.adminTokenSecret))";
-
-const BACKUP_NEEDS_ADMIN_TOKEN_MESSAGE: &str =
-    "set spec.backup.adminTokenSecret when spec.auth is required, or the scheduled \
-     backup runs authenticate with no token and every run fails 401 while the instance \
-     keeps reporting Ready";
-
-/// The `Tape` CustomResourceDefinition as YAML, for `kubectl apply`.
-///
-/// The schema is normalized to be Kubernetes-OpenAPI compatible: schemars
-/// emits `format: uint32`/`uint64` for tape's unsigned counts, which the API
-/// server's structural-schema validation rejects, so those are rewritten to a
-/// plain integer with a `minimum: 0` floor (relay/keep's pattern).
-pub fn crd_yaml() -> String {
-    use kube::CustomResourceExt;
-    let mut crd = serde_json::to_value(Tape::crd()).expect("CRD serializes to JSON");
-    service_k8s::crd::normalize_unsigned_integer_formats(&mut crd);
-    let attached = service_k8s::crd::add_spec_validation_rule(
-        &mut crd,
-        ONE_TOKEN_SOURCE_RULE,
-        ONE_TOKEN_SOURCE_MESSAGE,
-    );
-    assert!(
-        attached > 0,
-        "the one-token-source rule must reach the spec schema; the generated CRD changed shape"
-    );
-    let attached = service_k8s::crd::add_spec_validation_rule(
-        &mut crd,
-        BACKUP_NEEDS_ADMIN_TOKEN_RULE,
-        BACKUP_NEEDS_ADMIN_TOKEN_MESSAGE,
-    );
-    assert!(
-        attached > 0,
-        "the backup-admin-token rule must reach the spec schema; the generated CRD changed shape"
-    );
-    let yaml = serde_yaml::to_string(&crd).expect("CRD serializes");
-    service_k8s::crd::quote_yaml_1_1_boolean_like_strings(&yaml)
 }
