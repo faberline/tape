@@ -1,5 +1,7 @@
 [project]
 name = "tape"
+# Shared SaaS service skeleton (aw docs/standards/saas-service.md, S5).
+kind = "saas-service"
 cap_path = "README.md"
 label = "app:tape"
 
