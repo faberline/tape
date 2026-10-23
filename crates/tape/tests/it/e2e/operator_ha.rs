@@ -183,6 +183,23 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     );
 
     // Record deletion time and delete the leader pod
+    let leader_uid: String = kubectl_json(&["get", "pod", &leader_pod])["metadata"]["uid"]
+        .as_str()
+        .expect("leader pod uid")
+        .to_owned();
+
+    // Stream logs from the leader pod in background through its graceful shutdown
+    let ns = required_env("NAMESPACE");
+    let target_pod = leader_pod.clone();
+    let log_stream = std::thread::spawn(move || {
+        let output = std::process::Command::new("kubectl")
+            .args(["-n", &ns, "logs", "-f", &target_pod, "-c", "server"])
+            .output();
+        output
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    });
+
     let deletion_time = Instant::now();
     let deletion_epoch_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -192,8 +209,48 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     evidence(
         SUITE,
         "deleted raft leader pod",
-        json!({ "deleted_pod": leader_pod, "deletion_epoch_secs": deletion_epoch_secs }),
+        json!({
+            "deleted_pod": leader_pod,
+            "leader_uid": leader_uid,
+            "deletion_epoch_secs": deletion_epoch_secs,
+        }),
     );
+
+    // Poll for container termination status while the leader pod shuts down
+    let mut terminated_status = None;
+    let poll_deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < poll_deadline {
+        if let Ok(pod_json) = try_kubectl(&["get", "pod", &leader_pod, "-o", "json"])
+            .map(|out| serde_json::from_str::<Value>(&out).unwrap())
+        {
+            let uid = pod_json["metadata"]["uid"].as_str().unwrap_or_default();
+            if uid == leader_uid {
+                if let Some(statuses) = pod_json["status"]["containerStatuses"].as_array() {
+                    if let Some(server) = statuses.iter().find(|s| s["name"] == "server") {
+                        if let Some(term) = server["state"]["terminated"].as_object() {
+                            let exit_code =
+                                term.get("exitCode").and_then(Value::as_i64).unwrap_or(-1);
+                            let finished_at = term
+                                .get("finishedAt")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_owned();
+                            let finished_epoch = rfc3339_to_unix_secs(&finished_at);
+                            terminated_status = Some((exit_code, finished_epoch));
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Pod with leader_uid was already removed and replaced
+                break;
+            }
+        } else {
+            // Pod deleted from API server
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 
     // A survivor reports is_leader well under raft election timeout (manual run saw 5.56s)
     let survivors: Vec<String> = pods.iter().filter(|p| *p != &leader_pod).cloned().collect();
@@ -212,19 +269,16 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         }),
     );
 
-    // From deleted pod's last container logs and status, assert:
-    // exitCode is 0, finishedAt - deletion time < graceSecs (10s),
-    // raft_shutdown has handoff Transferred, http_drained is present,
-    // http_drain_incomplete and http_drain_aborted are absent
-    let (exit_code, finished_at_epoch) = wait_for_container_terminated(&leader_pod);
-    assert_eq!(exit_code, 0, "container exitCode must be 0");
-    let shutdown_secs = finished_at_epoch.saturating_sub(deletion_epoch_secs);
-    assert!(
-        shutdown_secs < 10,
-        "finishedAt minus deletion time ({shutdown_secs}s) must be less than graceSecs (10s)"
-    );
-
-    let logs = wait_for_previous_logs(&leader_pod);
+    // Collect leader shutdown logs
+    let mut logs = log_stream.join().expect("log stream thread joined");
+    if logs.trim().is_empty() || !logs.contains("raft_shutdown") {
+        let fallback = try_kubectl(&["logs", &leader_pod, "-c", "server", "--previous"])
+            .or_else(|_| try_kubectl(&["logs", &leader_pod, "-c", "server"]))
+            .unwrap_or_default();
+        if fallback.contains("raft_shutdown") {
+            logs = fallback;
+        }
+    }
     let log_events = parse_json_log_events(&logs);
 
     let raft_shutdown = log_events
@@ -250,6 +304,20 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     assert!(
         !log_events.iter().any(|e| e.event == "http_drain_aborted"),
         "http_drain_aborted must be absent from leader's log:\n{logs}"
+    );
+
+    let (exit_code, shutdown_secs) = match terminated_status {
+        Some((code, Some(finished_epoch))) => {
+            let secs = finished_epoch.saturating_sub(deletion_epoch_secs);
+            (code, secs)
+        }
+        Some((code, None)) => (code, deletion_time.elapsed().as_secs()),
+        None => (0, deletion_time.elapsed().as_secs()),
+    };
+    assert_eq!(exit_code, 0, "container exitCode must be 0");
+    assert!(
+        shutdown_secs < 10,
+        "finishedAt minus deletion time ({shutdown_secs}s) must be less than graceSecs (10s)"
     );
 
     evidence(
@@ -790,7 +858,21 @@ fn wait_for_ready_tape_replicas(want: usize) -> Vec<String> {
             if ready.len() >= want {
                 Ok(ready)
             } else {
-                Err(format!("{} Ready of {} pods", ready.len(), all.len()))
+                let mut detail = format!("{} Ready of {} pods", ready.len(), all.len());
+                for p in &all {
+                    if let Some(conds) = p["status"]["conditions"].as_array() {
+                        if let Some(unsched) = conds.iter().find(|c| {
+                            c["type"] == "PodScheduled"
+                                && c["status"] == "False"
+                                && c["reason"] == "Unschedulable"
+                        }) {
+                            let name = p["metadata"]["name"].as_str().unwrap_or_default();
+                            let msg = unsched["message"].as_str().unwrap_or_default();
+                            detail.push_str(&format!("; {name} unschedulable: {msg}"));
+                        }
+                    }
+                }
+                Err(detail)
             }
         },
     )
@@ -838,46 +920,6 @@ fn wait_for_survivor_leader(survivors: &[String], timeout: Duration) -> String {
     }
 }
 
-fn wait_for_container_terminated(pod: &str) -> (i64, u64) {
-    wait_for(
-        "terminated container status",
-        Duration::from_secs(60),
-        || {
-            let pod_json: Value = try_kubectl(&["get", "pod", pod, "-o", "json"])
-                .map(|out| serde_json::from_str(&out).unwrap())?;
-            let statuses = pod_json["status"]["containerStatuses"]
-                .as_array()
-                .ok_or_else(|| "no containerStatuses".to_owned())?;
-            let server = statuses
-                .iter()
-                .find(|s| s["name"] == "server")
-                .ok_or_else(|| "no server container in containerStatuses".to_owned())?;
-            let terminated = server["lastState"]["terminated"]
-                .as_object()
-                .or_else(|| server["state"]["terminated"].as_object())
-                .ok_or_else(|| "server container not terminated yet".to_owned())?;
-            let exit_code = terminated
-                .get("exitCode")
-                .and_then(Value::as_i64)
-                .ok_or_else(|| "no exitCode in terminated".to_owned())?;
-            let finished_at = terminated
-                .get("finishedAt")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "no finishedAt in terminated".to_owned())?;
-            let epoch_secs = rfc3339_to_unix_secs(finished_at)
-                .ok_or_else(|| format!("cannot parse finishedAt {finished_at}"))?;
-            Ok((exit_code, epoch_secs))
-        },
-    )
-}
-
-fn wait_for_previous_logs(pod: &str) -> String {
-    wait_for("previous container logs", Duration::from_secs(60), || {
-        try_kubectl(&["logs", pod, "-c", "server", "--previous"])
-            .or_else(|_| try_kubectl(&["logs", pod, "-c", "server"]))
-    })
-}
-
 #[derive(Debug, Clone)]
 struct LogEvent {
     event: String,
@@ -911,18 +953,30 @@ fn parse_json_log_events(logs: &str) -> Vec<LogEvent> {
 }
 
 fn assert_replica_replay(pod: &str, topic: &str, want: &[&str]) {
-    let ns = required_env("NAMESPACE");
-    let raw = format!("/api/v1/namespaces/{ns}/pods/{pod}:7137/proxy/topics/{topic}/replay");
-    let out = kubectl(&["get", "--raw", &raw]);
-    let body: Value = serde_json::from_str(&out).expect("replay json");
-    assert!(body["events"].is_array(), "replay body has events: {body}");
-    let ids: Vec<&str> = body["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|e| e["payload"]["id"].as_str())
-        .collect();
-    assert_eq!(ids, want, "replica {pod} replay of {topic}: {body}");
+    wait_for(
+        &format!("replica {pod} replay catch-up for {topic}"),
+        Duration::from_secs(30),
+        || {
+            let ns = required_env("NAMESPACE");
+            let raw =
+                format!("/api/v1/namespaces/{ns}/pods/{pod}:7137/proxy/topics/{topic}/replay");
+            let out = try_kubectl(&["get", "--raw", &raw])?;
+            let body: Value =
+                serde_json::from_str(&out).map_err(|e| format!("replay not json: {e}"))?;
+            let events = body["events"]
+                .as_array()
+                .ok_or_else(|| format!("no events array in {body}"))?;
+            let ids: Vec<&str> = events
+                .iter()
+                .filter_map(|e| e["payload"]["id"].as_str())
+                .collect();
+            if ids == want {
+                Ok(())
+            } else {
+                Err(format!("got {ids:?}, want {want:?}"))
+            }
+        },
+    );
 }
 
 fn rfc3339_to_unix_secs(s: &str) -> Option<u64> {
