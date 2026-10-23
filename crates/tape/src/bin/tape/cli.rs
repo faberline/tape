@@ -16,7 +16,11 @@ use crate::serve::ServeArgs;
 use crate::spec::SpecArgs;
 
 #[derive(Parser)]
-#[command(name = "tape", version, about = "tape - topic replay journal service")]
+#[command(
+    name = "tape",
+    version,
+    about = "tape - pub/sub message delivery service"
+)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Command,
