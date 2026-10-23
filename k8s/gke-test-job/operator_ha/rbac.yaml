@@ -15,7 +15,7 @@ metadata:
   name: tape-e2e
 rules:
   - apiGroups: [""]
-    resources: ["pods"]
+    resources: ["pods", "pods/proxy", "pods/log"]
     verbs: ["get", "list", "watch", "delete"]
   - apiGroups: [""]
     resources: ["services", "endpoints", "events"]
