@@ -735,6 +735,12 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "ackDeadlineSeconds": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 600,
+            "default": 10
           }
         }
       },
@@ -742,7 +748,8 @@
         "type": "object",
         "required": [
           "topic",
-          "name"
+          "name",
+          "ackDeadlineSeconds"
         ],
         "properties": {
           "topic": {
@@ -750,6 +757,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "ackDeadlineSeconds": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 600,
+            "default": 10
           }
         }
       },

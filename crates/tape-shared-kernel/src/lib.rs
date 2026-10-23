@@ -20,5 +20,8 @@ pub use event::{ConsumerCheckpoint, TapeEvent};
 pub use ports::{BoxFuture, CommitLog, ReplicationError, Replicator};
 pub use retention::{RetentionOutcome, RetentionPolicy};
 pub use snapshot::{encode_snapshot, JournalSnapshot, ProposalId};
-pub use subscription::{PullSubscriptionBatch, Subscription, DEFAULT_PULL_BATCH, MAX_PULL_BATCH};
+pub use subscription::{
+    PullSubscriptionBatch, Subscription, DEFAULT_ACK_DEADLINE_SECONDS, DEFAULT_PULL_BATCH,
+    MAX_ACK_DEADLINE_SECONDS, MAX_PULL_BATCH, MIN_ACK_DEADLINE_SECONDS,
+};
 pub use tape_journal::TapeJournal;

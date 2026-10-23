@@ -91,8 +91,13 @@ impl JournalService {
         &self,
         topic: String,
         name: String,
+        ack_deadline_seconds: u64,
     ) -> Result<Subscription, JournalError> {
-        let command = TapeCommand::SubscriptionCreate { topic, name };
+        let command = TapeCommand::SubscriptionCreate {
+            topic,
+            name,
+            ack_deadline_seconds,
+        };
         match self.mutate("subscription_create", command).await? {
             TapeOutcome::SubscriptionCreated(result) => result.map_err(JournalError::from),
             _ => Err(outcome_mismatch("subscription_create")),
@@ -229,8 +234,12 @@ impl JournalService {
                 SubscriptionError::AlreadyExists { topic, name },
             )));
         }
-        self.apply_mutation(TapeCommand::SubscriptionCreate { topic, name })
-            .await
+        self.apply_mutation(TapeCommand::SubscriptionCreate {
+            topic,
+            name,
+            ack_deadline_seconds: tape_shared_kernel::DEFAULT_ACK_DEADLINE_SECONDS,
+        })
+        .await
     }
 }
 

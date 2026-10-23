@@ -151,6 +151,7 @@ fn subscription_resource_roundtrip() {
         String::from_utf8_lossy(&create.stderr)
     );
     assert!(String::from_utf8_lossy(&create.stdout).contains("\"name\": \"worker-a\""));
+    assert!(String::from_utf8_lossy(&create.stdout).contains("\"ackDeadlineSeconds\": 10"));
 
     let list = Command::new(tape_bin())
         .args(["subscription", "list", "orders", "--store", store_arg])
@@ -159,6 +160,7 @@ fn subscription_resource_roundtrip() {
     assert!(list.status.success());
     let list_stdout = String::from_utf8_lossy(&list.stdout);
     assert!(list_stdout.contains("worker-a"));
+    assert!(list_stdout.contains("\"ackDeadlineSeconds\": 10"));
 
     let show = Command::new(tape_bin())
         .args([
@@ -173,6 +175,7 @@ fn subscription_resource_roundtrip() {
         .expect("show pull subscription");
     assert!(show.status.success());
     assert!(String::from_utf8_lossy(&show.stdout).contains("\"checkpoint\": null"));
+    assert!(String::from_utf8_lossy(&show.stdout).contains("\"ackDeadlineSeconds\": 10"));
 
     let delete = Command::new(tape_bin())
         .args([

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::error::{SubscriptionAckError, SubscriptionError, TapeError};
 use super::event::{ConsumerCheckpoint, TapeEvent};
 use super::retention::{RetentionOutcome, RetentionPolicy};
-use super::subscription::Subscription;
+use super::subscription::{default_ack_deadline_seconds, Subscription};
 use super::tape_journal::TapeJournal;
 
 /// A tape write replicated through raft -- the command bytes of one log
@@ -34,6 +34,12 @@ pub enum TapeCommand {
     SubscriptionCreate {
         topic: String,
         name: String,
+        #[serde(
+            default = "default_ack_deadline_seconds",
+            rename = "ackDeadlineSeconds",
+            alias = "ack_deadline_seconds"
+        )]
+        ack_deadline_seconds: u64,
     },
     SubscriptionDelete {
         topic: String,
@@ -93,9 +99,15 @@ pub fn apply_command(journal: &mut TapeJournal, command: TapeCommand) -> TapeOut
             let result = journal.put_checkpoint_at(topic, consumer, offset, updated_at_ms);
             TapeOutcome::Checkpoint(result)
         }
-        TapeCommand::SubscriptionCreate { topic, name } => {
-            TapeOutcome::SubscriptionCreated(journal.create_subscription(topic, name))
-        }
+        TapeCommand::SubscriptionCreate {
+            topic,
+            name,
+            ack_deadline_seconds,
+        } => TapeOutcome::SubscriptionCreated(journal.create_subscription_with_deadline(
+            topic,
+            name,
+            ack_deadline_seconds,
+        )),
         TapeCommand::SubscriptionDelete { topic, name } => {
             TapeOutcome::SubscriptionDeleted(journal.delete_subscription(&topic, &name))
         }
@@ -115,5 +127,30 @@ pub fn apply_command(journal: &mut TapeJournal, command: TapeCommand) -> TapeOut
             policy,
             now_ms,
         } => TapeOutcome::RetentionUpdated(journal.put_retention(topic, policy, now_ms)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DEFAULT_ACK_DEADLINE_SECONDS;
+
+    #[test]
+    fn old_command_shape_decodes_with_default_ack_deadline() {
+        let legacy_command_json = r#"{"SubscriptionCreate":{"topic":"orders","name":"sub-1"}}"#;
+        let command: TapeCommand =
+            serde_json::from_str(legacy_command_json).expect("decode legacy command");
+        match command {
+            TapeCommand::SubscriptionCreate {
+                topic,
+                name,
+                ack_deadline_seconds,
+            } => {
+                assert_eq!(topic, "orders");
+                assert_eq!(name, "sub-1");
+                assert_eq!(ack_deadline_seconds, DEFAULT_ACK_DEADLINE_SECONDS);
+            }
+            _ => panic!("unexpected command variant"),
+        }
     }
 }
