@@ -111,6 +111,14 @@ In `.github/workflows/affected-docs.yml`:
     ```
     to be added immediately preceding the node-drain row.
   - Reconstructed check: after removing EXACTLY these two rows, the remaining document must be 100% byte-identical to base `docs/operations/README.md`.
+- **Mandatory prerequisite wrapper and §6 smoke sequence contract**:
+  - Both `docs/runbooks/cold-restore.md` and `docs/runbooks/disk-full.md` must include exactly one mandatory prerequisite wrapper paragraph immediately following the document's H1 heading and one blank line (`\n\n`), followed by one blank line before the extracted runbook body:
+    ```markdown
+    > Prerequisite: Set `BASE` in this shell to the target Tape HTTP endpoint (`BASE=http://localhost:7137` for the local endpoint), as defined in the [deployment handoff smoke sequence](../deployment-handoff.md#6-smoke-sequence-end-to-end).
+    ```
+  - The relative source link `[deployment handoff smoke sequence](../deployment-handoff.md#6-smoke-sequence-end-to-end)` is strictly verified against the frozen base `docs/deployment-handoff.md`, asserting section 6 heading `## 6. Smoke sequence (end-to-end)` exists and defines `BASE=http://localhost:7137`.
+  - The validator permits only that exact wrapper text, endpoint, link, count (1), and placement (immediately after H1).
+  - The validator strips only this single inserted block before performing byte-preserving comparison against the normalized base handoff sections. Any missing, malformed, duplicate, or misplaced wrapper, extra blockquote command, or CRLF fails validation with explicit named assertions.
 - **Exact Cargo PR head execution**:
   - The `backup-destination-docs` job explicitly checks out `ref: ${{ github.event.pull_request.head.sha }}` (not default merge commit).
   - Step verifies `git rev-parse HEAD` equals `github.event.pull_request.head.sha` and logs both head and base.

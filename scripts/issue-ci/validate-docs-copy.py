@@ -22,6 +22,12 @@ EXPECTED_CHANGES = (
     "docs/runbooks/disk-full.md",
 )
 
+MANDATORY_WRAPPER = (
+    "> Prerequisite: Set `BASE` in this shell to the target Tape HTTP endpoint "
+    "(`BASE=http://localhost:7137` for the local endpoint), as defined in the "
+    "[deployment handoff smoke sequence](../deployment-handoff.md#6-smoke-sequence-end-to-end)."
+)
+
 FORBIDDEN_FILE = "docs/runbooks/README.md"
 
 FORBIDDEN_PREFIXES = (
@@ -278,6 +284,52 @@ def load_utf8_bytes(loader: FileLoader, path: str, side: str) -> Tuple[bytes, st
     return raw, text
 
 
+def verify_runbook_wrapper(doc_path: str, head_content: str, expected_h1: str, assertion_num: int) -> str:
+    """Verifies mandatory prerequisite wrapper contract and returns unwrapped normalized body."""
+    prereq_occurrences = [
+        line for line in head_content.splitlines()
+        if line.startswith("> Prerequisite:") or ("prerequisite" in line.lower() and line.startswith(">"))
+    ]
+    wrapper_count = head_content.count(MANDATORY_WRAPPER)
+
+    if wrapper_count > 1 or len(prereq_occurrences) > 1:
+        raise ValidationError(f"assertion {assertion_num} failed: duplicate prerequisite wrapper in {doc_path}")
+
+    if wrapper_count == 0:
+        if not prereq_occurrences:
+            raise ValidationError(f"assertion {assertion_num} failed: missing mandatory prerequisite wrapper in {doc_path}")
+        prereq_line = prereq_occurrences[0]
+        if "BASE=http://localhost:7137" not in prereq_line:
+            raise ValidationError(f"assertion {assertion_num} failed: malformed prerequisite wrapper endpoint or example in {doc_path}")
+        if "../deployment-handoff.md#6-smoke-sequence-end-to-end" not in prereq_line:
+            raise ValidationError(f"assertion {assertion_num} failed: malformed prerequisite wrapper source link or anchor in {doc_path}")
+        raise ValidationError(f"assertion {assertion_num} failed: malformed prerequisite wrapper in {doc_path}")
+
+    # Wrapper must appear immediately after H1 + \n\n
+    h1_with_blank = expected_h1 + "\n\n"
+    if not head_content.startswith(h1_with_blank):
+        raise ValidationError(f"assertion {assertion_num} failed: misplaced prerequisite wrapper in {doc_path} (must follow H1)")
+
+    after_h1 = head_content[len(h1_with_blank):]
+    if not after_h1.startswith(MANDATORY_WRAPPER):
+        raise ValidationError(f"assertion {assertion_num} failed: misplaced prerequisite wrapper in {doc_path} (must follow H1)")
+
+    after_wrapper = after_h1[len(MANDATORY_WRAPPER):]
+    if after_wrapper.startswith("\n>") or after_wrapper.startswith("\r\n>"):
+        raise ValidationError(f"assertion {assertion_num} failed: extra command or content in prerequisite wrapper in {doc_path}")
+
+    if not after_wrapper.startswith("\n\n"):
+        raise ValidationError(f"assertion {assertion_num} failed: misplaced prerequisite wrapper in {doc_path} (must follow H1)")
+
+    remaining = after_wrapper[2:]
+    if remaining.startswith(">"):
+        raise ValidationError(f"assertion {assertion_num} failed: extra command or content in prerequisite wrapper in {doc_path}")
+
+    # Remove only the exact inserted wrapper block, returning the unwrapped document
+    unwrapped = expected_h1 + "\n\n" + remaining
+    return unwrapped
+
+
 def validate_docs_copy(loader: FileLoader) -> dict:
     assertions_passed = []
 
@@ -348,11 +400,14 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     assertions_passed.append("2. docs/deployment-handoff.md is byte-identical to frozen base")
 
     # 3, 4, 5. Extract and normalize sections from base handoff
+    sec6_start = "## 6. Smoke sequence (end-to-end)\n"
     sec7_start = "## 7. Backup / restore runbook (#1329)\n"
     cold_sub = "### Cold restore runbook (#2465, #2468)\n"
     disk_sub = "### Disk-full runbook (#2573)\n"
     divider = "\n---\n\n## 8. Release-readiness gates\n"
 
+    if sec6_start not in base_handoff:
+        raise ValidationError("assertion 3 failed: missing section 6 in base handoff")
     if sec7_start not in base_handoff:
         raise ValidationError("assertion 3 failed: missing section 7 in base handoff")
     if cold_sub not in base_handoff:
@@ -362,16 +417,21 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     if divider not in base_handoff:
         raise ValidationError("assertion 4 failed: missing release-readiness divider in base handoff")
 
+    idx_sec6 = base_handoff.index(sec6_start)
     idx_sec7 = base_handoff.index(sec7_start)
     idx_cold = base_handoff.index(cold_sub)
     idx_disk = base_handoff.index(disk_sub)
     idx_div = base_handoff.index(divider)
 
-    if not (idx_sec7 < idx_cold < idx_disk < idx_div):
+    if not (idx_sec6 < idx_sec7 < idx_cold < idx_disk < idx_div):
         raise ValidationError("assertion 5 failed: base handoff sections out of expected order")
 
-    if base_handoff.count(sec7_start) > 1 or base_handoff.count(cold_sub) > 1 or base_handoff.count(disk_sub) > 1:
+    if base_handoff.count(sec6_start) > 1 or base_handoff.count(sec7_start) > 1 or base_handoff.count(cold_sub) > 1 or base_handoff.count(disk_sub) > 1:
         raise ValidationError("assertion 5 failed: duplicate headings in base handoff")
+
+    sec6_content = base_handoff[idx_sec6:idx_sec7]
+    if "BASE=http://localhost:7137" not in sec6_content:
+        raise ValidationError("assertion 3 failed: section 6 smoke sequence missing BASE=http://localhost:7137 definition")
 
     cold_source = base_handoff[idx_sec7:idx_disk]
     disk_source = base_handoff[idx_disk:idx_div]
@@ -393,20 +453,24 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     disk_head_raw, disk_head = load_utf8_bytes(loader, "docs/runbooks/disk-full.md", "head")
 
     # 3. Cold-restore target verification
-    cold_headings = [l for l in cold_head.splitlines() if l.startswith("#")]
+    cold_h1 = "# Backup / restore runbook (#1329)"
+    cold_unwrapped = verify_runbook_wrapper("docs/runbooks/cold-restore.md", cold_head, cold_h1, 3)
+    cold_headings = [l for l in cold_unwrapped.splitlines() if l.startswith("#")]
     if len(cold_headings) != len(set(cold_headings)):
         raise ValidationError("assertion 3 failed: duplicate headings in cold-restore.md")
-    if cold_head != cold_norm:
+    if cold_unwrapped != cold_norm:
         raise ValidationError("assertion 3 failed: docs/runbooks/cold-restore.md differs from normalized base handoff section 7")
-    assertions_passed.append("3. docs/runbooks/cold-restore.md matches normalized base handoff section 7")
+    assertions_passed.append("3. docs/runbooks/cold-restore.md matches normalized base handoff section 7 with mandatory prerequisite wrapper")
 
     # 4. Disk-full target verification
-    disk_headings = [l for l in disk_head.splitlines() if l.startswith("#")]
+    disk_h1 = "# Disk-full runbook (#2573)"
+    disk_unwrapped = verify_runbook_wrapper("docs/runbooks/disk-full.md", disk_head, disk_h1, 4)
+    disk_headings = [l for l in disk_unwrapped.splitlines() if l.startswith("#")]
     if len(disk_headings) != len(set(disk_headings)):
         raise ValidationError("assertion 4 failed: duplicate headings in disk-full.md")
-    if disk_head != disk_norm:
+    if disk_unwrapped != disk_norm:
         raise ValidationError("assertion 4 failed: docs/runbooks/disk-full.md differs from normalized base handoff disk-full subsection")
-    assertions_passed.append("4. docs/runbooks/disk-full.md matches normalized base handoff disk-full subsection")
+    assertions_passed.append("4. docs/runbooks/disk-full.md matches normalized base handoff disk-full subsection with mandatory prerequisite wrapper")
 
     # 5. Structural normalization validation
     assertions_passed.append("5. Section heading levels promoted; divider and trailing blank lines cleanly stripped")
