@@ -1,5 +1,7 @@
 # Backup / restore runbook (#1329)
 
+> Prerequisite: Set `BASE` in this shell to the target Tape HTTP endpoint (`BASE=http://localhost:7137` for the local endpoint), as defined in the [deployment handoff smoke sequence](../deployment-handoff.md#6-smoke-sequence-end-to-end).
+
 ```bash
 # operator-driven or ad hoc, against a running node:
 tape backup --url http://localhost:7137 --dest file:///tmp/tape-backups \

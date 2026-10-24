@@ -1,5 +1,7 @@
 # Disk-full runbook (#2573)
 
+> Prerequisite: Set `BASE` in this shell to the target Tape HTTP endpoint (`BASE=http://localhost:7137` for the local endpoint), as defined in the [deployment handoff smoke sequence](../deployment-handoff.md#6-smoke-sequence-end-to-end).
+
 A tape node that hits `ENOSPC` on its journal persist path latches **degraded
 read-only mode**: mutating requests (append, checkpoint advance, subscription
 create/delete/ack, retention set) answer `507` with error kind
