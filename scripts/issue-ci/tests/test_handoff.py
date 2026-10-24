@@ -39,19 +39,21 @@ def evidence():
 
 class HandoffTests(unittest.TestCase):
     def test_controller_matches_verified_aw_merge(self):
-        self.assertEqual(hashlib.sha256((SCRIPTS / 'handoff.py').read_bytes()).hexdigest(), 'c67533b39d45ad62d407af3748856be396941647c349b63464424fa6aff1c198')
-        self.assertIn('67af8d020df3ca2ec4b064289408cfb0c2f8b299', CONFIG['controller_source'])
+        self.assertEqual(hashlib.sha256((SCRIPTS / 'handoff.py').read_bytes()).hexdigest(), '8313b8c5bf88a42c4cd8b3131fc576360fb0d2b6d120aa30d1a820f4e5ada773')
+        self.assertIn('693e45bded9a4ec8167573e82b423c823c193ec0', CONFIG['controller_source'])
 
     def test_exact_complete_inventory(self):
         inventory = json.loads((SCRIPTS / 'tests/fixtures/gate-inventory.json').read_text())
-        self.assertEqual(GATES, [dict(path=inventory['path'], jobs=inventory['jobs'])])
+        expected = [dict(path=item['path'], jobs=item['jobs']) for item in inventory]
+        self.assertEqual(GATES, expected)
+        self.assertEqual(len(GATES), 1)
         self.assertEqual(len(GATES[0]['jobs']), 8)
-        source = (ROOT / inventory['path']).read_text()
-        self.assertIn('name: ' + inventory['workflow_name'], source)
-        self.assertIn('  pull_request:\n    paths:', source)
-        self.assertIn('name: resolve image identity', source)
-        self.assertEqual(sum(' / deploy + test on shared GKE' in name for name in inventory['jobs']), 2)
-        self.assertEqual(sum(' / build (' in name for name in inventory['jobs']), 2)
+        source0 = (ROOT / inventory[0]['path']).read_text()
+        self.assertIn('name: ' + inventory[0]['workflow_name'], source0)
+        self.assertIn('  pull_request:\n    paths:', source0)
+        self.assertIn('name: resolve image identity', source0)
+        self.assertEqual(sum(' / deploy + test on shared GKE' in name for name in inventory[0]['jobs']), 2)
+        self.assertEqual(sum(' / build (' in name for name in inventory[0]['jobs']), 2)
 
     def test_no_vacuous_done_empty_or_invalid_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -147,7 +149,10 @@ class HandoffTests(unittest.TestCase):
 
 class FailureOnlyApplyTests(unittest.TestCase):
     def setUp(self):
-        self.pr = dict(state='open', body='Closes #7', head=dict(sha=SHA, ref='issue/7', repo={'full_name': 'o/r'}))
+        self.pr = dict(number=8, state='open', body='Closes #7', changed_files=1,
+                       base=dict(sha=SHA),
+                       head=dict(sha=SHA, ref='issue/7', repo={'full_name': 'o/r'}))
+        self.files = [{'filename': 'src/main.rs', 'status': 'modified'}]
         self.labels = {'doing', 'priority:p1'}
         self.comments, self.writes = [], []
         self.failed = evidence()
@@ -171,9 +176,14 @@ class FailureOnlyApplyTests(unittest.TestCase):
             self.labels.discard(path.rsplit('/',1)[1])
         return {}
 
+    def mock_pages(self, path, *a):
+        if '/files' in path:
+            return self.files
+        return self.comments
+
     def invoke(self, snapshots=None):
         args = argparse.Namespace(repo='o/r', pr=8, head=SHA, apply=True, run_id=1)
-        with patch.object(ci, 'api', side_effect=self.api), patch.object(ci, 'pages', side_effect=lambda *a: self.comments), patch.object(ci, 'snapshot', return_value=self.failed if snapshots is None else snapshots), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(ci, 'api', side_effect=self.api), patch.object(ci, 'pages', side_effect=self.mock_pages), patch.object(ci, 'snapshot', return_value=self.failed if snapshots is None else snapshots), contextlib.redirect_stdout(io.StringIO()):
             return ci.process_head(args, CONFIG, check_event=False)
 
     def test_success_and_missing_have_no_writes(self):

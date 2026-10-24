@@ -1,4 +1,4 @@
-# Controller vendored unchanged from faberline/aw@67af8d020df3ca2ec4b064289408cfb0c2f8b299.
+# Controller vendored unchanged from faberline/aw@693e45bded9a4ec8167573e82b423c823c193ec0.
 # Failure-only: current-head failures may return doing to todo; done is disabled.
 # This is a trusted default-branch workflow, NOT pull_request_target execution.
 name: Issue CI handoff
