@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex};
 use service_auth::ReloadableRoleMapVerifier;
 
 use tape_access::AuthConfig;
-use tape_journal::application::{JournalService, TapeMetrics};
+use tape_journal::application::{JournalError, JournalService, TapeMetrics};
 use tape_replication::raft::TapeRaft;
-use tape_shared_kernel::{TapeJournal, TapeOutcome};
+use tape_shared_kernel::{Subscription, TapeJournal, TapeOutcome};
 use tape_storage::file_log::FileLog;
 use tape_storage::wal::CommitCoordinator;
 
@@ -125,5 +125,14 @@ impl AppState {
         self.service
             .provision_startup_subscription(topic, name)
             .await
+    }
+
+    /// Create a subscription through the journal service (replicated in HA mode).
+    pub async fn create_subscription(
+        &self,
+        topic: String,
+        name: String,
+    ) -> Result<Subscription, JournalError> {
+        self.service.create_subscription(topic, name).await
     }
 }
