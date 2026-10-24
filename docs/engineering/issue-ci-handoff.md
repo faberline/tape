@@ -22,8 +22,7 @@ manifest, or accepts artifacts as authorization. All writers share the
 Permissions are contents/actions/PR read and issues write only.
 
 The workflow guard requires explicit failure-only mode and an explicit nonempty list of
-qualification blockers. It uses the pinned controller's `load_config` and
-validates the `qualification` v1 contract schema. All-green evidence remains
+qualification blockers. It uses the pinned controller's `load_config`. All-green evidence remains
 pending even if blockers are accidentally cleared. A separate reviewed rollout
 decision is required to authorize any future done transition; this guard refuses full mode.
 
@@ -41,42 +40,88 @@ refused. Receipts deduplicate handoffs per head/policy/coding epoch; unrelated
 labels are preserved. The controller rechecks current head and complete run
 snapshots before writes and lifecycle state before removing old labels.
 
-## Affected docs qualification gates
+## Staging principle: Live required gates vs Candidate qualification
 
-Workflow: `.github/workflows/affected-docs.yml`
-Blob SHA: `bbcb437325754ea56e7d5a91477804d11ecdafd6`
+Under the Defer44 staging principle, live required gates must not introduce narrowing
+qualification in front of all existing PR failure reconciliation prior to complete
+activation.
 
-Two real cloud jobs are configured on GitHub runners:
-1. `docs-copy-contract` (`kind: policy`): Deterministic validator (`scripts/issue-ci/validate-docs-copy.py`)
-   verifies that PR changes are strictly bounded to the three runbook copy paths, byte-identical
-   handoff, promoted section levels, verbatim scheme preservation, and correct operations navigation.
-2. `backup-destination-docs` (`kind: unit`): Runs affected Rust test selector:
-   `cargo test --locked -p tape --test it -- backup_destination_docs::`
-   via `scripts/issue-ci/run-backup-docs-tests.py`, ensuring all six named cases pass.
+### 1. Live required gates (`.github/issue-ci-required-gates.json`)
+- Evaluated by the live default-branch `issue-ci.yml` reconciler.
+- Contains only the active GKE test workflow inventory:
+  `.github/workflows/gke-test.yml` (8 jobs):
+  - `build test-client image`
+  - `build server image / build (x86_64-unknown-linux-musl)`
+  - `build server image / build (aarch64-unknown-linux-musl)`
+  - `build server image / publish ghcr test image`
+  - `resolve image identity`
+  - `image e2e (arm64)`
+  - `GKE e2e (operator_recovery) / deploy + test on shared GKE`
+  - `GKE e2e (operator_ha) / deploy + test on shared GKE`
+- Contains NO live `qualification` block. This ensures that any non-docs PR experiencing a GKE failure
+  is cleanly reconciled to `todo` without failing qualification selection or applicability checks.
+- Retains `lifecycle_mode: failure-only` and all 4 `qualification_blockers`.
 
-Applicability rules map only:
-- `docs/operations/README.md`
-- `docs/runbooks/cold-restore.md`
-- `docs/runbooks/disk-full.md`
-Unknown or extra changed paths fail closed.
-Exemptions for `functional_e2e` and `performance` are explicitly justified for these exact
-documentation-copy paths (no executable, deployed, topology, storage, or workload change).
+### 2. Candidate qualification contract (`.github/issue-ci-candidate-gates.json`)
+- Defines the staged qualification contract v1 for affected docs runbook copy qualification.
+- Validated offline via `scripts/issue-ci/validate-policy.py`.
+- Includes trusted workflow identities:
+  - `.github/workflows/gke-test.yml` (ID: 389097869)
+  - `.github/workflows/affected-docs.yml` (provisional ID: 1, definition blob SHA pinned)
+- Checks:
+  - `docs-copy-contract` (`kind: policy`): executes `validate-docs-copy.py`
+  - `backup-destination-docs` (`kind: unit`): executes `run-backup-docs-tests.py`
+- Mandatory policy check: `always: ["docs-copy-contract"]`
+- Protected paths:
+  - `.github/actions/**`
+  - `.github/issue-ci-candidate-gates.json`
+  - `.github/issue-ci-required-gates.json`
+  - `.github/workflows/**`
+  - `scripts/ci/**`
+  - `scripts/issue-ci/**`
+- Rules:
+  Maps strictly to the three runbook documentation paths:
+  - `docs/operations/README.md`
+  - `docs/runbooks/cold-restore.md`
+  - `docs/runbooks/disk-full.md`
+  Requires `backup-destination-docs`.
+  Explicit exemptions for `functional_e2e` and `performance` are justified because these changes
+  are exact content-preserving copies of human-read documentation with no runtime, dependency,
+  deployment, topology, storage, workload or selector changes.
 
-## Gate inventory
+## Trusted base execution for affected docs
 
-Manifest `.github/issue-ci-required-gates.json`:
-1. `.github/workflows/gke-test.yml` (8 jobs):
-   - build test-client image
-   - build server image / build (x86_64-unknown-linux-musl)
-   - build server image / build (aarch64-unknown-linux-musl)
-   - build server image / publish ghcr test image
-   - resolve image identity
-   - image e2e (arm64)
-   - GKE e2e (operator_recovery) / deploy + test on shared GKE
-   - GKE e2e (operator_ha) / deploy + test on shared GKE
-2. `.github/workflows/affected-docs.yml` (2 jobs):
-   - docs-copy-contract
-   - backup-destination-docs
+In `.github/workflows/affected-docs.yml`:
+- The `docs-copy-contract` job checks out the trusted base branch at `trusted-base` (`ref: ${{ github.event.pull_request.base.sha }}`).
+- The product PR head is checked out at `product-head` (`ref: ${{ github.event.pull_request.head.sha }}`).
+- The validator `trusted-base/scripts/issue-ci/validate-docs-copy.py` executes from the trusted base,
+  treating all markdown files in `product-head` strictly as DATA.
+- The `backup-destination-docs` job executes on the cloud Ubuntu runner via `scripts/issue-ci/run-backup-docs-tests.py`,
+  running `cargo test --locked -p tape --test it -- backup_destination_docs::` and verifying all 6 named cases pass.
+
+## Infrastructure CI on GitHub runners
+
+Workflow `.github/workflows/ci-infrastructure.yml`:
+- Triggers on `pull_request` touching infrastructure files:
+  - `.github/workflows/**`
+  - `scripts/issue-ci/**`
+  - `.github/issue-ci*.json`
+  - `docs/engineering/issue-ci-handoff.md`
+- Runs in an unprivileged GitHub runner (`ubuntu-latest`) with `contents: read`.
+- Validates:
+  1. `python3 scripts/issue-ci/check-policy.py .github/issue-ci-required-gates.json`
+  2. `python3 scripts/issue-ci/validate-policy.py .github/issue-ci-candidate-gates.json`
+  3. `python3 -m unittest discover -s scripts/issue-ci/tests -v`
+- Ensures PRs modifying CI infrastructure generate authentic cloud CI check evidence.
+
+## Activation prerequisites for candidate qualification
+
+Before promoting `.github/issue-ci-candidate-gates.json` into live `.github/issue-ci-required-gates.json`:
+1. **Land PR #41 on default branch**: Establishes the validator scripts, test suite, and candidate policy definitions on main.
+2. **Register `.github/workflows/affected-docs.yml`**: Ensure the workflow is registered in GitHub Actions on the default branch, and query the real numeric workflow ID assigned by GitHub.
+3. **Record immutable blob SHA**: Compute the git blob SHA of `.github/workflows/affected-docs.yml` as committed on the default branch.
+4. **Update `issue-ci.yml`**: Add `"affected-docs"` to `workflow_run.workflows` in `.github/workflows/issue-ci.yml`.
+5. **Promote candidate gates**: Replace the live configuration in `.github/issue-ci-required-gates.json` with the candidate qualification configuration updated with the verified numeric workflow ID and default-branch blob SHA.
 
 ## Unresolved coverage decisions (blockers retained)
 

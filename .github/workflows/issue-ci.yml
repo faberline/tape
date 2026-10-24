@@ -4,7 +4,7 @@
 name: Issue CI handoff
 on:
   workflow_run:
-    workflows: ["gke-test", "affected-docs"]
+    workflows: ["gke-test"]
     types: [completed]
 permissions:
   actions: read

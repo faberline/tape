@@ -49,7 +49,7 @@ EXPECTED_CHANGES = validator.EXPECTED_CHANGES
 ci = load_module("handoff", SCRIPTS / "handoff.py")
 q = ci.qualification_module()
 
-POLICY_FILE = ROOT / ".github/issue-ci-required-gates.json"
+POLICY_FILE = ROOT / ".github/issue-ci-candidate-gates.json"
 BASE_HANDOFF_CONTENT = (ROOT / "docs/deployment-handoff.md").read_text()
 BASE_OPS_CONTENT = (ROOT / "docs/operations/README.md").read_text()
 

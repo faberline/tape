@@ -46,18 +46,14 @@ class HandoffTests(unittest.TestCase):
         inventory = json.loads((SCRIPTS / 'tests/fixtures/gate-inventory.json').read_text())
         expected = [dict(path=item['path'], jobs=item['jobs']) for item in inventory]
         self.assertEqual(GATES, expected)
+        self.assertEqual(len(GATES), 1)
         self.assertEqual(len(GATES[0]['jobs']), 8)
-        self.assertEqual(len(GATES[1]['jobs']), 2)
         source0 = (ROOT / inventory[0]['path']).read_text()
         self.assertIn('name: ' + inventory[0]['workflow_name'], source0)
         self.assertIn('  pull_request:\n    paths:', source0)
         self.assertIn('name: resolve image identity', source0)
         self.assertEqual(sum(' / deploy + test on shared GKE' in name for name in inventory[0]['jobs']), 2)
         self.assertEqual(sum(' / build (' in name for name in inventory[0]['jobs']), 2)
-        source1 = (ROOT / inventory[1]['path']).read_text()
-        self.assertIn('name: ' + inventory[1]['workflow_name'], source1)
-        self.assertIn('docs-copy-contract', inventory[1]['jobs'])
-        self.assertIn('backup-destination-docs', inventory[1]['jobs'])
 
     def test_no_vacuous_done_empty_or_invalid_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -124,7 +120,7 @@ class HandoffTests(unittest.TestCase):
         old = dict(good, id=2, run_attempt=1)
         stale = dict(good, id=100, head_sha='b' * 40)
         foreign = dict(good, id=101, head_repository={'full_name': 'fork/r'})
-        with patch.object(ci, 'pages', side_effect=[[old, good, stale, foreign], [], [], []]) as pages:
+        with patch.object(ci, 'pages', side_effect=[[old, good, stale, foreign], []]) as pages:
             snapshots = ci.snapshot('o/r', SHA, CONFIG)
         self.assertEqual(snapshots[GATES[0]['path']][0]['id'], 3)
         self.assertIn('/runs/3/attempts/2/jobs', pages.call_args_list[1].args[0])
@@ -146,32 +142,26 @@ class HandoffTests(unittest.TestCase):
         self.assertLess(workflow.index('python3 scripts/issue-ci/check-policy.py'), workflow.index('python3 scripts/issue-ci/handoff.py'))
         self.assertIn('--reconcile', workflow)
         self.assertIn('group: issue-ci-handoff', workflow)
-        self.assertIn('workflows: ["gke-test", "affected-docs"]', workflow)
+        self.assertIn('workflows: ["gke-test"]', workflow)
         self.assertNotIn('pull_request_target', workflow.replace('# This is a trusted default-branch workflow, NOT pull_request_target execution.', ''))
         for forbidden in ('pull_request.head', 'download-artifact', 'workflow_dispatch:', 'id-token:', 'packages:'):
             self.assertNotIn(forbidden, workflow)
 
 class FailureOnlyApplyTests(unittest.TestCase):
     def setUp(self):
-        self.pr = dict(number=8, state='open', body='Closes #7', changed_files=3,
+        self.pr = dict(number=8, state='open', body='Closes #7', changed_files=1,
                        base=dict(sha=SHA),
                        head=dict(sha=SHA, ref='issue/7', repo={'full_name': 'o/r'}))
-        self.files = [{'filename': p, 'status': 'modified' if p.endswith('README.md') else 'added'}
-                      for p in ['docs/operations/README.md', 'docs/runbooks/cold-restore.md', 'docs/runbooks/disk-full.md']]
+        self.files = [{'filename': 'src/main.rs', 'status': 'modified'}]
         self.labels = {'doing', 'priority:p1'}
         self.comments, self.writes = [], []
         self.failed = evidence()
         self.failed[GATES[0]['path']][1][0]['conclusion'] = 'failure'
-        self.failed[GATES[1]['path']][1][0]['conclusion'] = 'failure'
 
     def api(self, path, method='GET', data=None):
         if method == 'GET':
             if '/pulls/' in path:
                 return self.pr
-            if '/contents/' in path:
-                wf = path.split('contents/')[1].split('?')[0]
-                blob = CONFIG['qualification']['trusted_workflows'][wf]['definition_sha']
-                return dict(sha=blob)
             return dict(state='open', labels=[dict(name=n) for n in self.labels])
         self.writes.append((path, method, data))
         if method == 'POST' and path.endswith('/comments'):
@@ -204,7 +194,7 @@ class FailureOnlyApplyTests(unittest.TestCase):
     def test_only_doing_returns_todo_and_preserves_other_labels(self):
         self.invoke()
         self.assertEqual(self.labels, {'todo', 'priority:p1'})
-        self.assertIn(self.failed[GATES[1]['path']][1][0]['html_url'], self.comments[0]['body'])
+        self.assertIn(self.failed[GATES[0]['path']][1][0]['html_url'], self.comments[0]['body'])
         self.assertFalse(any('/labels/done' in x[0] for x in self.writes))
 
     def test_done_todo_and_mixed_issues_cannot_be_mutated(self):

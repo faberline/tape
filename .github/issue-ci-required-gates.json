@@ -19,65 +19,7 @@
         "GKE e2e (operator_recovery) / deploy + test on shared GKE",
         "GKE e2e (operator_ha) / deploy + test on shared GKE"
       ]
-    },
-    {
-      "path": ".github/workflows/affected-docs.yml",
-      "jobs": [
-        "docs-copy-contract",
-        "backup-destination-docs"
-      ]
     }
   ],
-  "qualification": {
-    "version": 1,
-    "trusted_workflows": {
-      ".github/workflows/gke-test.yml": {
-        "id": 389097869,
-        "definition_sha": "052a2e83dcac71da8b6292661d4200c985b3c1d3"
-      },
-      ".github/workflows/affected-docs.yml": {
-        "id": 1,
-        "definition_sha": "bbcb437325754ea56e7d5a91477804d11ecdafd6"
-      }
-    },
-    "checks": {
-      "docs-copy-contract": {
-        "workflow": ".github/workflows/affected-docs.yml",
-        "job": "docs-copy-contract",
-        "kind": "policy"
-      },
-      "backup-destination-docs": {
-        "workflow": ".github/workflows/affected-docs.yml",
-        "job": "backup-destination-docs",
-        "kind": "unit"
-      }
-    },
-    "always": [
-      "docs-copy-contract"
-    ],
-    "protected_paths": [
-      ".github/actions/**",
-      ".github/issue-ci-required-gates.json",
-      ".github/workflows/**",
-      "scripts/ci/**",
-      "scripts/issue-ci/**"
-    ],
-    "rules": [
-      {
-        "paths": [
-          "docs/operations/README.md",
-          "docs/runbooks/cold-restore.md",
-          "docs/runbooks/disk-full.md"
-        ],
-        "require": [
-          "backup-destination-docs"
-        ],
-        "exempt": {
-          "functional_e2e": "Exact content-preserving copy of existing human-read runbooks plus navigation entries, with no executable/runtime, dependency, deployment, storage, topology, workload or selector change.",
-          "performance": "Exact content-preserving copy of existing human-read runbooks plus navigation entries, with no executable/runtime, dependency, deployment, storage, topology, workload or selector change."
-        }
-      }
-    ]
-  },
   "lifecycle_mode": "failure-only"
 }

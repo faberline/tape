@@ -13,13 +13,5 @@
       "GKE e2e (operator_ha) / deploy + test on shared GKE"
     ],
     "inventory_run_url": "https://github.com/faberline/tape/actions/runs/39731235238"
-  },
-  {
-    "workflow_name": "affected-docs",
-    "path": ".github/workflows/affected-docs.yml",
-    "jobs": [
-      "docs-copy-contract",
-      "backup-destination-docs"
-    ]
   }
 ]
