@@ -66,8 +66,8 @@ activation.
 - Defines the staged qualification contract v1 for affected docs runbook copy qualification.
 - Validated offline via `scripts/issue-ci/validate-policy.py`.
 - Includes trusted workflow identities:
-  - `.github/workflows/gke-test.yml` (ID: 389097869)
-  - `.github/workflows/affected-docs.yml` (provisional ID: 1, definition blob SHA pinned)
+  - `.github/workflows/gke-test.yml` (ID: 389097869, blob SHA: `052a2e83dcac71da8b6292661d4200c985b3c1d3`)
+  - `.github/workflows/affected-docs.yml` (provisional ID: 1, blob SHA: `9782c830864c85559763ddb556ac32bfa3c9c835`)
 - Checks:
   - `docs-copy-contract` (`kind: policy`): executes `validate-docs-copy.py`
   - `backup-destination-docs` (`kind: unit`): executes `run-backup-docs-tests.py`
@@ -89,15 +89,32 @@ activation.
   are exact content-preserving copies of human-read documentation with no runtime, dependency,
   deployment, topology, storage, workload or selector changes.
 
-## Trusted base execution for affected docs
+## Trusted base execution and deterministic document validation
 
 In `.github/workflows/affected-docs.yml`:
 - The `docs-copy-contract` job checks out the trusted base branch at `trusted-base` (`ref: ${{ github.event.pull_request.base.sha }}`).
 - The product PR head is checked out at `product-head` (`ref: ${{ github.event.pull_request.head.sha }}`).
 - The validator `trusted-base/scripts/issue-ci/validate-docs-copy.py` executes from the trusted base,
   treating all markdown files in `product-head` strictly as DATA.
-- The `backup-destination-docs` job executes on the cloud Ubuntu runner via `scripts/issue-ci/run-backup-docs-tests.py`,
-  running `cargo test --locked -p tape --test it -- backup_destination_docs::` and verifying all 6 named cases pass.
+- **Frozen Git tree & NUL-delimited inventory**:
+  - The validator uses `GitCheckoutLoader` across both checkouts, connecting them via `GIT_ALTERNATE_OBJECT_DIRECTORIES`.
+  - It runs `git diff-tree -r -z --raw -M -C <base_sha> <head_sha>` to obtain complete change metadata.
+  - Rejects forbidden renames, copies, type changes, symlinks (`120000`), mode changes (`old_mode != new_mode`), and unexpected paths.
+  - Verifies exact `100644` modes for all allowed files.
+  - Reads document bytes directly from git blob objects at the frozen commits (avoiding untracked filesystem diffs and text newline normalization).
+  - Strictly rejects any CRLF (`\r\n`) or CR (`\r`) in document bytes.
+- **Exact operations whole-document transform**:
+  - Requires the two exact runbook rows:
+    ```markdown
+    | [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |
+    | [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |
+    ```
+    to be added immediately preceding the node-drain row.
+  - Reconstructed check: after removing EXACTLY these two rows, the remaining document must be 100% byte-identical to base `docs/operations/README.md`.
+- **Exact Cargo PR head execution**:
+  - The `backup-destination-docs` job explicitly checks out `ref: ${{ github.event.pull_request.head.sha }}` (not default merge commit).
+  - Step verifies `git rev-parse HEAD` equals `github.event.pull_request.head.sha` and logs both head and base.
+  - Runs `scripts/issue-ci/run-backup-docs-tests.py` on the Ubuntu runner, verifying all 6 named `backup_destination_docs::` tests pass (6 passed, 0 failed, 0 ignored).
 
 ## Infrastructure CI on GitHub runners
 

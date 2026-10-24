@@ -2,14 +2,18 @@
 """Deterministic validator for runbook copy qualification.
 
 Inspects product-head document bytes as data against the frozen base.
+Uses frozen Git trees and complete NUL-delimited inventory with change status,
+old/new paths, and mode/type/blob identities.
 Zero execution of runbook shell commands. Zero PR self-approval.
 """
 import argparse
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+from typing import Dict, List, Optional, Tuple
 
 
 EXPECTED_CHANGES = (
@@ -43,133 +47,260 @@ class ValidationError(RuntimeError):
     pass
 
 
+@dataclass
+class DiffEntry:
+    old_mode: str
+    new_mode: str
+    old_sha: str
+    new_sha: str
+    status: str
+    src_path: str
+    dst_path: Optional[str] = None
+
+
 class FileLoader:
     """Abstract interface for loading file bytes and metadata."""
-    def read_text(self, path: str, side: str) -> str:
+    def inventory(self) -> Dict[str, DiffEntry]:
+        raise NotImplementedError
+
+    def read_bytes(self, path: str, side: str) -> bytes:
         raise NotImplementedError
 
     def file_exists(self, path: str, side: str) -> bool:
         raise NotImplementedError
 
-    def changed_files(self) -> list:
-        raise NotImplementedError
-
-    def check_file_mode_and_symlink(self, path: str, side: str):
+    def get_mode_and_type(self, path: str, side: str) -> Tuple[str, str]:
         raise NotImplementedError
 
 
-class GitLoader(FileLoader):
-    """Loads file data and change lists from Git revisions."""
-    def __init__(self, base_ref: str, head_ref: str, repo_dir: Path):
+class GitCheckoutLoader(FileLoader):
+    """Loads file data and change lists from real Git checkouts and frozen trees."""
+    def __init__(self, base_dir: Path, head_dir: Path, base_ref: str, head_ref: str):
+        self.base_dir = Path(base_dir).resolve()
+        self.head_dir = Path(head_dir).resolve()
         self.base_ref = base_ref
         self.head_ref = head_ref
-        self.repo_dir = repo_dir
+        self._init_repos()
 
-    def _show(self, ref: str, path: str) -> str:
-        try:
-            return subprocess.check_output(
-                ["git", "show", f"{ref}:{path}"],
-                cwd=self.repo_dir,
-                stderr=subprocess.PIPE,
+    def _init_repos(self):
+        # Verify repositories exist
+        for d, name in ((self.base_dir, "base"), (self.head_dir, "head")):
+            res = subprocess.run(
+                ["git", "-C", str(d), "rev-parse", "--is-inside-work-tree"],
+                capture_output=True,
                 text=True,
             )
-        except subprocess.CalledProcessError as exc:
-            raise ValidationError(f"failed to read {path} at {ref}: {exc.stderr.strip()}")
+            if res.returncode != 0:
+                raise ValidationError(f"{name} directory is not a valid git repository: {d}")
 
-    def read_text(self, path: str, side: str) -> str:
-        ref = self.base_ref if side == "base" else self.head_ref
-        return self._show(ref, path)
+        # Resolve exact commit SHAs
+        try:
+            self.base_sha = subprocess.check_output(
+                ["git", "-C", str(self.base_dir), "rev-parse", "--verify", f"{self.base_ref}^{{commit}}"],
+                stderr=subprocess.PIPE,
+                text=True,
+            ).strip()
+        except subprocess.CalledProcessError as exc:
+            raise ValidationError(f"cannot resolve base commit {self.base_ref} in {self.base_dir}: {exc.stderr.strip()}")
+
+        try:
+            self.head_sha = subprocess.check_output(
+                ["git", "-C", str(self.head_dir), "rev-parse", "--verify", f"{self.head_ref}^{{commit}}"],
+                stderr=subprocess.PIPE,
+                text=True,
+            ).strip()
+        except subprocess.CalledProcessError as exc:
+            raise ValidationError(f"cannot resolve head commit {self.head_ref} in {self.head_dir}: {exc.stderr.strip()}")
+
+        if not re.fullmatch(r"[0-9a-f]{40}", self.base_sha):
+            raise ValidationError(f"invalid base SHA format: {self.base_sha}")
+        if not re.fullmatch(r"[0-9a-f]{40}", self.head_sha):
+            raise ValidationError(f"invalid head SHA format: {self.head_sha}")
+
+        print(f"Verified base commit: {self.base_sha} ({self.base_dir})")
+        print(f"Verified head commit: {self.head_sha} ({self.head_dir})")
+
+        # Set up git environment for cross-directory object access
+        self.env = dict(os.environ)
+        if self.base_dir != self.head_dir:
+            base_objects = subprocess.check_output(
+                ["git", "-C", str(self.base_dir), "rev-parse", "--git-path", "objects"],
+                text=True,
+            ).strip()
+            abs_base_objects = str((self.base_dir / base_objects).resolve())
+            self.env["GIT_ALTERNATE_OBJECT_DIRECTORIES"] = abs_base_objects
+
+            # Verify head repo can resolve base_sha, fetch if necessary
+            check = subprocess.run(
+                ["git", "-C", str(self.head_dir), "cat-file", "-e", f"{self.base_sha}^{{commit}}"],
+                env=self.env,
+                capture_output=True,
+            )
+            if check.returncode != 0:
+                fetch = subprocess.run(
+                    ["git", "-C", str(self.head_dir), "fetch", "--quiet", str(self.base_dir), self.base_sha],
+                    capture_output=True,
+                    text=True,
+                )
+                if fetch.returncode != 0:
+                    raise ValidationError(f"failed to fetch base objects into head repository: {fetch.stderr.strip()}")
+
+    def inventory(self) -> Dict[str, DiffEntry]:
+        cmd = [
+            "git", "-C", str(self.head_dir),
+            "diff-tree", "-r", "-z", "--raw", "-M", "-C",
+            self.base_sha, self.head_sha
+        ]
+        try:
+            raw = subprocess.check_output(cmd, env=self.env)
+        except subprocess.CalledProcessError as exc:
+            raise ValidationError(f"git diff-tree failed: {exc}")
+
+        entries: Dict[str, DiffEntry] = {}
+        if not raw:
+            return entries
+
+        parts = raw.split(b"\x00")
+        i = 0
+        while i < len(parts) - 1:
+            meta = parts[i].decode("latin1").strip()
+            if not meta:
+                i += 1
+                continue
+            if not meta.startswith(":"):
+                raise ValidationError(f"malformed diff-tree output: {meta}")
+            tokens = meta[1:].split()
+            if len(tokens) != 5:
+                raise ValidationError(f"invalid diff-tree tokens count: {meta}")
+            old_mode, new_mode, old_sha, new_sha, status = tokens
+            src_path = parts[i + 1].decode("utf-8")
+            if status.startswith("R") or status.startswith("C"):
+                dst_path = parts[i + 2].decode("utf-8")
+                entry = DiffEntry(old_mode, new_mode, old_sha, new_sha, status, src_path, dst_path)
+                entries[dst_path] = entry
+                i += 3
+            else:
+                entry = DiffEntry(old_mode, new_mode, old_sha, new_sha, status, src_path)
+                entries[src_path] = entry
+                i += 2
+        return entries
+
+    def read_bytes(self, path: str, side: str) -> bytes:
+        ref = self.base_sha if side == "base" else self.head_sha
+        repo = self.base_dir if side == "base" else self.head_dir
+        cmd = ["git", "-C", str(repo), "cat-file", "blob", f"{ref}:{path}"]
+        try:
+            return subprocess.check_output(cmd, env=self.env)
+        except subprocess.CalledProcessError as exc:
+            raise ValidationError(f"failed to read blob for {path} at {side} ({ref}): {exc}")
 
     def file_exists(self, path: str, side: str) -> bool:
-        ref = self.base_ref if side == "base" else self.head_ref
-        res = subprocess.run(
-            ["git", "cat-file", "-e", f"{ref}:{path}"],
-            cwd=self.repo_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        ref = self.base_sha if side == "base" else self.head_sha
+        repo = self.base_dir if side == "base" else self.head_dir
+        cmd = ["git", "-C", str(repo), "cat-file", "-e", f"{ref}:{path}"]
+        res = subprocess.run(cmd, env=self.env, capture_output=True)
         return res.returncode == 0
 
-    def changed_files(self) -> list:
-        out = subprocess.check_output(
-            ["git", "diff", "--name-only", f"{self.base_ref}...{self.head_ref}"],
-            cwd=self.repo_dir,
-            text=True,
-        )
-        return [line.strip() for line in out.splitlines() if line.strip()]
-
-    def check_file_mode_and_symlink(self, path: str, side: str):
-        ref = self.base_ref if side == "base" else self.head_ref
-        out = subprocess.check_output(
-            ["git", "ls-tree", ref, path],
-            cwd=self.repo_dir,
-            text=True,
-        ).strip()
+    def get_mode_and_type(self, path: str, side: str) -> Tuple[str, str]:
+        ref = self.base_sha if side == "base" else self.head_sha
+        repo = self.base_dir if side == "base" else self.head_dir
+        cmd = ["git", "-C", str(repo), "ls-tree", "-z", ref, path]
+        try:
+            out = subprocess.check_output(cmd, env=self.env)
+        except subprocess.CalledProcessError as exc:
+            raise ValidationError(f"ls-tree failed for {path} at {side}: {exc}")
         if not out:
-            raise ValidationError(f"{path} not found in git tree at {ref}")
-        mode = out.split()[0]
-        if mode == "120000":
-            raise ValidationError(f"{path} is a symlink at {ref} (forbidden)")
-        if mode != "100644":
-            raise ValidationError(f"{path} has invalid file mode {mode} at {ref} (expected 100644)")
+            raise ValidationError(f"path {path} not found in ls-tree at {side} ({ref})")
+        parts = out.split(b"\x00")[0].decode("latin1").split()
+        if len(parts) < 3:
+            raise ValidationError(f"invalid ls-tree output for {path}: {out}")
+        return parts[0], parts[1]
 
 
-class DiskLoader(FileLoader):
-    """Loads file data from directory trees for offline fixture testing."""
-    def __init__(self, base_dir: Path, head_dir: Path, changed: list = None):
-        self.base_dir = base_dir
-        self.head_dir = head_dir
-        self._changed = changed
+class MemoryLoader(FileLoader):
+    """In-memory loader for fixture tests."""
+    def __init__(
+        self,
+        base_files: Dict[str, bytes],
+        head_files: Dict[str, bytes],
+        modes: Optional[Dict[Tuple[str, str], str]] = None,
+        types: Optional[Dict[Tuple[str, str], str]] = None,
+        diff_entries: Optional[Dict[str, DiffEntry]] = None,
+    ):
+        self.base_files = base_files
+        self.head_files = head_files
+        self.modes = modes or {}
+        self.types = types or {}
+        self.diff_entries = diff_entries
 
-    def read_text(self, path: str, side: str) -> str:
-        root = self.base_dir if side == "base" else self.head_dir
-        target = root / path
-        if not target.is_file():
-            raise ValidationError(f"missing {path} on {side} disk: {target}")
-        return target.read_text()
+    def inventory(self) -> Dict[str, DiffEntry]:
+        if self.diff_entries is not None:
+            return self.diff_entries
+        entries: Dict[str, DiffEntry] = {}
+        all_paths = sorted(set(self.base_files) | set(self.head_files))
+        for p in all_paths:
+            b = self.base_files.get(p)
+            h = self.head_files.get(p)
+            bm = self.modes.get((p, "base"), "100644")
+            hm = self.modes.get((p, "head"), "100644")
+            if b is None and h is not None:
+                entries[p] = DiffEntry("000000", hm, "0" * 40, "1" * 40, "A", p)
+            elif b is not None and h is None:
+                entries[p] = DiffEntry(bm, "000000", "1" * 40, "0" * 40, "D", p)
+            elif b != h or bm != hm:
+                entries[p] = DiffEntry(bm, hm, "1" * 40, "2" * 40, "M", p)
+        return entries
+
+    def read_bytes(self, path: str, side: str) -> bytes:
+        files = self.base_files if side == "base" else self.head_files
+        if path not in files:
+            raise ValidationError(f"missing {path} on {side}")
+        return files[path]
 
     def file_exists(self, path: str, side: str) -> bool:
-        root = self.base_dir if side == "base" else self.head_dir
-        return (root / path).is_file()
+        files = self.base_files if side == "base" else self.head_files
+        return path in files
 
-    def changed_files(self) -> list:
-        if self._changed is not None:
-            return self._changed
-        # Compute differences between base and head
-        changed = []
-        all_paths = set()
-        for root in (self.base_dir, self.head_dir):
-            if root.exists():
-                for p in root.rglob("*"):
-                    if p.is_file():
-                        all_paths.add(p.relative_to(root).as_posix())
-        for rel in sorted(all_paths):
-            b, h = self.base_dir / rel, self.head_dir / rel
-            if not b.exists() or not h.exists():
-                changed.append(rel)
-            elif b.read_bytes() != h.read_bytes():
-                changed.append(rel)
-        return changed
+    def get_mode_and_type(self, path: str, side: str) -> Tuple[str, str]:
+        mode = self.modes.get((path, side), "100644")
+        obj_type = self.types.get((path, side), "blob")
+        return mode, obj_type
 
-    def check_file_mode_and_symlink(self, path: str, side: str):
-        root = self.base_dir if side == "base" else self.head_dir
-        target = root / path
-        if target.is_symlink():
-            raise ValidationError(f"{path} is a symlink on {side} disk (forbidden)")
-        if not target.is_file():
-            raise ValidationError(f"{path} is not a regular file on {side} disk")
-        mode = oct(target.stat().st_mode & 0o777)
-        if mode not in ("0o644", "0o664"):
-            raise ValidationError(f"{path} has invalid file mode {mode} on {side} disk (expected 0o644)")
+
+def load_utf8_bytes(loader: FileLoader, path: str, side: str) -> Tuple[bytes, str]:
+    raw = loader.read_bytes(path, side)
+    if b"\r" in raw:
+        raise ValidationError(f"CRLF or CR detected in {path} at {side} (forbidden)")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValidationError(f"invalid UTF-8 in {path} at {side}: {exc}")
+    return raw, text
 
 
 def validate_docs_copy(loader: FileLoader) -> dict:
     assertions_passed = []
 
     # 1. Complete PR file inventory contains exactly the three listed document paths
-    changed = loader.changed_files()
-    if not changed:
+    inv = loader.inventory()
+    if not inv:
         raise ValidationError("assertion 1 failed: empty changed files inventory")
+
+    for path, entry in inv.items():
+        if entry.status.startswith("R"):
+            raise ValidationError(f"assertion 1 failed: forbidden rename detected: {entry.src_path} -> {entry.dst_path}")
+        if entry.status.startswith("C"):
+            raise ValidationError(f"assertion 1 failed: forbidden copy detected: {entry.src_path} -> {entry.dst_path}")
+        if entry.status == "T":
+            raise ValidationError(f"assertion 1 failed: forbidden type change detected: {entry.src_path}")
+        if entry.old_mode == "120000" or entry.new_mode == "120000":
+            raise ValidationError(f"assertion 1 failed: forbidden symlink detected: {entry.src_path}")
+        if entry.status == "M" and entry.old_mode != entry.new_mode:
+            raise ValidationError(f"assertion 1 failed: forbidden mode change detected: {entry.src_path} ({entry.old_mode} -> {entry.new_mode})")
+        if entry.status in ("A", "M") and entry.new_mode != "100644":
+            raise ValidationError(f"assertion 1 failed: invalid file mode {entry.new_mode} for {entry.src_path} (expected 100644)")
+
+    changed = sorted(inv.keys())
     unexpected = set(changed) - set(EXPECTED_CHANGES)
     if unexpected:
         raise ValidationError(f"assertion 1 failed: unexpected changed paths: {sorted(unexpected)}")
@@ -180,11 +311,17 @@ def validate_docs_copy(loader: FileLoader) -> dict:
         raise ValidationError(f"assertion 1 failed: duplicate or invalid inventory length: {len(changed)}")
 
     for p in EXPECTED_CHANGES:
-        loader.check_file_mode_and_symlink(p, "head")
+        mode, obj_type = loader.get_mode_and_type(p, "head")
+        if mode == "120000":
+            raise ValidationError(f"assertion 1 failed: {p} is a symlink at head (forbidden)")
+        if mode != "100644":
+            raise ValidationError(f"assertion 1 failed: {p} has invalid file mode {mode} at head (expected 100644)")
+        if obj_type != "blob":
+            raise ValidationError(f"assertion 1 failed: {p} has invalid type {obj_type} at head (expected blob)")
 
     assertions_passed.append("1. File inventory contains exactly the three expected document paths with valid modes")
 
-    # 8 (part 1). Check forbidden file and content changes
+    # 8. Check forbidden files, prefixes, extensions, and basenames
     if loader.file_exists(FORBIDDEN_FILE, "head"):
         raise ValidationError(f"assertion 8 failed: forbidden file {FORBIDDEN_FILE} is present")
 
@@ -202,9 +339,10 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     handoff_path = "docs/deployment-handoff.md"
     if not loader.file_exists(handoff_path, "base") or not loader.file_exists(handoff_path, "head"):
         raise ValidationError(f"assertion 2 failed: {handoff_path} must exist at both base and head")
-    base_handoff = loader.read_text(handoff_path, "base")
-    head_handoff = loader.read_text(handoff_path, "head")
-    if base_handoff != head_handoff:
+
+    base_handoff_raw, base_handoff = load_utf8_bytes(loader, handoff_path, "base")
+    head_handoff_raw, head_handoff = load_utf8_bytes(loader, handoff_path, "head")
+    if base_handoff_raw != head_handoff_raw:
         raise ValidationError(f"assertion 2 failed: {handoff_path} was modified (must remain byte-identical to base)")
 
     assertions_passed.append("2. docs/deployment-handoff.md is byte-identical to frozen base")
@@ -232,11 +370,9 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     if not (idx_sec7 < idx_cold < idx_disk < idx_div):
         raise ValidationError("assertion 5 failed: base handoff sections out of expected order")
 
-    # Check for duplicate headings in base handoff section
     if base_handoff.count(sec7_start) > 1 or base_handoff.count(cold_sub) > 1 or base_handoff.count(disk_sub) > 1:
         raise ValidationError("assertion 5 failed: duplicate headings in base handoff")
 
-    # Extract source sections
     cold_source = base_handoff[idx_sec7:idx_disk]
     disk_source = base_handoff[idx_disk:idx_div]
 
@@ -253,8 +389,8 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     disk_norm = disk_norm.rstrip("\n") + "\n"
 
     # Read head targets
-    cold_head = loader.read_text("docs/runbooks/cold-restore.md", "head")
-    disk_head = loader.read_text("docs/runbooks/disk-full.md", "head")
+    cold_head_raw, cold_head = load_utf8_bytes(loader, "docs/runbooks/cold-restore.md", "head")
+    disk_head_raw, disk_head = load_utf8_bytes(loader, "docs/runbooks/disk-full.md", "head")
 
     # 3. Cold-restore target verification
     cold_headings = [l for l in cold_head.splitlines() if l.startswith("#")]
@@ -288,41 +424,29 @@ def validate_docs_copy(loader: FileLoader) -> dict:
     assertions_passed.append("6. Supported schemes (file://, s3://, gs://) and qualifications preserved verbatim")
 
     # 7. Operations table retains existing rows and links, adds exactly two relative links next to node-drain runbook
-    base_ops = loader.read_text("docs/operations/README.md", "base")
-    head_ops = loader.read_text("docs/operations/README.md", "head")
+    base_ops_raw, base_ops = load_utf8_bytes(loader, "docs/operations/README.md", "base")
+    head_ops_raw, head_ops = load_utf8_bytes(loader, "docs/operations/README.md", "head")
 
-    base_rows = [l.strip() for l in base_ops.splitlines() if l.strip().startswith("| [")]
-    head_rows = [l.strip() for l in head_ops.splitlines() if l.strip().startswith("| [")]
+    new_cold_row = "| [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |\n"
+    new_disk_row = "| [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |\n"
+    combined_new_rows = new_cold_row + new_disk_row
+    node_drain_prefix = "| [Node drain and PodDisruptionBudget](../runbooks/node-drain-and-pdb.md) |"
 
-    expected_existing_links = [
-        "[Deployment handoff](../deployment-handoff.md)",
-        "[Node drain and PodDisruptionBudget](../runbooks/node-drain-and-pdb.md)",
-        "[Benchmark history](../benchmarks-scale.md)",
-    ]
-    for link in expected_existing_links:
-        if not any(link in row for row in head_rows):
-            raise ValidationError(f"assertion 7 failed: existing link {link} missing from head operations table")
+    if combined_new_rows not in head_ops:
+        raise ValidationError("assertion 7 failed: expected new runbook rows missing or altered in operations table")
 
-    new_cold_link = "| [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |"
-    new_disk_link = "| [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |"
+    if head_ops.count(combined_new_rows) != 1:
+        raise ValidationError("assertion 7 failed: expected new runbook rows appear multiple times")
 
-    if new_cold_link not in head_rows or new_disk_link not in head_rows:
-        raise ValidationError("assertion 7 failed: expected new runbook links missing from operations table")
-
-    if len(head_rows) != len(base_rows) + 2:
-        raise ValidationError(f"assertion 7 failed: expected exactly 2 rows added to operations table (was {len(head_rows) - len(base_rows)})")
-
-    # Verify placed next to node-drain runbook
-    idx_cold_row = head_rows.index(new_cold_link)
-    idx_disk_row = head_rows.index(new_disk_link)
-    drain_rows = [i for i, r in enumerate(head_rows) if "node-drain-and-pdb.md" in r]
-    if not drain_rows:
-        raise ValidationError("assertion 7 failed: node-drain row missing")
-    idx_drain = drain_rows[0]
-    if not (idx_cold_row + 1 == idx_disk_row and idx_disk_row + 1 == idx_drain):
+    if combined_new_rows + node_drain_prefix not in head_ops:
         raise ValidationError("assertion 7 failed: new runbook rows not placed immediately preceding node-drain runbook")
 
-    # Both targets exist at head
+    # Exact whole-document transform check:
+    # After removing EXACTLY the two intended new rows, remaining document must be byte-identical to base!
+    reconstructed_ops = head_ops.replace(combined_new_rows, "", 1)
+    if reconstructed_ops != base_ops:
+        raise ValidationError("assertion 7 failed: docs/operations/README.md contains unintended changes outside the two approved runbook rows")
+
     if not loader.file_exists("docs/runbooks/cold-restore.md", "head"):
         raise ValidationError("assertion 7 failed: cold-restore.md target does not exist at head")
     if not loader.file_exists("docs/runbooks/disk-full.md", "head"):
@@ -348,19 +472,18 @@ def main():
     parser = argparse.ArgumentParser(description="Validate docs copy contract between base and head")
     parser.add_argument("--base-ref", help="Base git commit reference (default: origin/main or HEAD~1)")
     parser.add_argument("--head-ref", help="Head git commit reference (default: HEAD)")
-    parser.add_argument("--base-dir", type=Path, help="Base directory for disk mode")
-    parser.add_argument("--head-dir", type=Path, help="Head directory for disk mode")
+    parser.add_argument("--base-dir", type=Path, help="Base directory for checkout mode")
+    parser.add_argument("--head-dir", type=Path, help="Head directory for checkout mode")
     parser.add_argument("--repo-dir", type=Path, default=Path.cwd(), help="Repository root directory")
     args = parser.parse_args()
 
-    if args.base_dir and args.head_dir:
-        loader = DiskLoader(args.base_dir, args.head_dir)
-        source_summary = f"disk: base={args.base_dir} head={args.head_dir}"
-    else:
-        base_ref = args.base_ref or "origin/main"
-        head_ref = args.head_ref or "HEAD"
-        loader = GitLoader(base_ref, head_ref, args.repo_dir)
-        source_summary = f"git: base={base_ref} head={head_ref}"
+    base_dir = (args.base_dir or args.repo_dir).resolve()
+    head_dir = (args.head_dir or args.repo_dir).resolve()
+    base_ref = args.base_ref or "origin/main"
+    head_ref = args.head_ref or "HEAD"
+
+    loader = GitCheckoutLoader(base_dir, head_dir, base_ref, head_ref)
+    source_summary = f"git: base={base_dir}@{loader.base_sha} head={head_dir}@{loader.head_sha}"
 
     try:
         result = validate_docs_copy(loader)

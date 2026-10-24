@@ -37,7 +37,7 @@
       },
       ".github/workflows/affected-docs.yml": {
         "id": 1,
-        "definition_sha": "c8f1a957ee3f8c4bc44123d17be1329d2c633e11"
+        "definition_sha": "9782c830864c85559763ddb556ac32bfa3c9c835"
       }
     },
     "checks": {

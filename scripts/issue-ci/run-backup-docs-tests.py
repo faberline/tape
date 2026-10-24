@@ -2,9 +2,11 @@
 """Run affected docs tests and verify all six named cases pass.
 
 Libtest zero-match exit code is NOT evidence. This runner ensures:
-1. Exact six named cases executed and reported ok.
-2. 6 passed, 0 failed, 0 ignored.
+1. Exact product HEAD verified against HEAD_SHA (no merge preview commit).
+2. Exact six named cases executed and reported ok.
+3. 6 passed, 0 failed, 0 ignored.
 """
+import os
 import re
 import subprocess
 import sys
@@ -35,6 +37,23 @@ def verify_test_output(output: str):
 
 
 def main():
+    head_sha = os.environ.get("HEAD_SHA")
+    base_sha = os.environ.get("BASE_SHA")
+    try:
+        current_head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception as exc:
+        print(f"Error determining git HEAD: {exc}", file=sys.stderr)
+        return 1
+
+    if head_sha and current_head != head_sha:
+        print(
+            f"Error: current git HEAD {current_head} does not match expected product head {head_sha}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Product HEAD: {current_head} (expected: {head_sha or 'n/a'}), Frozen BASE: {base_sha or 'n/a'}")
+
     cmd = ["cargo", "test", "--locked", "-p", "tape", "--test", "it", "--", "backup_destination_docs::"]
     print(f"Running command: {' '.join(cmd)}")
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
