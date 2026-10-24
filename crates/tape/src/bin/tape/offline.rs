@@ -110,6 +110,9 @@ pub(crate) struct SubscriptionCreateArgs {
     pub(crate) topic: String,
     /// Subscription name, also used as the durable checkpoint consumer name.
     pub(crate) name: String,
+    /// Ack deadline in seconds (10..=600, default 10).
+    #[arg(long, default_value = "10")]
+    pub(crate) ack_deadline_seconds: u64,
     /// Journal file. Defaults to `.tape/journal.json`.
     #[arg(long, default_value = ".tape/journal.json")]
     pub(crate) store: PathBuf,
@@ -215,8 +218,15 @@ pub(crate) fn checkpoint(args: CheckpointArgs) -> Result<()> {
 pub(crate) fn subscription(args: SubscriptionArgs) -> Result<()> {
     match args.command {
         SubscriptionCommand::Create(args) => {
+            if !(10..=600).contains(&args.ack_deadline_seconds) {
+                anyhow::bail!("ackDeadlineSeconds must be between 10 and 600");
+            }
             let mut journal = load_journal(&args.store)?;
-            let subscription = journal.create_subscription(args.topic, args.name)?;
+            let subscription = journal.create_subscription_with_deadline(
+                args.topic,
+                args.name,
+                args.ack_deadline_seconds,
+            )?;
             save_journal(&args.store, &journal)?;
             println!(
                 "{}",

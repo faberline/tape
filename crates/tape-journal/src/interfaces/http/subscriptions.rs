@@ -41,7 +41,45 @@ pub async fn subscription_create(
         Ok(req) => req,
         Err(bad) => return bad.into_response(),
     };
-    match service.create_subscription(topic, req.name).await {
+    let ack_deadline_seconds = match req.ack_deadline_seconds {
+        None => tape_shared_kernel::DEFAULT_ACK_DEADLINE_SECONDS,
+        Some(serde_json::Value::Number(num)) if num.is_u64() => {
+            let n = num.as_u64().unwrap();
+            if (tape_shared_kernel::MIN_ACK_DEADLINE_SECONDS
+                ..=tape_shared_kernel::MAX_ACK_DEADLINE_SECONDS)
+                .contains(&n)
+            {
+                n
+            } else {
+                return service_http::ApiErr::new(
+                    StatusCode::BAD_REQUEST,
+                    "bad_request",
+                    format!(
+                        "ackDeadlineSeconds must be an integer between {} and {}",
+                        tape_shared_kernel::MIN_ACK_DEADLINE_SECONDS,
+                        tape_shared_kernel::MAX_ACK_DEADLINE_SECONDS
+                    ),
+                )
+                .into_response();
+            }
+        }
+        _ => {
+            return service_http::ApiErr::new(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                format!(
+                    "ackDeadlineSeconds must be an integer between {} and {}",
+                    tape_shared_kernel::MIN_ACK_DEADLINE_SECONDS,
+                    tape_shared_kernel::MAX_ACK_DEADLINE_SECONDS
+                ),
+            )
+            .into_response();
+        }
+    };
+    match service
+        .create_subscription(topic, req.name, ack_deadline_seconds)
+        .await
+    {
         Ok(value) => (StatusCode::CREATED, Json(value)).into_response(),
         Err(error) => error.into_response(),
     }

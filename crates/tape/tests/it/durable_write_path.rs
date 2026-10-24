@@ -180,6 +180,7 @@ fn fixture_commands() -> Vec<TapeCommand> {
     commands.push(TapeCommand::SubscriptionCreate {
         topic: "orders".to_string(),
         name: "sub1".to_string(),
+        ack_deadline_seconds: 10,
     });
     commands.push(TapeCommand::RetentionPut {
         topic: "orders".to_string(),
@@ -235,8 +236,14 @@ fn apply_fixture_commands_via_public_journal_api(journal: &mut TapeJournal) {
                     .put_checkpoint_at(topic, consumer, offset, updated_at_ms)
                     .unwrap();
             }
-            TapeCommand::SubscriptionCreate { topic, name } => {
-                journal.create_subscription(topic, name).unwrap();
+            TapeCommand::SubscriptionCreate {
+                topic,
+                name,
+                ack_deadline_seconds,
+            } => {
+                journal
+                    .create_subscription_with_deadline(topic, name, ack_deadline_seconds)
+                    .unwrap();
             }
             TapeCommand::SubscriptionDelete { .. } | TapeCommand::SubscriptionAck { .. } => {
                 unreachable!("fixture_commands() never emits these variants")

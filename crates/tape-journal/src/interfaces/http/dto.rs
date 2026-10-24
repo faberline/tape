@@ -54,6 +54,9 @@ pub struct CheckpointPutRequest {
 #[serde(deny_unknown_fields)]
 pub struct SubscriptionCreateRequest {
     pub name: String,
+    #[serde(rename = "ackDeadlineSeconds", default)]
+    #[schema(value_type = Option<u64>, default = 10, minimum = 10, maximum = 600)]
+    pub ack_deadline_seconds: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
