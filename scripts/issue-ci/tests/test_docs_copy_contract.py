@@ -63,6 +63,7 @@ ValidationError = validator.ValidationError
 validate_docs_copy = validator.validate_docs_copy
 EXPECTED_CHANGES = validator.EXPECTED_CHANGES
 DiffEntry = validator.DiffEntry
+MANDATORY_WRAPPER = validator.MANDATORY_WRAPPER
 
 ci = load_module("handoff", SCRIPTS / "handoff.py")
 q = ci.qualification_module()
@@ -71,7 +72,9 @@ POLICY_FILE = ROOT / ".github/issue-ci-candidate-gates.json"
 BASE_HANDOFF_CONTENT = (ROOT / "docs/deployment-handoff.md").read_bytes().decode("utf-8")
 BASE_OPS_CONTENT = (ROOT / "docs/operations/README.md").read_bytes().decode("utf-8")
 
-COLD_RESTORE_CONTENT = """# Backup / restore runbook (#1329)
+COLD_RESTORE_CONTENT = f"""# Backup / restore runbook (#1329)
+
+{MANDATORY_WRAPPER}
 
 ```bash
 # operator-driven or ad hoc, against a running node:
@@ -112,7 +115,7 @@ still set crash-looped on the non-empty-PVC refusal).
    bootstrap has converged.
    ```bash
    kubectl patch tape/<name> --type=json \\
-     -p '[{"op":"remove","path":"/spec/bootstrapSeedUri"}]'
+     -p '[{{"op":"remove","path":"/spec/bootstrapSeedUri"}}]'
    ```
    This guards against a narrower follow-on hazard: if the PVC is ever
    deleted and reprovisioned (not a routine restart) while the field is
@@ -122,7 +125,9 @@ still set crash-looped on the non-empty-PVC refusal).
    fail loudly (no seed configured) instead of silently reseeding old data.
 """
 
-DISK_FULL_CONTENT = """# Disk-full runbook (#2573)
+DISK_FULL_CONTENT = f"""# Disk-full runbook (#2573)
+
+{MANDATORY_WRAPPER}
 
 A tape node that hits `ENOSPC` on its journal persist path latches **degraded
 read-only mode**: mutating requests (append, checkpoint advance, subscription
@@ -150,7 +155,7 @@ replay window during the restart.
    reason.
 3. Make room. Either shrink the journal through retention:
    ```bash
-   curl -X PUT $BASE/topics/<topic>/retention -d '{"max_events": <n>}'
+   curl -X PUT $BASE/topics/<topic>/retention -d '{{"max_events": <n>}}'
    ```
    (note this **also** returns `507` while degraded — a retention change
    rewrites the whole journal through a temp file, so it needs room for a
@@ -158,7 +163,7 @@ replay window during the restart.
    first), or expand the PVC on a resizable StorageClass:
    ```bash
    kubectl patch pvc data-<name>-0 -p \\
-     '{"spec":{"resources":{"requests":{"storage":"<bigger>"}}}}'
+     '{{"spec":{{"resources":{{"requests":{{"storage":"<bigger>"}}}}}}}}'
    ```
 4. Wait one re-probe interval and re-check `/metrics`. The pod log carries
    `storage re-probe write succeeded; leaving degraded read-only mode`.
@@ -379,6 +384,258 @@ class RealTwoCheckoutCliTests(unittest.TestCase):
         proc = self.run_validator_cli(head_sha=new_head)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("assertion 7 failed: docs/operations/README.md contains unintended changes outside the two approved runbook rows", proc.stderr)
+
+    def test_cli_missing_wrapper_in_cold_restore_fails(self):
+        # Defect: remove wrapper from cold-restore.md
+        unwrapped = COLD_RESTORE_CONTENT.replace(MANDATORY_WRAPPER + "\n\n", "")
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(unwrapped.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: missing wrapper in cold-restore.md"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: missing mandatory prerequisite wrapper in docs/runbooks/cold-restore.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_missing_wrapper_in_disk_full_fails(self):
+        # Defect: remove wrapper from disk-full.md
+        unwrapped = DISK_FULL_CONTENT.replace(MANDATORY_WRAPPER + "\n\n", "")
+        (self.head_repo / "docs/runbooks/disk-full.md").write_bytes(unwrapped.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/disk-full.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: missing wrapper in disk-full.md"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 4 failed: missing mandatory prerequisite wrapper in docs/runbooks/disk-full.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/disk-full.md").write_bytes(DISK_FULL_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/disk-full.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive disk-full.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_wrong_endpoint_or_example_fails(self):
+        # Defect: alter endpoint to 8080
+        corrupted = COLD_RESTORE_CONTENT.replace("BASE=http://localhost:7137", "BASE=http://localhost:8080")
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: wrong endpoint in wrapper"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: malformed prerequisite wrapper endpoint or example in docs/runbooks/cold-restore.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_wrong_source_link_or_anchor_fails(self):
+        # Defect: alter anchor
+        corrupted = COLD_RESTORE_CONTENT.replace("#6-smoke-sequence-end-to-end", "#wrong-anchor")
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: wrong anchor in wrapper"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: malformed prerequisite wrapper source link or anchor in docs/runbooks/cold-restore.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_duplicate_wrapper_fails(self):
+        # Defect: duplicate wrapper
+        corrupted = COLD_RESTORE_CONTENT.replace(MANDATORY_WRAPPER, MANDATORY_WRAPPER + "\n\n" + MANDATORY_WRAPPER)
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: duplicate wrapper"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: duplicate prerequisite wrapper in docs/runbooks/cold-restore.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_misplaced_wrapper_fails(self):
+        # Defect: move wrapper to bottom of file
+        unwrapped = COLD_RESTORE_CONTENT.replace(MANDATORY_WRAPPER + "\n\n", "")
+        misplaced = unwrapped + "\n" + MANDATORY_WRAPPER + "\n"
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(misplaced.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: misplaced wrapper at bottom"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: misplaced prerequisite wrapper in docs/runbooks/cold-restore.md (must follow H1)", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_extra_command_in_wrapper_fails(self):
+        # Defect: extra command in wrapper blockquote
+        corrupted = COLD_RESTORE_CONTENT.replace(
+            MANDATORY_WRAPPER,
+            MANDATORY_WRAPPER + "\n> curl $BASE/healthz",
+        )
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: extra command in wrapper"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: extra command or content in prerequisite wrapper in docs/runbooks/cold-restore.md", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_changed_extracted_body_fails(self):
+        # Defect: wrapper is valid, but body is altered
+        corrupted = COLD_RESTORE_CONTENT.replace("--retention-secs 604800", "--retention-secs 123456")
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: changed extracted body in cold-restore.md"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: docs/runbooks/cold-restore.md differs from normalized base handoff section 7", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_crlf_in_wrapper_fails(self):
+        # Defect: CRLF on wrapper line
+        crlf_wrapper = MANDATORY_WRAPPER.replace("\n", "\r\n") + "\r\n\r\n"
+        corrupted = COLD_RESTORE_CONTENT.replace(MANDATORY_WRAPPER + "\n\n", crlf_wrapper)
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(corrupted.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: CRLF in wrapper"], cwd=self.head_repo, check=True)
+        bad_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(head_sha=bad_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("CRLF or CR detected in docs/runbooks/cold-restore.md at head (forbidden)", proc.stderr)
+
+        # Restored positive
+        (self.head_repo / "docs/runbooks/cold-restore.md").write_bytes(COLD_RESTORE_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/runbooks/cold-restore.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive cold-restore.md"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
+
+    def test_cli_missing_frozen_source_prerequisite_fails(self):
+        # Defect: alter section 6 smoke sequence definition from base repo handoff
+        corrupted_base_handoff = BASE_HANDOFF_CONTENT.replace("BASE=http://localhost:7137\n", "BASE=unconfigured\n")
+        (self.base_repo / "docs/deployment-handoff.md").write_bytes(corrupted_base_handoff.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.base_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: corrupted base section 6 definition"], cwd=self.base_repo, check=True)
+        bad_base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.base_repo, text=True).strip()
+
+        # In head repo, make docs/deployment-handoff.md match bad_base so assertion 2 passes and we reach assertion 3
+        (self.head_repo / "docs/deployment-handoff.md").write_bytes(corrupted_base_handoff.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "sync head handoff with bad base"], cwd=self.head_repo, check=True)
+        current_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc = self.run_validator_cli(base_sha=bad_base, head_sha=current_head)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("assertion 3 failed: section 6 smoke sequence missing BASE=http://localhost:7137 definition", proc.stderr)
+
+        # Also test completely missing section 6
+        missing_sec6 = BASE_HANDOFF_CONTENT.replace("## 6. Smoke sequence (end-to-end)\n", "## 6. Omitted\n")
+        (self.base_repo / "docs/deployment-handoff.md").write_bytes(missing_sec6.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.base_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "defect: missing section 6 in base handoff"], cwd=self.base_repo, check=True)
+        bad_base2 = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.base_repo, text=True).strip()
+
+        (self.head_repo / "docs/deployment-handoff.md").write_bytes(missing_sec6.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "sync head handoff with bad base 2"], cwd=self.head_repo, check=True)
+        current_head2 = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc2 = self.run_validator_cli(base_sha=bad_base2, head_sha=current_head2)
+        self.assertNotEqual(proc2.returncode, 0)
+        self.assertIn("assertion 3 failed: missing section 6 in base handoff", proc2.stderr)
+
+        # Restored positive: restore clean base and head
+        (self.base_repo / "docs/deployment-handoff.md").write_bytes(BASE_HANDOFF_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.base_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive base handoff"], cwd=self.base_repo, check=True)
+        good_base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.base_repo, text=True).strip()
+
+        (self.head_repo / "docs/deployment-handoff.md").write_bytes(BASE_HANDOFF_CONTENT.encode("utf-8"))
+        subprocess.run(["git", "add", "docs/deployment-handoff.md"], cwd=self.head_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "restore positive head handoff"], cwd=self.head_repo, check=True)
+        good_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.head_repo, text=True).strip()
+
+        proc_good = self.run_validator_cli(base_sha=good_base, head_sha=good_head)
+        self.assertEqual(proc_good.returncode, 0, f"Restored positive failed: {proc_good.stderr}")
+        self.assertIn("DOCS COPY CONTRACT VALIDATION: PASS", proc_good.stdout)
 
 
 class MemoryValidatorTests(unittest.TestCase):
