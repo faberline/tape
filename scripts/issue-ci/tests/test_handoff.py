@@ -39,19 +39,25 @@ def evidence():
 
 class HandoffTests(unittest.TestCase):
     def test_controller_matches_verified_aw_merge(self):
-        self.assertEqual(hashlib.sha256((SCRIPTS / 'handoff.py').read_bytes()).hexdigest(), 'c67533b39d45ad62d407af3748856be396941647c349b63464424fa6aff1c198')
-        self.assertIn('67af8d020df3ca2ec4b064289408cfb0c2f8b299', CONFIG['controller_source'])
+        self.assertEqual(hashlib.sha256((SCRIPTS / 'handoff.py').read_bytes()).hexdigest(), '8313b8c5bf88a42c4cd8b3131fc576360fb0d2b6d120aa30d1a820f4e5ada773')
+        self.assertIn('693e45bded9a4ec8167573e82b423c823c193ec0', CONFIG['controller_source'])
 
     def test_exact_complete_inventory(self):
         inventory = json.loads((SCRIPTS / 'tests/fixtures/gate-inventory.json').read_text())
-        self.assertEqual(GATES, [dict(path=inventory['path'], jobs=inventory['jobs'])])
+        expected = [dict(path=item['path'], jobs=item['jobs']) for item in inventory]
+        self.assertEqual(GATES, expected)
         self.assertEqual(len(GATES[0]['jobs']), 8)
-        source = (ROOT / inventory['path']).read_text()
-        self.assertIn('name: ' + inventory['workflow_name'], source)
-        self.assertIn('  pull_request:\n    paths:', source)
-        self.assertIn('name: resolve image identity', source)
-        self.assertEqual(sum(' / deploy + test on shared GKE' in name for name in inventory['jobs']), 2)
-        self.assertEqual(sum(' / build (' in name for name in inventory['jobs']), 2)
+        self.assertEqual(len(GATES[1]['jobs']), 2)
+        source0 = (ROOT / inventory[0]['path']).read_text()
+        self.assertIn('name: ' + inventory[0]['workflow_name'], source0)
+        self.assertIn('  pull_request:\n    paths:', source0)
+        self.assertIn('name: resolve image identity', source0)
+        self.assertEqual(sum(' / deploy + test on shared GKE' in name for name in inventory[0]['jobs']), 2)
+        self.assertEqual(sum(' / build (' in name for name in inventory[0]['jobs']), 2)
+        source1 = (ROOT / inventory[1]['path']).read_text()
+        self.assertIn('name: ' + inventory[1]['workflow_name'], source1)
+        self.assertIn('docs-copy-contract', inventory[1]['jobs'])
+        self.assertIn('backup-destination-docs', inventory[1]['jobs'])
 
     def test_no_vacuous_done_empty_or_invalid_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -118,7 +124,7 @@ class HandoffTests(unittest.TestCase):
         old = dict(good, id=2, run_attempt=1)
         stale = dict(good, id=100, head_sha='b' * 40)
         foreign = dict(good, id=101, head_repository={'full_name': 'fork/r'})
-        with patch.object(ci, 'pages', side_effect=[[old, good, stale, foreign], []]) as pages:
+        with patch.object(ci, 'pages', side_effect=[[old, good, stale, foreign], [], [], []]) as pages:
             snapshots = ci.snapshot('o/r', SHA, CONFIG)
         self.assertEqual(snapshots[GATES[0]['path']][0]['id'], 3)
         self.assertIn('/runs/3/attempts/2/jobs', pages.call_args_list[1].args[0])
@@ -140,23 +146,32 @@ class HandoffTests(unittest.TestCase):
         self.assertLess(workflow.index('python3 scripts/issue-ci/check-policy.py'), workflow.index('python3 scripts/issue-ci/handoff.py'))
         self.assertIn('--reconcile', workflow)
         self.assertIn('group: issue-ci-handoff', workflow)
-        self.assertIn('workflows: ["gke-test"]', workflow)
+        self.assertIn('workflows: ["gke-test", "affected-docs"]', workflow)
         self.assertNotIn('pull_request_target', workflow.replace('# This is a trusted default-branch workflow, NOT pull_request_target execution.', ''))
         for forbidden in ('pull_request.head', 'download-artifact', 'workflow_dispatch:', 'id-token:', 'packages:'):
             self.assertNotIn(forbidden, workflow)
 
 class FailureOnlyApplyTests(unittest.TestCase):
     def setUp(self):
-        self.pr = dict(state='open', body='Closes #7', head=dict(sha=SHA, ref='issue/7', repo={'full_name': 'o/r'}))
+        self.pr = dict(number=8, state='open', body='Closes #7', changed_files=3,
+                       base=dict(sha=SHA),
+                       head=dict(sha=SHA, ref='issue/7', repo={'full_name': 'o/r'}))
+        self.files = [{'filename': p, 'status': 'modified' if p.endswith('README.md') else 'added'}
+                      for p in ['docs/operations/README.md', 'docs/runbooks/cold-restore.md', 'docs/runbooks/disk-full.md']]
         self.labels = {'doing', 'priority:p1'}
         self.comments, self.writes = [], []
         self.failed = evidence()
         self.failed[GATES[0]['path']][1][0]['conclusion'] = 'failure'
+        self.failed[GATES[1]['path']][1][0]['conclusion'] = 'failure'
 
     def api(self, path, method='GET', data=None):
         if method == 'GET':
             if '/pulls/' in path:
                 return self.pr
+            if '/contents/' in path:
+                wf = path.split('contents/')[1].split('?')[0]
+                blob = CONFIG['qualification']['trusted_workflows'][wf]['definition_sha']
+                return dict(sha=blob)
             return dict(state='open', labels=[dict(name=n) for n in self.labels])
         self.writes.append((path, method, data))
         if method == 'POST' and path.endswith('/comments'):
@@ -171,9 +186,14 @@ class FailureOnlyApplyTests(unittest.TestCase):
             self.labels.discard(path.rsplit('/',1)[1])
         return {}
 
+    def mock_pages(self, path, *a):
+        if '/files' in path:
+            return self.files
+        return self.comments
+
     def invoke(self, snapshots=None):
         args = argparse.Namespace(repo='o/r', pr=8, head=SHA, apply=True, run_id=1)
-        with patch.object(ci, 'api', side_effect=self.api), patch.object(ci, 'pages', side_effect=lambda *a: self.comments), patch.object(ci, 'snapshot', return_value=self.failed if snapshots is None else snapshots), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(ci, 'api', side_effect=self.api), patch.object(ci, 'pages', side_effect=self.mock_pages), patch.object(ci, 'snapshot', return_value=self.failed if snapshots is None else snapshots), contextlib.redirect_stdout(io.StringIO()):
             return ci.process_head(args, CONFIG, check_event=False)
 
     def test_success_and_missing_have_no_writes(self):
@@ -184,7 +204,7 @@ class FailureOnlyApplyTests(unittest.TestCase):
     def test_only_doing_returns_todo_and_preserves_other_labels(self):
         self.invoke()
         self.assertEqual(self.labels, {'todo', 'priority:p1'})
-        self.assertIn(self.failed[GATES[0]['path']][1][0]['html_url'], self.comments[0]['body'])
+        self.assertIn(self.failed[GATES[1]['path']][1][0]['html_url'], self.comments[0]['body'])
         self.assertFalse(any('/labels/done' in x[0] for x in self.writes))
 
     def test_done_todo_and_mixed_issues_cannot_be_mutated(self):
