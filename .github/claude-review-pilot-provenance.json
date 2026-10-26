@@ -1,0 +1,205 @@
+{
+  "observed_main": "1c556e237f9c1d3566b0f0d8dcee4591d4b44992",
+  "gke": {
+    "workflow_id": 389097869,
+    "blob": "052a2e83dcac71da8b6292661d4200c985b3c1d3",
+    "observed_run": 40011714270,
+    "jobs": [
+      {
+        "id": 120613482225,
+        "name": "build test-client image",
+        "conclusion": "success"
+      },
+      {
+        "id": 120613482763,
+        "name": "build server image / build (aarch64-unknown-linux-musl)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120613482789,
+        "name": "build server image / build (x86_64-unknown-linux-musl)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615440233,
+        "name": "build server image / publish ghcr test image",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615757363,
+        "name": "resolve image identity",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615871981,
+        "name": "image e2e (arm64)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615872595,
+        "name": "GKE e2e (operator_recovery) / deploy + test on shared GKE",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120621240576,
+        "name": "GKE e2e (operator_ha) / deploy + test on shared GKE",
+        "conclusion": "failure"
+      }
+    ]
+  },
+  "producer": {
+    "workflow_id": 394214906,
+    "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
+    "observed_run": 40015552646,
+    "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
+    "enabled_candidate_blob": "188839e5906da3027f959313de66c97fdd0f4e47"
+  },
+  "other": [
+    {
+      "path": ".github/workflows/affected-docs.yml",
+      "id": 395044816,
+      "blob": "9782c830864c85559763ddb556ac32bfa3c9c835"
+    },
+    {
+      "path": ".github/workflows/ci-infrastructure.yml",
+      "id": 395010308,
+      "blob": "2ff4606303d82613c3fefd1e9a316c7eb9874543"
+    }
+  ],
+  "schema_version": 1,
+  "rollout_status": "offline_enable_audit_candidate_not_deployed",
+  "observed_on": "2026-10-26",
+  "aw_candidate": "07e8a01a80ad8014d57200cb41e1f1706f1ab67f",
+  "aw_candidate_status": "offline_isolation_contract_candidate_unpublished",
+  "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
+  "existing_issue_ci_prefix": {
+    "length": 1793,
+    "sha256": "51fca5225564f39074e41aafe0f75d851c2bc42b7bb48144db86b727ddc4eaa6"
+  },
+  "readonly_sources": [
+    "https://api.github.com/repos/faberline/tape/actions/runs?per_page=100",
+    "https://api.github.com/repos/faberline/tape/actions/runs/40011714270/jobs",
+    "https://api.github.com/repos/faberline/tape/contents/.github/workflows/gke-test.yml?ref=1c556e237f9c1d3566b0f0d8dcee4591d4b44992",
+    "https://api.github.com/repos/faberline/tape/branches/main"
+  ],
+  "protection_observation": {
+    "branch_protected": false,
+    "branch_protection_enabled": false,
+    "branch_status_check_enforcement": "off",
+    "rulesets": "not_queried",
+    "effective_token_permissions": "unverified",
+    "shared_action_access": "unverified",
+    "oauth_secret_presence": "not_inspected",
+    "organization_managed_cli_policy": "unverified",
+    "merge_queue_contract": "not_established"
+  },
+  "cli_observation": {
+    "version": "2.1.310",
+    "version_evidence": "local claude --version (no authentication)",
+    "manifest_url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json",
+    "manifest_result": "not_obtained_web_reader_unavailable_and_public_https_URLError_cause_unknown",
+    "actual_linux_binary_hash": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+    "signature_verification": "verified_independently_with_existing_cloud_gpg",
+    "binary_download": "one_bounded_official_fetch_completed",
+    "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
+    "bounded_public_https_retry": {
+      "attempts": 1,
+      "category": "dns_resolution",
+      "errno": 8,
+      "exception_type": "URLError",
+      "maximum_bytes": 262144,
+      "reason_type": "gaierror",
+      "status": "failed",
+      "timeout_seconds": 15,
+      "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json"
+    },
+    "current_manifest_status": "independent_gpg_signature_verified_binary_verification_and_supply_review_pending",
+    "alternative_distribution_option": {
+      "status": "review_only_not_selected_not_executed",
+      "package": "@anthropic-ai/claude-code@2.1.310",
+      "official_documentation": "https://code.claude.com/docs/en/setup#install-with-npm",
+      "registry": "https://registry.npmjs.org",
+      "registry_metadata": "not_fetched",
+      "dist_integrity": "unverified",
+      "native_payload_source": "unverified_may_still_depend_on_downloads.claude.ai",
+      "trust_change": "npm_SRI_is_not_the_native_release_GPG_signature_requires_independent_supply_review",
+      "current_native_gpg_supply": "unchanged_disabled"
+    },
+    "approved_public_integrity_metadata_observation": {
+      "status": "retrieved_public_metadata_signature_not_verified_not_selected",
+      "request_context": "normal_require_escalated_approval_read_only",
+      "manifest_sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
+      "linux_x64_manifest_checksum": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+      "signature_verified": false,
+      "signature_blocker": "no_installed_gpg_gpgv_or_sequoia_found_no_tool_installation_authorized",
+      "binary_downloaded": false,
+      "binary_executed": false,
+      "selected_supply_modified": false
+    },
+    "independent_signature_verification": {
+      "method": "independent_existing_cloud_gpg_isolated_keyring",
+      "verifier": "/usr/bin/gpg",
+      "gpg_verify_exit_code": 0,
+      "public_key_import_succeeded": true,
+      "good_signature_reported": true,
+      "validsig_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
+      "matches_official_documented_fingerprint": true,
+      "exact_resource_sizes_and_sha256_matched": true,
+      "local_mac_verification_performed": false,
+      "binary_downloaded": false,
+      "binary_hash_checked": false,
+      "verification_evidence": "independent_verification_report_for_exact_preserved_public_artifacts"
+    },
+    "current_binary_status": "official_binary_hash_verified_not_executed_activation_held",
+    "binary_execution": "not_executed",
+    "binary_verification": {
+      "version": 1,
+      "status": "official_binary_hash_verified_not_executed_activation_held",
+      "cli_version": "2.1.310",
+      "platform": "linux-x64",
+      "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/linux-x64/claude",
+      "authenticated_manifest_sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
+      "expected_size": 291638640,
+      "observed_size": 291638640,
+      "expected_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+      "observed_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+      "independent_local_rehash_matched": true,
+      "file_mode": "0600",
+      "binary_executed": false,
+      "binary_installed": false,
+      "retained_as_private_local_data": true,
+      "network_attempts": 1,
+      "redirects_allowed": false,
+      "maximum_body_bytes": 291638640,
+      "socket_timeout_seconds": 15,
+      "total_timeout_seconds": 180,
+      "supply_enabled": false,
+      "jobs_enabled": false,
+      "merge_enabled": false,
+      "publication_status": "local_evidence_pending_independent_review_not_published"
+    }
+  },
+  "merge_status": "hard_disabled_in_aw_no_provider_write",
+  "known_test_dependency_limits": [
+    "gke-test.yml references faberline/aw reusable workflow at mutable main",
+    "tape-test-image.yml references mutable action/toolchain tags; complete dependency supply review pending"
+  ],
+  "dependency_pin_candidate": {
+    "status": "offline_unpublished_candidate_not_qualified",
+    "base_commit": "542942fff0ab051a328f1290f6a0abbb8d3c758c",
+    "candidate_workflow_blobs": {
+      ".github/workflows/tape-test-image.yml": "0f07c05c9a0b6acb62d65172339a71d5e5784e49",
+      ".github/workflows/gke-test.yml": "d1530edc69924ee42ff630a477ecef4735cd68d4"
+    },
+    "aw_workflow_commit": "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc",
+    "published": false,
+    "real_checks_executed": false,
+    "if_published_gke_path_match": true
+  },
+  "deployment_activated": false,
+  "current_dependency_limits": [
+    "Immutable action/reusable references and aw-ref are bound in this candidate; runtime/toolchain/package downloads remain separately documented in ci-dependency-pins-candidate.json."
+  ],
+  "aw_published_base_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
+  "aw_published_base_url": "https://github.com/faberline/aw/pull/86"
+}
