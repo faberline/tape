@@ -160,3 +160,96 @@ Before promoting `.github/issue-ci-candidate-gates.json` into live `.github/issu
 Run `python3 -m unittest discover -s scripts/issue-ci/tests -v`.
 Tests execute offline with metadata and document fixtures only: no local product
 E2E/performance, no cloud dispatch, and no issue mutations.
+
+## Disabled Claude review-only integration candidate
+
+### Goal
+
+Prepare review after the existing required tests succeed, preserving the current
+failure-only handoff. The new `claude-preflight` and `claude-final-review` jobs
+are appended to this repository's existing trusted `Issue CI handoff` workflow,
+which wakes after `gke-test`. They are **unconditionally disabled**. No secret is
+added to the PR-triggered GKE/docs/infrastructure workflows, and their bytes,
+gate names and coverage blockers remain unchanged. No 99% threshold is added;
+that remains a future five-milestone objective requiring real measurement.
+
+### How
+
+`.github/issue-ci-required-gates.json` now contains a staged `claude_final_review`
+extension. The legacy handoff ignores this extension; its existing controller
+bytes and policy fields are unchanged. The review producer reuses the real
+Issue CI workflow ID `394214906`, with exact job `claude-final-review` and the
+new local workflow blob. The required GKE ID is `389097869`, definition blob
+`052a2e83dcac71da8b6292661d4200c985b3c1d3`; all eight exact jobs are retained.
+The candidate AW action pin is `cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, currently
+local/unpublished and pending independent review. It contains a hard merge hold
+and does not require merge workflow registration for review-only operation.
+
+`.github/claude-review-pilot-provenance.json` distinguishes existing default-
+branch blobs/IDs from new candidate bytes. Observations come from normal read-only
+GitHub metadata at main `1c556e237f9c1d3566b0f0d8dcee4591d4b44992`, not an old
+disabled tree. GKE run `40011714270` has six successes and two operator failures;
+it is historical failure evidence, not a qualifying run for this new candidate.
+The docs workflow ID `395044816` and infrastructure ID `395010308` are observed
+facts; neither is substituted for required GKE jobs by this change.
+
+CLI supply is a separate, credential-free step from trusted default-branch
+`github.workflow_sha`, with checkout credentials not persisted. The provisioning
+helper never executes the downloaded binary or an installer shell script. It
+allows only fixed version `2.1.310`, official HTTPS origin `downloads.claude.ai`,
+the versioned manifest/signature/binary paths and release-key path; redirects,
+ambient proxies, arbitrary URL/version arguments and credentialed provisioning
+are refused. Before staging a binary it requires independently pinned manifest
+and binary SHA256 hashes, a valid manifest signature rooted in exact fingerprint
+`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`, matching signed linux-x64 checksum and
+matching downloaded bytes. GPG uses an isolated temporary keyring and receives
+no credentials. These checks follow the official
+[release integrity instructions](https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing).
+
+The actual official manifest could not be obtained in this preparation: the web
+reader reported it unavailable and a public HTTPS fetch returned URLError, with
+cause unknown. No Linux binary or signing key was downloaded, signature checked
+or CLI executed. `.github/claude-review-cli-supply.json` therefore stays disabled,
+with manifest/binary hashes null; review policy CLI hash is also null. This is
+an explicit live-validation refusal, not evidence of denied credentials or a
+verified release. Actual manifest structure and binary path availability also
+remain to be confirmed against the signed release bytes before activation.
+
+Only the final shared review action step references the existing same-name OAuth
+Actions secret. Its presence/value has not been inspected. The new jobs override
+the handoff's broader workflow permissions to contents/Actions/PR/issues read.
+No repository permission, credential, environment or cloud resource is created.
+
+### Acceptance
+
+Offline tests check unchanged handoff prefix, complete retained gate/blocker
+policy, unconditional job disabling, read-only scopes, fixed action pin, default-
+branch provisioning, isolated secret scope, signed-supply validation and
+corrupted/missing hash/signature negative controls. Synthetic bytes and mocked
+GPG prove helper behavior; they do not prove a real signed release or runner.
+The local infrastructure suite remains the verification command above.
+
+Before separately authorized deployment, independently review shared AW and this
+consumer diff, publish the reviewed immutable AW revision, verify real official
+CLI supply and hashes, update the actual default-branch producer blob, inspect
+machine/account managed CLI configuration, and establish real current-head test
+and review evidence. Existing mutable GKE reusable/action dependencies remain
+visible in provenance for source review; this candidate does not silently claim
+their complete dependency trust. Do not remove true coverage blockers to activate.
+
+### Never
+
+`.github/workflows/claude-guarded-merge.yml` is a separately disabled pending
+workflow. It has no write scope, no OAuth secret, no real merge call and no
+invented workflow ID in policy. Shared AW also refuses `merge` before any API
+call. Durable cross-run intent/result reconciliation, mutual exclusion and an
+approved provider base/protection contract are still required. An ordinary
+expected-head PUT is not atomic exact-base enforcement. No automatic merge is
+authorized by a successful review.
+
+The branch metadata currently reports main `protected=false`, branch protection
+disabled and branch status-check enforcement off. This does **not** establish
+absence of all rulesets: rulesets were not queried. Effective token permissions,
+shared-action access, secret availability, organization-managed CLI policy and
+merge-queue contract remain unverified. No protection bypass, new credential,
+permission expansion or new infrastructure is proposed to resolve those gaps.

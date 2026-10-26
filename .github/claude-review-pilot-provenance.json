@@ -1,0 +1,110 @@
+{
+  "observed_main": "1c556e237f9c1d3566b0f0d8dcee4591d4b44992",
+  "gke": {
+    "workflow_id": 389097869,
+    "blob": "052a2e83dcac71da8b6292661d4200c985b3c1d3",
+    "observed_run": 40011714270,
+    "jobs": [
+      {
+        "id": 120613482225,
+        "name": "build test-client image",
+        "conclusion": "success"
+      },
+      {
+        "id": 120613482763,
+        "name": "build server image / build (aarch64-unknown-linux-musl)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120613482789,
+        "name": "build server image / build (x86_64-unknown-linux-musl)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615440233,
+        "name": "build server image / publish ghcr test image",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615757363,
+        "name": "resolve image identity",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615871981,
+        "name": "image e2e (arm64)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120615872595,
+        "name": "GKE e2e (operator_recovery) / deploy + test on shared GKE",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120621240576,
+        "name": "GKE e2e (operator_ha) / deploy + test on shared GKE",
+        "conclusion": "failure"
+      }
+    ]
+  },
+  "producer": {
+    "workflow_id": 394214906,
+    "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
+    "observed_run": 40015552646,
+    "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0"
+  },
+  "other": [
+    {
+      "path": ".github/workflows/affected-docs.yml",
+      "id": 395044816,
+      "blob": "9782c830864c85559763ddb556ac32bfa3c9c835"
+    },
+    {
+      "path": ".github/workflows/ci-infrastructure.yml",
+      "id": 395010308,
+      "blob": "2ff4606303d82613c3fefd1e9a316c7eb9874543"
+    }
+  ],
+  "schema_version": 1,
+  "rollout_status": "disabled_review_only_candidate",
+  "observed_on": "2026-10-26",
+  "aw_candidate": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
+  "aw_candidate_status": "local_unpublished_pending_independent_review",
+  "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
+  "existing_issue_ci_prefix": {
+    "length": 1793,
+    "sha256": "51fca5225564f39074e41aafe0f75d851c2bc42b7bb48144db86b727ddc4eaa6"
+  },
+  "readonly_sources": [
+    "https://api.github.com/repos/faberline/tape/actions/runs?per_page=100",
+    "https://api.github.com/repos/faberline/tape/actions/runs/40011714270/jobs",
+    "https://api.github.com/repos/faberline/tape/contents/.github/workflows/gke-test.yml?ref=1c556e237f9c1d3566b0f0d8dcee4591d4b44992",
+    "https://api.github.com/repos/faberline/tape/branches/main"
+  ],
+  "protection_observation": {
+    "branch_protected": false,
+    "branch_protection_enabled": false,
+    "branch_status_check_enforcement": "off",
+    "rulesets": "not_queried",
+    "effective_token_permissions": "unverified",
+    "shared_action_access": "unverified",
+    "oauth_secret_presence": "not_inspected",
+    "organization_managed_cli_policy": "unverified",
+    "merge_queue_contract": "not_established"
+  },
+  "cli_observation": {
+    "version": "2.1.310",
+    "version_evidence": "local claude --version (no authentication)",
+    "manifest_url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json",
+    "manifest_result": "not_obtained_web_reader_unavailable_and_public_https_URLError_cause_unknown",
+    "actual_linux_binary_hash": "unverified",
+    "signature_verification": "not_executed",
+    "binary_download": "not_executed",
+    "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing"
+  },
+  "merge_status": "hard_disabled_in_aw_no_provider_write",
+  "known_test_dependency_limits": [
+    "gke-test.yml references faberline/aw reusable workflow at mutable main",
+    "tape-test-image.yml references mutable action/toolchain tags; complete dependency supply review pending"
+  ]
+}

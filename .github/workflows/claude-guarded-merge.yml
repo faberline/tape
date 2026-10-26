@@ -1,0 +1,31 @@
+# Pending design only. No write scope, no environment/protection creation.
+# Shared AW merge code also refuses before any API call.
+name: Claude guarded merge (disabled)
+on:
+  workflow_run:
+    workflows: [Issue CI handoff]
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+concurrency:
+  group: claude-guarded-merge
+  cancel-in-progress: false
+jobs:
+  verify-review:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+        with:
+          operation: discover
+          review-run: ${{ github.event.workflow_run.id }}
+  guarded-merge-pending:
+    if: ${{ false }}
+    needs: verify-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require independently reviewed durable cross-run reconciliation
+        run: exit 2

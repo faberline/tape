@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "enabled": false,
+  "cli_version": "2.1.310",
+  "platform": "linux-x64",
+  "origin": "https://downloads.claude.ai",
+  "manifest_path": "/claude-code-releases/2.1.310/manifest.json",
+  "signature_path": "/claude-code-releases/2.1.310/manifest.json.sig",
+  "binary_path": "/claude-code-releases/2.1.310/linux-x64/claude",
+  "signing_key_path": "/keys/claude-code.asc",
+  "signing_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
+  "manifest_sha256": null,
+  "binary_sha256": null,
+  "status": "pending_official_manifest_and_binary_hash_verification",
+  "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing"
+}

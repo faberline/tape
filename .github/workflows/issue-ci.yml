@@ -41,3 +41,63 @@ jobs:
           python3 scripts/issue-ci/handoff.py \
             --repo "$REPO" --run-id "$RUN_ID" --reconcile \
             --config .github/issue-ci-required-gates.json
+
+  # Review-only tail candidate. Unconditionally disabled pending independent
+  # review, official CLI supply verification and separately authorized rollout.
+  # The handoff above is unchanged; no secret enters a pull_request workflow.
+  claude-preflight:
+    if: ${{ false }}
+    needs: handoff
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    outputs:
+      eligible: ${{ steps.preflight.outputs.eligible }}
+      pr: ${{ steps.preflight.outputs.pr }}
+      head: ${{ steps.preflight.outputs.head }}
+    steps:
+      - uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+        id: preflight
+        with:
+          operation: preflight
+          pr: ${{ github.event.workflow_run.pull_requests[0].number }}
+          head: ${{ github.event.workflow_run.head_sha }}
+          review-run: ${{ github.run_id }}
+
+  claude-final-review:
+    if: ${{ false }}
+    needs: claude-preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout trusted default-branch provisioning only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/issue-ci/provision-claude.py
+            .github/claude-review-cli-supply.json
+      - name: Verify and stage pinned official CLI without credentials
+        id: provision
+        run: python3 -I scripts/issue-ci/provision-claude.py
+      - name: Install verified binary on the disposable runner
+        env:
+          VERIFIED_BINARY: ${{ steps.provision.outputs.binary }}
+        run: sudo install -m 0755 -- "$VERIFIED_BINARY" /usr/local/bin/claude
+      - name: Review exact current head after all existing required gates
+        uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        with:
+          operation: review
+          pr: ${{ needs.claude-preflight.outputs.pr }}
+          head: ${{ needs.claude-preflight.outputs.head }}
+          review-run: ${{ github.run_id }}

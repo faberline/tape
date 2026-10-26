@@ -21,5 +21,30 @@
       ]
     }
   ],
-  "lifecycle_mode": "failure-only"
+  "lifecycle_mode": "failure-only",
+  "claude_final_review": {
+    "version": 1,
+    "producer": {
+      "path": ".github/workflows/issue-ci.yml",
+      "id": 394214906,
+      "definition_sha": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
+      "job": "claude-final-review"
+    },
+    "gates": {
+      ".github/workflows/gke-test.yml": {
+        "id": 389097869,
+        "definition_sha": "052a2e83dcac71da8b6292661d4200c985b3c1d3"
+      }
+    },
+    "protected_paths": [
+      "scripts/issue-ci/",
+      "scripts/gke-test/",
+      "acceptance/gcp/",
+      "k8s/",
+      "Dockerfile.test"
+    ],
+    "cli_sha256": null,
+    "merge_producer": null,
+    "merge_method": null
+  }
 }
