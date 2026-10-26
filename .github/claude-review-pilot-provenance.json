@@ -155,5 +155,17 @@
     "gke-test.yml references faberline/aw reusable workflow at mutable main",
     "tape-test-image.yml references mutable action/toolchain tags; complete dependency supply review pending"
   ],
-  "aw_candidate_url": "https://github.com/faberline/aw/pull/86"
+  "aw_candidate_url": "https://github.com/faberline/aw/pull/86",
+  "dependency_pin_candidate": {
+    "status": "offline_unpublished_candidate_not_qualified",
+    "base_commit": "542942fff0ab051a328f1290f6a0abbb8d3c758c",
+    "candidate_workflow_blobs": {
+      ".github/workflows/tape-test-image.yml": "0f07c05c9a0b6acb62d65172339a71d5e5784e49",
+      ".github/workflows/gke-test.yml": "d1530edc69924ee42ff630a477ecef4735cd68d4"
+    },
+    "aw_workflow_commit": "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc",
+    "published": false,
+    "real_checks_executed": false,
+    "if_published_gke_path_match": true
+  }
 }

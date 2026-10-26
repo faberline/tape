@@ -169,8 +169,10 @@ Prepare review after the existing required tests succeed, preserving the current
 failure-only handoff. The new `claude-preflight` and `claude-final-review` jobs
 are appended to this repository's existing trusted `Issue CI handoff` workflow,
 which wakes after `gke-test`. They are **unconditionally disabled**. No secret is
-added to the PR-triggered GKE/docs/infrastructure workflows, and their bytes,
-gate names and coverage blockers remain unchanged. No 99% threshold is added;
+added to the PR-triggered GKE/docs/infrastructure workflows. The original
+review-only change preserved their bytes; the separate offline dependency-pin
+candidate below changes only declared refs and the AW scripts identity input.
+Gate names and coverage blockers remain unchanged. No 99% threshold is added;
 that remains a future five-milestone objective requiring real measurement.
 
 ### How
@@ -310,3 +312,58 @@ absence of all rulesets: rulesets were not queried. Effective token permissions,
 shared-action access, secret availability, organization-managed CLI policy and
 merge-queue contract remain unverified. No protection bypass, new credential,
 permission expansion or new infrastructure is proposed to resolve those gaps.
+
+## Offline test-workflow dependency pin candidate
+
+### Goal
+
+Freeze existing action/reusable-workflow source references while preserving test
+commands, job names, required gates, permissions and disabled Claude/merge jobs.
+This is a separate unpublished candidate, not qualification or rollout evidence.
+
+### How
+
+`.github/ci-dependency-pins-candidate.json` records normal read-only GitHub refs
+from action owner/maintainer repositories and the exact resolved commits. The
+Swatinem v2 annotated tag is explicitly dereferenced to its commit; a tag-object
+SHA is never substituted for an action commit. Referenced tag/branch names are
+observation provenance, not runtime refs. Current major-tag resolution may be a
+different action revision from a historical run; independent source review is
+still required.
+
+The AW GKE workflow candidate freezes checkout, Google auth/setup-gcloud and
+artifact action refs. Its unchanged scripts and infrastructure derive from AW
+main `59ed3084c991606fc41b55a3d59088307b6aef62`. Tape points both reusable `uses`
+and its explicit `aw-ref` checkout input to the same local AW candidate commit.
+This avoids leaving `scripts/gke-test` at the reusable workflow's default main.
+The AW candidate is not yet published; remote action access is not established.
+
+Tape's test-image workflow freezes nine existing owner/maintainer action refs.
+The existing GKE workflow numeric ID and every required job remain intact.
+The trusted-policy extension binds the **candidate** workflow blob, while the
+previous deployed blob and run conclusions stay in observed provenance. This
+is not a claim that candidate definitions already exist on the default branch.
+
+### Acceptance
+
+Offline tests reverse exactly the declared dependency substitutions and the
+one frozen scripts-ref input, then require the original workflow Git blob IDs.
+An unrelated command/content change, mutable ref, foreign source URL, mismatch
+between reusable/scripts SHA or false provenance fails. YAML syntax and existing
+failure-only/disabled-job guards remain checked. No real GKE or product test
+has run for these new definitions.
+
+Pinned `uses` sources are only one boundary. Hosted Ubuntu tools/images, apt
+packages, Rust stable compiler selection inside the frozen toolchain action,
+QEMU/Buildx image/tool downloads, gcloud/components and arbitrary transitive
+action runtime downloads still need separate supply review and exact version/
+digest policy. This candidate does not claim a hermetic or fully qualified run.
+
+### Never
+
+Do not publish this candidate under the earlier review-only draft permission:
+changing `.github/workflows/gke-test.yml` **does** match Tape's automatic GKE PR
+path filter. A future push/PR therefore requires separate authorization for
+that ordinary GKE effect after independent infrastructure review. Do not manually
+dispatch, change credentials/permissions/protections, enable Claude/merge jobs,
+clear qualification blockers or claim live readiness from these offline tests.

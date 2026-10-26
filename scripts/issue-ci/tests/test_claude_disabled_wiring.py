@@ -75,7 +75,8 @@ def check_disabled(policy, review_source, merge_source, supply, provenance):
     p = policy["claude_final_review"]
     assert p["producer"] == {"path": ".github/workflows/issue-ci.yml", "id": 394214906,
                              "definition_sha": git_blob(review_source.encode()), "job": "claude-final-review"}
-    assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": "052a2e83dcac71da8b6292661d4200c985b3c1d3"}}
+    gate_blob = provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {}).get(".github/workflows/gke-test.yml", provenance["gke"]["blob"])
+    assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": gate_blob}}
     assert p["merge_producer"] is None and p["merge_method"] is None
     fixture = ROOT / "scripts/issue-ci/tests/fixtures/claude-native-2.1.310/manifest.json"
     manifest = json.loads(fixture.read_text())
@@ -122,8 +123,10 @@ class DisabledWiringTests(unittest.TestCase):
             value = copy.deepcopy(self.policy); mutation(value)
             with self.assertRaises(AssertionError): self.check(policy=value)
 
-    def test_runtime_gke_and_docs_workflows_unchanged_against_observed_blobs(self):
-        self.assertEqual(git_blob((ROOT / ".github/workflows/gke-test.yml").read_bytes()), self.provenance["gke"]["blob"])
+    def test_runtime_gke_matches_declared_candidate_and_docs_remain_observed_bytes(self):
+        candidate = self.provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {})
+        self.assertEqual(git_blob((ROOT / ".github/workflows/gke-test.yml").read_bytes()), candidate.get(".github/workflows/gke-test.yml", self.provenance["gke"]["blob"]))
+        self.assertEqual(self.provenance["gke"]["blob"], "052a2e83dcac71da8b6292661d4200c985b3c1d3")
         for entry in self.provenance["other"]:
             self.assertEqual(git_blob((ROOT / entry["path"]).read_bytes()), entry["blob"])
         expected = self.policy["workflows"][0]["jobs"]
