@@ -1,7 +1,10 @@
 {
   "activation_authorized": false,
-  "binary_downloaded": false,
+  "binary_downloaded": true,
   "binary_executed": false,
+  "binary_hash_checked": true,
+  "binary_installed": false,
+  "binary_observation": ".github/claude-review-binary-integrity-candidate.json",
   "cli_version": "2.1.310",
   "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
   "expected_signing_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
@@ -58,6 +61,6 @@
   "selected_supply_modified": true,
   "signature_blocker": null,
   "signature_verified": true,
-  "status": "manifest_signature_verified_binary_verification_and_supply_review_pending",
+  "status": "manifest_and_binary_integrity_verified_activation_held_pending_review",
   "version": 1
 }
