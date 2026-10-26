@@ -27,7 +27,7 @@
     "producer": {
       "path": ".github/workflows/issue-ci.yml",
       "id": 394214906,
-      "definition_sha": "188839e5906da3027f959313de66c97fdd0f4e47",
+      "definition_sha": "19f2fb1225091e829ef261795dd8f66705fc0e7e",
       "job": "claude-final-review"
     },
     "gates": {
