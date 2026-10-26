@@ -272,6 +272,24 @@ actual binary bytes against the signed expected checksum, and obtain separate
 deployment authorization before any activation. No draft PR was updated with
 this unreviewed follow-up.
 
+After a separate safe-download review, one normally approved official linux-x64
+binary GET completed with the exact signed-manifest size of 291638640 bytes and
+SHA256 `b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56`.
+The request prohibited redirects, required the exact Content-Length and identity
+encoding, used a 15-second socket timeout and 180-second process deadline, and
+streamed at most the declared size into a unique mode-0600 temporary data file.
+A second local read confirmed size, hash, regular-file type and permissions.
+The binary was neither installed nor executed. The non-executable evidence is
+in `.github/claude-review-binary-integrity-candidate.json`.
+
+This completes artifact integrity evidence, not credentialed runner or semantic
+review evidence. The selected supply and jobs remain disabled. The existing
+`manifest_signature_verified_binary_verification_pending` supply hold label is
+retained until an independently reviewed promotion; the separate current binary
+record reports the completed hash check explicitly. Publishing this evidence,
+promoting supply to `reviewed_pinned`, and enabling review jobs require separate
+review/authorization. Merge remains hard disabled.
+
 Only the final shared review action step references the existing same-name OAuth
 Actions secret. Its presence/value has not been inspected. The new jobs override
 the handoff's broader workflow permissions to contents/Actions/PR/issues read.
