@@ -51,7 +51,8 @@
     "workflow_id": 394214906,
     "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
     "observed_run": 40015552646,
-    "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0"
+    "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
+    "enabled_candidate_blob": "5312454b6fd49b17214fffc19b99733cb4c40789"
   },
   "other": [
     {
@@ -66,7 +67,7 @@
     }
   ],
   "schema_version": 1,
-  "rollout_status": "disabled_review_only_candidate",
+  "rollout_status": "offline_enable_audit_candidate_not_deployed",
   "observed_on": "2026-10-26",
   "aw_candidate": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
   "aw_candidate_status": "published_exact_commit_in_aw_draft_pr_86",
@@ -195,5 +196,9 @@
     "published": false,
     "real_checks_executed": false,
     "if_published_gke_path_match": true
-  }
+  },
+  "deployment_activated": false,
+  "current_dependency_limits": [
+    "Immutable action/reusable references and aw-ref are bound in this candidate; runtime/toolchain/package downloads remain separately documented in ci-dependency-pins-candidate.json."
+  ]
 }

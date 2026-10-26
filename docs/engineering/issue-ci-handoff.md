@@ -161,183 +161,128 @@ Run `python3 -m unittest discover -s scripts/issue-ci/tests -v`.
 Tests execute offline with metadata and document fixtures only: no local product
 E2E/performance, no cloud dispatch, and no issue mutations.
 
-## Disabled Claude review-only integration candidate
+## Offline Claude review-only enable audit candidate
 
 ### Goal
 
-Prepare review after the existing required tests succeed, preserving the current
-failure-only handoff. The new `claude-preflight` and `claude-final-review` jobs
-are appended to this repository's existing trusted `Issue CI handoff` workflow,
-which wakes after `gke-test`. They are **unconditionally disabled**. No secret is
-added to the PR-triggered GKE/docs/infrastructure workflows. The original
-review-only change preserved their bytes; the separate offline dependency-pin
-candidate below changes only declared refs and the AW scripts identity input.
-Gate names and coverage blockers remain unchanged. No 99% threshold is added;
-that remains a future five-milestone objective requiring real measurement.
+This unpublished branch is the complete configuration proposed for independent
+review. It changes the local review jobs from unconditional false to guarded
+conditions and promotes the fixed CLI supply to `reviewed_pinned`. It does not
+publish, deploy, call Claude, dispatch CI or execute a binary. The existing
+public draft remains the separately published disabled revision.
+
+`.github/claude-review-enable-candidate.json` records the candidate identities
+and remaining acceptance. Live deployment and publication authorization are
+false. Merge remains hard disabled, with no write scope or workflow ID invented.
 
 ### How
 
-`.github/issue-ci-required-gates.json` now contains a staged `claude_final_review`
-extension. The legacy handoff ignores this extension; its existing controller
-bytes and policy fields are unchanged. The review producer reuses the real
-Issue CI workflow ID `394214906`, with exact job `claude-final-review` and the
-new local workflow blob. The required GKE ID is `389097869`, definition blob
-`052a2e83dcac71da8b6292661d4200c985b3c1d3`; all eight exact jobs are retained.
-The AW action pin is `cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, published as the
-exact immutable head of [AW draft #86](https://github.com/faberline/aw/pull/86). It contains a hard merge hold
-and does not require merge workflow registration for review-only operation.
+The trusted `Issue CI handoff` tail now requires a successful `pull_request`
+wake from the same repository. `claude-preflight` depends on the existing
+handoff, and the model job requires both preflight success and its authenticated
+eligible output. The shared action independently rechecks every required job,
+exact current head/base and the wake identity; YAML conditions are not evidence
+by themselves. The handoff prefix, failure-only mode, eight required GKE jobs
+and all four genuine coverage blockers are retained. No immediate 99% threshold
+is introduced; that remains a future five-milestone measured objective.
 
-`.github/claude-review-pilot-provenance.json` distinguishes existing default-
-branch blobs/IDs from new candidate bytes. Observations come from normal read-only
-GitHub metadata at main `1c556e237f9c1d3566b0f0d8dcee4591d4b44992`, not an old
-disabled tree. GKE run `40011714270` has six successes and two operator failures;
-it is historical failure evidence, not a qualifying run for this new candidate.
-The docs workflow ID `395044816` and infrastructure ID `395010308` are observed
-facts; neither is substituted for required GKE jobs by this change.
+New review jobs have only contents/Actions/PR/issues read. Provisioning checks
+out `github.workflow_sha`, not a PR head, with credentials not persisted. Only
+its final immutable shared-action step receives the existing named OAuth secret.
+No token value or validity call is part of this offline work. The reviewer has
+no tools/MCP and runs in an isolated temporary home as defined by the pinned
+shared implementation. Managed machine/account policy still needs inspection;
+the settings flags cannot override administrator-managed hooks.
 
-CLI supply is a separate, credential-free step from trusted default-branch
-`github.workflow_sha`, with checkout credentials not persisted. The provisioning
-helper never executes the downloaded binary or an installer shell script. It
-allows only fixed version `2.1.310`, official HTTPS origin `downloads.claude.ai`,
-the versioned manifest/signature/binary paths and release-key path; redirects,
-ambient proxies, arbitrary URL/version arguments and credentialed provisioning
-are refused. Before staging a binary it requires independently pinned manifest
-and binary SHA256 hashes, a valid manifest signature rooted in exact fingerprint
-`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`, matching signed linux-x64 checksum and
-matching downloaded bytes. GPG uses an isolated temporary keyring and receives
-no credentials. These checks follow the official
+The review action stays pinned to AW
+`cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, published in
+[AW draft #86](https://github.com/faberline/aw/pull/86). The review producer reuses
+real workflow ID `394214906` and job `claude-final-review`; its definition blob
+is recomputed from the actual conditional workflow bytes. GKE keeps real ID
+`389097869`, all exact job names, and candidate definition blob
+`d1530edc69924ee42ff630a477ecef4735cd68d4`. Observed deployed blob
+`052a2e83dcac71da8b6292661d4200c985b3c1d3` remains separate historical evidence.
+Both the reusable workflow and its scripts input use the same unpublished AW
+`f5b4c093ca2b5525e594c6ea154f0159af1fb9cc`; publish that separately reviewed source
+before any consumer rollout. See the dependency section below for owner/ref
+proofs and residual runtime supply limits.
+
+CLI version `2.1.310` uses only fixed official `downloads.claude.ai` URLs. The
+exact manifest/signature/public-key bytes are preserved in the fixtures. An
+independent existing cloud `/usr/bin/gpg`, isolated temporary keyring and matched
+sizes/hashes verified the signature with exit 0, GOODSIG and VALIDSIG fingerprint
+`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`, matching the official
 [release integrity instructions](https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing).
+No local verification tool was installed. Earlier normal-context DNS failures
+and the successful normally approved read context remain distinguished in
+provenance; neither was treated as a credential denial.
 
-Initial normal-context requests did not obtain the official manifest: the web
-reader reported it unavailable and a public HTTPS fetch returned URLError, with
-cause unknown. At that initial checkpoint no Linux binary or signing key had
-been downloaded, signature checked or CLI executed, and the disabled supply and
-policy hashes were null. Those failures did not establish access denial or a
-verified release. The subsequent authenticated-manifest result below supersedes
-that initial state; binary download availability and bytes remain unverified.
-
-One subsequent bounded ordinary HTTPS retry used the same exact URL, a
-15-second timeout and a 256 KiB limit. It failed in DNS resolution with
-`URLError.reason` type `gaierror`, errno `8`; no HTTP response was obtained.
-That identifies this retry's transport failure, not an access denial or a
-retrospective explanation of the earlier unknown failure. No TLS bypass,
-network/proxy setting change, binary download or further retry was performed.
-The sanitized result is recorded separately in provenance.
-
-An alternative **for independent supply review only** is Anthropic's documented
-[npm distribution](https://code.claude.com/docs/en/setup#install-with-npm), pinned
-to `@anthropic-ai/claude-code@2.1.310`. Before considering it, fetch official
-registry metadata without credentials, pin `dist.integrity` and every required
-platform/transitive package, inspect tarballs with install scripts disabled,
-review the actual native-payload source, then bind the resulting Linux binary
-hash to the review policy. Node.js 22 or later is required by the documented npm
-package. Its installer may still fetch a native binary from the currently
-unresolved host; npm is not yet proven to resolve this transport blocker.
-Registry SRI is a different trust mechanism from the native release's GPG
-signature. No equivalence or source switch is assumed: registry metadata and
-tarballs have not been fetched, npm has not been executed, and the selected
-native/GPG supply and all disabled flags remain unchanged.
-
-A later normal `require_escalated` approval permitted one bounded read-only GET
-per official manifest/signature/public-key resource. All three returned HTTP 200.
-This proves availability in that approved execution context, not the cause of
-the earlier DNS failures and not a general network or credential-access change.
-The unmodified public bytes are preserved under
-`scripts/issue-ci/tests/fixtures/claude-native-2.1.310/`; their observed SHA256
-digests and exact URLs are in `.github/claude-review-native-integrity-candidate.json`.
-The 2.1.310 manifest names binary `claude` for linux-x64, size 291638640 bytes,
-with checksum `b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56`.
-Manifest SHA256 is `895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74`.
-
-These are **observed candidate values, not trusted supply pins**. No installed
-GPG, GPGV or Sequoia verifier was found in the checked standard locations; no
-tool was installed. The public-key fingerprint and detached signature have not
-been independently verified at that retrieval checkpoint. No Linux binary was
-downloaded or executed.
-
-The exact preserved public bytes were subsequently verified independently using
-an existing cloud `/usr/bin/gpg` and an isolated temporary keyring. All three
-artifact sizes and SHA256 values matched. Public-key import succeeded; signature
-verification exited 0 with GOODSIG and VALIDSIG fingerprint
-`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`, matching the official documented trust
-anchor. This is independently reported cryptographic verification of the
-manifest, not local Mac verification and not verification of downloaded binary
-bytes. The local Mac verifier remains unavailable and no tools were installed.
-
-The authenticated manifest hash and expected linux-x64 binary checksum are now
-staged in the disabled supply file and review policy. The supply's status is
-`manifest_signature_verified_binary_verification_pending`, with `enabled=false`.
-The binary has not been downloaded, hashed or executed. Even changing only
-`enabled` to true remains a refusal while this pending status is present.
-Independently review the supply helper and this pin/provenance update, verify
-actual binary bytes against the signed expected checksum, and obtain separate
-deployment authorization before any activation. No draft PR was updated with
-this unreviewed follow-up.
-
-After a separate safe-download review, one normally approved official linux-x64
-binary GET completed with the exact signed-manifest size of 291638640 bytes and
+Manifest SHA256 is
+`895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74`.
+One bounded official linux-x64 download measured exactly 291638640 bytes with
 SHA256 `b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56`.
-The request prohibited redirects, required the exact Content-Length and identity
-encoding, used a 15-second socket timeout and 180-second process deadline, and
-streamed at most the declared size into a unique mode-0600 temporary data file.
-A second local read confirmed size, hash, regular-file type and permissions.
-The binary was neither installed nor executed. The non-executable evidence is
-in `.github/claude-review-binary-integrity-candidate.json`.
+It prohibited redirects, required the exact Content-Length and identity encoding,
+used a 15-second socket timeout and 180-second process deadline, and wrote only
+mode-0600 temporary data. A second local read confirmed size/hash/type/mode.
+The binary was neither installed nor executed. The integrity receipt is data,
+not runner/model execution or deployment authority.
 
-This completes artifact integrity evidence, not credentialed runner or semantic
-review evidence. The selected supply and jobs remain disabled. The existing
-`manifest_signature_verified_binary_verification_pending` supply hold label is
-retained until an independently reviewed promotion; the separate current binary
-record reports the completed hash check explicitly. Publishing this evidence,
-promoting supply to `reviewed_pinned`, and enabling review jobs require separate
-review/authorization. Merge remains hard disabled.
-
-Only the final shared review action step references the existing same-name OAuth
-Actions secret. Its presence/value has not been inspected. The new jobs override
-the handoff's broader workflow permissions to contents/Actions/PR/issues read.
-No repository permission, credential, environment or cloud resource is created.
+The selected supply's expected hashes and `enabled=true` / `reviewed_pinned`
+values are local enable-proposal configuration. No script is invoked merely by
+editing these files. Its helper still authenticates the manifest and verifies
+newly downloaded binary bytes on a future authorized runner; it accepts no
+arbitrary URL/version, redirect or credentialed provisioning process. Official
+npm remains an unselected alternative; no npm package, script or installation
+was fetched or executed for this candidate.
 
 ### Acceptance
 
-Offline tests check unchanged handoff prefix, complete retained gate/blocker
-policy, unconditional job disabling, read-only scopes, fixed action pin, default-
-branch provisioning, isolated secret scope, signed-supply validation and
-corrupted/missing hash/signature negative controls. Synthetic bytes and mocked
-GPG prove helper behavior; they do not prove a real signed release or runner.
-The local infrastructure suite remains the verification command above.
+The actual diff includes conditions, supply promotion, producer blob, immutable
+source/script pins and negative controls, rather than instructions to do them.
+Offline tests reject unconditional/incomplete job conditions, fork bypass,
+permission expansion, mutable pins, stale producer blobs, removed gates or
+blockers, mismatched integrity receipts and a false deployment claim. Source-only
+validation does not prove an actual GitHub runner or OAuth/model response.
 
-Before separately authorized deployment, independently review shared AW and this
-consumer diff, publish the reviewed immutable AW revision, verify real official
-CLI supply and hashes, update the actual default-branch producer blob, inspect
-machine/account managed CLI configuration, and establish real current-head test
-and review evidence. Existing mutable GKE reusable/action dependencies remain
-visible in provenance for source review; this candidate does not silently claim
-their complete dependency trust. Do not remove true coverage blockers to activate.
+Still required: independent review of this complete enable/dependency diff,
+publication permission covering its GKE path effects, publishing the reviewed AW
+workflow/scripts commit, separately authorized infrastructure deployment, managed
+CLI policy inspection and real current-head gates/review transport evidence.
+Existing product PR heads must contain matching reviewed gate definitions at
+head/base before the collector can accept them; an old green run is insufficient.
+No actual functional/e2e/performance/model run occurred in this offline work.
+
+Keep the corresponding existing hourly Claude cloud review running alongside CI
+review during rollout. Stop that corresponding schedule only after a real
+exact-current-HEAD Claude job conclusion, an authenticated valid review receipt
+and guard negative evidence establish that CI review works. Installing workflows,
+ordinary CI success, static fixtures or disabled jobs are insufficient. This
+candidate performs no schedule or cron change.
 
 ### Never
 
-`.github/workflows/claude-guarded-merge.yml` is a separately disabled pending
-workflow. It has no write scope, no OAuth secret, no real merge call and no
-invented workflow ID in policy. Shared AW also refuses `merge` before any API
-call. Durable cross-run intent/result reconciliation, mutual exclusion and an
-approved provider base/protection contract are still required. An ordinary
-expected-head PUT is not atomic exact-base enforcement. No automatic merge is
-authorized by a successful review.
+The separate `claude-guarded-merge.yml` jobs stay false and read-only; AW `merge`
+refuses before any API call. A successful review cannot authorize a merge.
+Cross-run durable intent/result reconciliation, mutual exclusion and an approved
+provider base/protection contract remain separate prerequisites. Expected-head
+PUT alone is not atomic exact-base enforcement.
 
-The branch metadata currently reports main `protected=false`, branch protection
-disabled and branch status-check enforcement off. This does **not** establish
-absence of all rulesets: rulesets were not queried. Effective token permissions,
-shared-action access, secret availability, organization-managed CLI policy and
-merge-queue contract remain unverified. No protection bypass, new credential,
-permission expansion or new infrastructure is proposed to resolve those gaps.
+No permission, protection, environment, credential or infrastructure change is
+made here. The earlier branch metadata observation reports `protected=false`
+and status-check enforcement off; it is not proof that all rulesets are absent.
+Effective deployment permissions and managed-policy behavior require independent
+inspection. Do not infer live readiness from an offline candidate or clear true
+coverage blockers to activate it.
 
 ## Offline test-workflow dependency pin candidate
 
 ### Goal
 
 Freeze existing action/reusable-workflow source references while preserving test
-commands, job names, required gates, permissions and disabled Claude/merge jobs.
-This is a separate unpublished candidate, not qualification or rollout evidence.
+commands, job names, required gates and permissions. The dependency-only base
+preserved disabled Claude/merge jobs; this combined enable-audit branch adds the
+review conditions above while keeping merge false. This remains unpublished
+and is not qualification or rollout evidence.
 
 ### How
 
@@ -383,5 +328,6 @@ Do not publish this candidate under the earlier review-only draft permission:
 changing `.github/workflows/gke-test.yml` **does** match Tape's automatic GKE PR
 path filter. A future push/PR therefore requires separate authorization for
 that ordinary GKE effect after independent infrastructure review. Do not manually
-dispatch, change credentials/permissions/protections, enable Claude/merge jobs,
-clear qualification blockers or claim live readiness from these offline tests.
+dispatch, change credentials/permissions/protections, deploy the proposed review
+conditions, enable merge, clear qualification blockers or claim live readiness
+from these offline tests.

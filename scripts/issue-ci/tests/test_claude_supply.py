@@ -28,8 +28,9 @@ class SupplyTests(unittest.TestCase):
                   supply["signing_key_path"]: b"fixture public key", supply["binary_path"]: binary}
         return supply, values
 
-    def test_checked_in_disabled_supply_never_reads_network_or_writes(self):
+    def test_disabled_supply_never_reads_network_or_writes(self):
         supply = json.loads((ROOT / ".github/claude-review-cli-supply.json").read_text())
+        supply["enabled"] = False
         with tempfile.TemporaryDirectory() as directory, patch.object(p, "fetch", side_effect=AssertionError("no network")) as network:
             target = Path(directory) / "claude"
             with self.assertRaisesRegex(p.Refused, "supply_not_enabled"):
@@ -39,7 +40,8 @@ class SupplyTests(unittest.TestCase):
 
     def test_verified_manifest_pins_are_not_binary_verification_or_activation(self):
         supply = json.loads((ROOT / ".github/claude-review-cli-supply.json").read_text())
-        self.assertEqual(supply["status"], "manifest_signature_verified_binary_verification_pending")
+        self.assertEqual(supply["status"], "reviewed_pinned")
+        supply["status"] = "manifest_signature_verified_binary_verification_pending"
         self.assertIsNotNone(supply["manifest_sha256"])
         self.assertIsNotNone(supply["binary_sha256"])
         for enabled in (False, True):
