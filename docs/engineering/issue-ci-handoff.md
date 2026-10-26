@@ -215,6 +215,28 @@ an explicit live-validation refusal, not evidence of denied credentials or a
 verified release. Actual manifest structure and binary path availability also
 remain to be confirmed against the signed release bytes before activation.
 
+One subsequent bounded ordinary HTTPS retry used the same exact URL, a
+15-second timeout and a 256 KiB limit. It failed in DNS resolution with
+`URLError.reason` type `gaierror`, errno `8`; no HTTP response was obtained.
+That identifies this retry's transport failure, not an access denial or a
+retrospective explanation of the earlier unknown failure. No TLS bypass,
+network/proxy setting change, binary download or further retry was performed.
+The sanitized result is recorded separately in provenance.
+
+An alternative **for independent supply review only** is Anthropic's documented
+[npm distribution](https://code.claude.com/docs/en/setup#install-with-npm), pinned
+to `@anthropic-ai/claude-code@2.1.310`. Before considering it, fetch official
+registry metadata without credentials, pin `dist.integrity` and every required
+platform/transitive package, inspect tarballs with install scripts disabled,
+review the actual native-payload source, then bind the resulting Linux binary
+hash to the review policy. Node.js 22 or later is required by the documented npm
+package. Its installer may still fetch a native binary from the currently
+unresolved host; npm is not yet proven to resolve this transport blocker.
+Registry SRI is a different trust mechanism from the native release's GPG
+signature. No equivalence or source switch is assumed: registry metadata and
+tarballs have not been fetched, npm has not been executed, and the selected
+native/GPG supply and all disabled flags remain unchanged.
+
 Only the final shared review action step references the existing same-name OAuth
 Actions secret. Its presence/value has not been inspected. The new jobs override
 the handoff's broader workflow permissions to contents/Actions/PR/issues read.

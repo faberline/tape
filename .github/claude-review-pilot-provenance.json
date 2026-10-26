@@ -100,7 +100,30 @@
     "actual_linux_binary_hash": "unverified",
     "signature_verification": "not_executed",
     "binary_download": "not_executed",
-    "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing"
+    "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
+    "bounded_public_https_retry": {
+      "attempts": 1,
+      "category": "dns_resolution",
+      "errno": 8,
+      "exception_type": "URLError",
+      "maximum_bytes": 262144,
+      "reason_type": "gaierror",
+      "status": "failed",
+      "timeout_seconds": 15,
+      "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json"
+    },
+    "current_manifest_status": "retry_failed_dns_resolution_no_http_response_no_access_denial_established",
+    "alternative_distribution_option": {
+      "status": "review_only_not_selected_not_executed",
+      "package": "@anthropic-ai/claude-code@2.1.310",
+      "official_documentation": "https://code.claude.com/docs/en/setup#install-with-npm",
+      "registry": "https://registry.npmjs.org",
+      "registry_metadata": "not_fetched",
+      "dist_integrity": "unverified",
+      "native_payload_source": "unverified_may_still_depend_on_downloads.claude.ai",
+      "trust_change": "npm_SRI_is_not_the_native_release_GPG_signature_requires_independent_supply_review",
+      "current_native_gpg_supply": "unchanged_disabled"
+    }
   },
   "merge_status": "hard_disabled_in_aw_no_provider_write",
   "known_test_dependency_limits": [
