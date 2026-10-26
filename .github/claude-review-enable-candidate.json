@@ -3,11 +3,11 @@
   "status": "offline_enable_audit_candidate_not_deployed",
   "dependency_base_commit": "8d1433e7b74cac42c90b4c86619a490e3b3dab50",
   "binary_evidence_source_commit": "dd88d7989260a13dfa8d5cedaaa6057153a8f0a1",
-  "aw_review_action_commit": "07e8a01a80ad8014d57200cb41e1f1706f1ab67f",
+  "aw_review_action_commit": "0b3bbff90509d638a7928af5c369b3105eec2c53",
   "aw_test_workflow_and_scripts_commit": "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc",
   "producer_workflow_id": 394214906,
   "producer_job": "claude-final-review",
-  "producer_candidate_blob": "188839e5906da3027f959313de66c97fdd0f4e47",
+  "producer_candidate_blob": "19f2fb1225091e829ef261795dd8f66705fc0e7e",
   "required_test_workflow_id": 389097869,
   "required_test_candidate_blob": "d1530edc69924ee42ff630a477ecef4735cd68d4",
   "supply_configuration": "reviewed_pinned_expected_hashes_verified_binary_no_execution",
@@ -40,5 +40,15 @@
   "cron_change_performed": false,
   "aw_review_published_base_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
   "credential_profile": "personal-claude-max-oauth",
-  "credential_binding_contract": "Deployment owner binds opaque credential to the personal Max setup; no token/account identifiers or runtime principal attestation are stored."
+  "credential_binding_contract": "Deployment owner binds opaque credential to the personal Max setup; no token/account identifiers or runtime principal attestation are stored.",
+  "review_policy_candidate": "agent_context_exact_issue_fit",
+  "maximum_claude_calls": 2,
+  "historical_single_call_validation": {
+    "head": "c75a9f7aa5634e2b01bdea9d52e538af7e87f7c8",
+    "gke_run": 40320061406,
+    "review_run": 40322453650,
+    "review_job": 121570873607,
+    "receipt_sha256": "2f7e3afed43905a9ee7832b1e7bcb57937c2067ad8e2ce9bc98bfbc00e0669e3",
+    "scope": "previous_07e8a01_implementation_only_not_this_candidate"
+  }
 }
