@@ -349,3 +349,41 @@ that ordinary GKE effect after independent infrastructure review. Do not manuall
 dispatch, change credentials/permissions/protections, deploy the proposed review
 conditions, enable merge, clear qualification blockers or claim live readiness
 from these offline tests.
+
+## Offline issue-conformance skill and findings candidate (not deployed)
+
+This local candidate keeps required GKE gates, four qualification blockers,
+coverage ownership, OAuth isolation and merge hard-off. It updates the immutable
+AW action pin for the planner protocol fix and trusted skill-text integration.
+The dedicated `claude-findings.yml` is a proposed default-branch follow-up to a
+completed Issue CI run. It does not call Claude, run GKE, check out PR code or
+receive OAuth/cloud credentials. Status (pass/fail/block), concrete missing/extra
+findings and uncertainties are distinct. Protocol failures produce no findings.
+Only the authenticated linked issue may receive an informational comment.
+
+The proposed job uses existing GITHUB_TOKEN with issues:write plus contents,
+actions and pull-requests read. Model jobs remain read-only. This permission
+expansion is NOT activated or authorized by local files; publication/merge needs
+explicit approval after independent review. Native skill discovery stays off.
+
+Concurrency and fixed run-name bind source review run+attempt. Only the earliest
+publisher run's first attempt may POST once; duplicate events/reruns reconcile
+exact bot-owned marker/body, otherwise hold unknown. Up to three reads follow an
+uncertain POST, never an automatic second POST. History is bounded/paginated;
+incomplete evidence refuses. This is practical deduplication, not exactly-once:
+crash/API-visibility/history-deletion windows can cause duplicates or no delivery.
+No persistent journal service is required, no storage permission is borrowed,
+and no comment changes labels, closes issues or authorizes merge.
+
+Bounded plan requiring new approval: publish reviewed AW candidate through draft
+AW #86 (no AW main merge); publish one Tape deployment PR and merge only it after
+applicable infrastructure CI and exact-head safeguards. These changed paths match
+ci-infrastructure, not the existing gke-test path filter. Then synchronize existing
+validation PR #45 to newly deployed main, retaining its exact three rustdoc lines
+and unique Closes #44. One push may run one full normal GKE pipeline, followed by
+at most two production Claude CLI processes (each has a 900-second ceiling) and
+one eligible findings POST to #44. No automatic retry or extra paid run. Costs
+and Max quota use are unknown; the ceilings are not duration/cost promises. Keep
+#45 open, do not merge it, preserve hourly routines and disabled automatic merge.
+A failed receipt/protocol boundary stops without publishing invented findings.
+Historical successful single-call evidence is not proof for this new candidate.

@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "status": "offline_enable_audit_candidate_not_deployed",
+  "status": "offline_skill_protocol_and_github_findings_candidate_not_deployed",
   "dependency_base_commit": "8d1433e7b74cac42c90b4c86619a490e3b3dab50",
   "binary_evidence_source_commit": "dd88d7989260a13dfa8d5cedaaa6057153a8f0a1",
-  "aw_review_action_commit": "0b3bbff90509d638a7928af5c369b3105eec2c53",
+  "aw_review_action_commit": "5c557da6cd408fe2c81d39626cfe9f922c2ec330",
   "aw_test_workflow_and_scripts_commit": "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc",
   "producer_workflow_id": 394214906,
   "producer_job": "claude-final-review",
-  "producer_candidate_blob": "19f2fb1225091e829ef261795dd8f66705fc0e7e",
+  "producer_candidate_blob": "7cf0d9ff74f3f5a7e763b332b7684078d7ee009d",
   "required_test_workflow_id": 389097869,
   "required_test_candidate_blob": "d1530edc69924ee42ff630a477ecef4735cd68d4",
   "supply_configuration": "reviewed_pinned_expected_hashes_verified_binary_no_execution",
@@ -19,17 +19,15 @@
   "existing_gate_jobs_preserved": true,
   "existing_coverage_blockers_preserved": true,
   "coverage_99_percent_instant_gate": false,
-  "if_published_gke_path_match": true,
+  "if_published_gke_path_match": false,
   "remaining_acceptance": [
-    "Independent review of complete enable and dependency diff.",
-    "Explicit publication approval covering changed GKE workflow paths and their automatic CI effects.",
-    "Publish the independently reviewed AW test-workflow/scripts commit before this Tape reusable reference.",
-    "Separately authorize default-branch infrastructure merge/deployment; this candidate cannot approve itself.",
-    "Existing product PR heads must contain the reviewed matching gate definitions before review can qualify.",
-    "Verify Linux endpoint-managed policy absence; this pilot supports only the trusted personal Max OAuth profile, not Team/Enterprise or unknown profiles.",
-    "Real current-head required-gate, runner OAuth/structured-output and authenticated producer-log evidence.",
-    "Review residual runtime/toolchain supply limits; pinning YAML refs is not hermetic runtime attestation.",
-    "Keep the corresponding hourly Claude cloud review alongside CI until actual exact-HEAD Claude job conclusion, authenticated valid receipt and guard negative evidence establish CI review operation; installation or ordinary CI green is insufficient."
+    "Independent review of complete protocol, skill, GitHub-only publisher and consumer wiring.",
+    "Explicit approval for the separate issues:write publisher job, publication and deployment merge.",
+    "Publish reviewed immutable AW pin before Tape consumer references; AW main merge is unnecessary.",
+    "Applicable infrastructure CI and exact-head deployment merge; no GKE path match in this deployment diff.",
+    "Separately bounded one normal PR45 GKE run, up to two Claude CLI processes, and eligible findings publication to issue44.",
+    "Practical deduplication is not exactly-once; unknown results are held without automatic retries.",
+    "Keep validation PR45 open, automatic merge disabled, credentials/permissions otherwise unchanged and hourly routines active."
   ],
   "parallel_hourly_claude_review_required_until_ci_operational": true,
   "ci_review_operational_proof": {
@@ -50,5 +48,13 @@
     "review_job": 121570873607,
     "receipt_sha256": "2f7e3afed43905a9ee7832b1e7bcb57937c2067ad8e2ce9bc98bfbc00e0669e3",
     "scope": "previous_07e8a01_implementation_only_not_this_candidate"
+  },
+  "findings_offline_candidate": {
+    "workflow": ".github/workflows/claude-findings.yml",
+    "blob": "18146e8004c008a37ec95265f0dbe83ef99ea82b",
+    "aw_pin": "5c557da6cd408fe2c81d39626cfe9f922c2ec330",
+    "permissions_activation_authorized": false,
+    "delivery": "github_only_practical_deduplication_not_exactly_once",
+    "live_validation": "pending_one_new_approved_gke_review_and_findings_run"
   }
 }

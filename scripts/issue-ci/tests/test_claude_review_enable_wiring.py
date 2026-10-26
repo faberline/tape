@@ -7,7 +7,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
-PIN = "0b3bbff90509d638a7928af5c369b3105eec2c53"
+PIN = "5c557da6cd408fe2c81d39626cfe9f922c2ec330"
 PREFLIGHT_IF = "${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}"
 REVIEW_IF = "${{ needs.claude-preflight.result == 'success' && needs.claude-preflight.outputs.eligible == 'true' }}"
 PARSER = r'''
@@ -48,7 +48,7 @@ def git_blob(raw):
 
 
 def check_wiring(policy, review_source, merge_source, supply, provenance, binary_evidence, enable_candidate):
-    base = {key: value for key, value in policy.items() if key != "claude_final_review"}
+    base = {key: value for key, value in policy.items() if key not in ("claude_final_review", "claude_findings")}
     assert hashlib.sha256(json.dumps(base, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == provenance["baseline_policy_canonical_sha256"]
     assert base["lifecycle_mode"] == "failure-only" and len(base["qualification_blockers"]) == 4
     prefix = provenance["existing_issue_ci_prefix"]
@@ -96,7 +96,7 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
     assert binary_evidence["observed_sha256"] == supply["binary_sha256"]
     assert binary_evidence["observed_size"] == manifest["platforms"]["linux-x64"]["size"] == 291638640
     assert binary_evidence["binary_executed"] is False and binary_evidence["binary_installed"] is False
-    assert enable_candidate["status"] == "offline_enable_audit_candidate_not_deployed"
+    assert enable_candidate["status"] == "offline_skill_protocol_and_github_findings_candidate_not_deployed"
     assert enable_candidate["publication_authorized"] is False and enable_candidate["live_deployment_activated"] is False
     assert enable_candidate["producer_candidate_blob"] == git_blob(review_source.encode())
     assert enable_candidate["parallel_hourly_claude_review_required_until_ci_operational"] is True
@@ -107,7 +107,7 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
     assert verification["gpg_verify_exit_code"] == 0
     assert verification["validsig_fingerprint"] == "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
     assert verification["binary_downloaded"] is False and verification["binary_hash_checked"] is False
-    assert provenance["aw_candidate"] == PIN and provenance["rollout_status"] == "offline_enable_audit_candidate_not_deployed"
+    assert provenance["aw_candidate"] == PIN and provenance["rollout_status"] == "offline_skill_protocol_and_github_findings_candidate_not_deployed"
 
 
 class OfflineEnableWiringTests(unittest.TestCase):

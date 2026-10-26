@@ -1,0 +1,24 @@
+# OFFLINE candidate: publication/permission activation requires explicit approval.
+name: Claude issue findings
+run-name: claude-findings-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+on:
+  workflow_run:
+    workflows: ["Issue CI handoff"]
+    types: [completed]
+permissions: {}
+concurrency:
+  group: claude-findings-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+jobs:
+  publish-findings:
+    if: ${{ github.event.workflow_run.event == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Verify review and publish linked-issue findings
+        uses: faberline/aw/.github/actions/claude-findings@5c557da6cd408fe2c81d39626cfe9f922c2ec330
