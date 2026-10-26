@@ -27,7 +27,7 @@
     "producer": {
       "path": ".github/workflows/issue-ci.yml",
       "id": 394214906,
-      "definition_sha": "7cf0d9ff74f3f5a7e763b332b7684078d7ee009d",
+      "definition_sha": "94f84f347a49dd5f16cd33306a9b41a4eb76f4a6",
       "job": "claude-final-review"
     },
     "gates": {
@@ -73,7 +73,7 @@
   "claude_findings": {
     "version": 1,
     "path": ".github/workflows/claude-findings.yml",
-    "definition_sha": "18146e8004c008a37ec95265f0dbe83ef99ea82b",
+    "definition_sha": "8c3aa9b1d295d0dde365898b5dd303c577e6e7c8",
     "job": "publish-findings"
   }
 }

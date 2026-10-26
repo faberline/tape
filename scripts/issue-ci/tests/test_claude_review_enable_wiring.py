@@ -7,7 +7,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
-PIN = "5c557da6cd408fe2c81d39626cfe9f922c2ec330"
+PIN = "e06e407972685df3d5b50adeeca1d8ae913b4cea"
 PREFLIGHT_IF = "${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}"
 REVIEW_IF = "${{ needs.claude-preflight.result == 'success' && needs.claude-preflight.outputs.eligible == 'true' }}"
 PARSER = r'''
