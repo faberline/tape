@@ -80,6 +80,11 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
     gate_blob = provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {}).get(".github/workflows/gke-test.yml", provenance["gke"]["blob"])
     assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": gate_blob}}
     assert p["merge_producer"] is None and p["merge_method"] is None
+    contract = json.loads((ROOT / ".github/claude-review-test-contract.json").read_text())
+    assert contract["held_test_root"] in p["protected_paths"]
+    assert set(contract["held_build_and_target_paths"]) <= set(p["protected_paths"])
+    assert "crates/tape/tests/" in p["protected_paths"] and "Cargo.toml" in p["protected_paths"]
+    assert "crates/tape/src/" not in p["protected_paths"]
     fixture = ROOT / "scripts/issue-ci/tests/fixtures/claude-native-2.1.310/manifest.json"
     manifest = json.loads(fixture.read_text())
     assert supply["manifest_sha256"] == hashlib.sha256(fixture.read_bytes()).hexdigest()
@@ -145,6 +150,12 @@ class OfflineEnableWiringTests(unittest.TestCase):
                          lambda v: v.update(binary_executed=True)):
             value = copy.deepcopy(self.binary_evidence); mutation(value)
             with self.assertRaises(AssertionError): self.check(binary_evidence=value)
+
+    def test_weakened_test_harness_or_target_boundary_is_rejected(self):
+        for path in ("crates/tape/tests/", "Cargo.toml", "crates/tape/Cargo.toml", "crates/tape/build.rs", ".cargo/"):
+            value = copy.deepcopy(self.policy)
+            value["claude_final_review"]["protected_paths"].remove(path)
+            with self.subTest(path=path), self.assertRaises(AssertionError): self.check(policy=value)
 
     def test_stale_producer_blob_or_false_deployment_claim_is_rejected(self):
         value = copy.deepcopy(self.policy)

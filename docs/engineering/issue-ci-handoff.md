@@ -252,6 +252,14 @@ Existing product PR heads must contain matching reviewed gate definitions at
 head/base before the collector can accept them; an old green run is insufficient.
 No actual functional/e2e/performance/model run occurred in this offline work.
 
+The trusted gate boundary now holds `crates/tape/tests/`, Cargo manifests/lock,
+workspace/crate target and build-hook configuration, `.cargo/` and toolchain
+selection paths before model review. `.github/claude-review-test-contract.json`
+records their role. A legitimate test/configuration change needs separate
+independent test/gate-contract review; this is a manual route, not a verdict
+that the change is wrong. Ordinary `crates/tape/src/` product changes remain
+reviewable. Existing failure-only mode and genuine coverage blockers remain.
+
 Keep the corresponding existing hourly Claude cloud review running alongside CI
 review during rollout. Stop that corresponding schedule only after a real
 exact-current-HEAD Claude job conclusion, an authenticated valid review receipt
