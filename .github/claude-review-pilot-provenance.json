@@ -112,7 +112,7 @@
       "timeout_seconds": 15,
       "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json"
     },
-    "current_manifest_status": "retry_failed_dns_resolution_no_http_response_no_access_denial_established",
+    "current_manifest_status": "approved_read_context_http_200_signature_pending_missing_verifier",
     "alternative_distribution_option": {
       "status": "review_only_not_selected_not_executed",
       "package": "@anthropic-ai/claude-code@2.1.310",
@@ -123,6 +123,17 @@
       "native_payload_source": "unverified_may_still_depend_on_downloads.claude.ai",
       "trust_change": "npm_SRI_is_not_the_native_release_GPG_signature_requires_independent_supply_review",
       "current_native_gpg_supply": "unchanged_disabled"
+    },
+    "approved_public_integrity_metadata_observation": {
+      "status": "retrieved_public_metadata_signature_not_verified_not_selected",
+      "request_context": "normal_require_escalated_approval_read_only",
+      "manifest_sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
+      "linux_x64_manifest_checksum": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+      "signature_verified": false,
+      "signature_blocker": "no_installed_gpg_gpgv_or_sequoia_found_no_tool_installation_authorized",
+      "binary_downloaded": false,
+      "binary_executed": false,
+      "selected_supply_modified": false
     }
   },
   "merge_status": "hard_disabled_in_aw_no_provider_write",

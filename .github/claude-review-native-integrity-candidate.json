@@ -1,0 +1,48 @@
+{
+  "binary_downloaded": false,
+  "binary_executed": false,
+  "cli_version": "2.1.310",
+  "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
+  "expected_signing_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
+  "fixtures": "scripts/issue-ci/tests/fixtures/claude-native-2.1.310",
+  "linux_x64_manifest_binary": "claude",
+  "linux_x64_manifest_checksum": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+  "linux_x64_manifest_size": 291638640,
+  "manifest_sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
+  "observed_on": "2026-10-26",
+  "observed_signing_fingerprint": null,
+  "origin": "https://downloads.claude.ai",
+  "platform": "linux-x64",
+  "request_context": "normal_require_escalated_approval_read_only",
+  "resources": [
+    {
+      "bytes": 2050,
+      "http_status": 200,
+      "name": "manifest.json",
+      "sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
+      "status": "downloaded_public_metadata",
+      "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json"
+    },
+    {
+      "bytes": 833,
+      "http_status": 200,
+      "name": "manifest.json.sig",
+      "sha256": "5a441d83b678da97ab2447bfa4fb718fbed07ecc4912909edf96284a4a799011",
+      "status": "downloaded_public_metadata",
+      "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json.sig"
+    },
+    {
+      "bytes": 1688,
+      "http_status": 200,
+      "name": "claude-code.asc",
+      "sha256": "bd70a5e4a268002704024ceba7f8446024114e94f3f0bdd11c23a9e592be81c6",
+      "status": "downloaded_public_metadata",
+      "url": "https://downloads.claude.ai/keys/claude-code.asc"
+    }
+  ],
+  "selected_supply_modified": false,
+  "signature_blocker": "no_installed_gpg_gpgv_or_sequoia_found_no_tool_installation_authorized",
+  "signature_verified": false,
+  "status": "retrieved_public_metadata_signature_not_verified_not_selected",
+  "version": 1
+}

@@ -237,6 +237,27 @@ signature. No equivalence or source switch is assumed: registry metadata and
 tarballs have not been fetched, npm has not been executed, and the selected
 native/GPG supply and all disabled flags remain unchanged.
 
+A later normal `require_escalated` approval permitted one bounded read-only GET
+per official manifest/signature/public-key resource. All three returned HTTP 200.
+This proves availability in that approved execution context, not the cause of
+the earlier DNS failures and not a general network or credential-access change.
+The unmodified public bytes are preserved under
+`scripts/issue-ci/tests/fixtures/claude-native-2.1.310/`; their observed SHA256
+digests and exact URLs are in `.github/claude-review-native-integrity-candidate.json`.
+The 2.1.310 manifest names binary `claude` for linux-x64, size 291638640 bytes,
+with checksum `b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56`.
+Manifest SHA256 is `895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74`.
+
+These are **observed candidate values, not trusted supply pins**. No installed
+GPG, GPGV or Sequoia verifier was found in the checked standard locations; no
+tool was installed. The public-key fingerprint and detached signature have not
+been independently verified. Candidate metadata explicitly records this blocker.
+The selected supply file stays disabled with null hashes, review-policy CLI
+hash remains null, and no Linux binary was downloaded or executed. Complete
+isolated-keyring verification against the documented fingerprint, independently
+review the result, and separately approve any supply change before copying
+these observations into active provisioning fields.
+
 Only the final shared review action step references the existing same-name OAuth
 Actions secret. Its presence/value has not been inspected. The new jobs override
 the handoff's broader workflow permissions to contents/Actions/PR/issues read.
