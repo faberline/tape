@@ -52,7 +52,7 @@
     "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
     "observed_run": 40015552646,
     "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
-    "enabled_candidate_blob": "19f2fb1225091e829ef261795dd8f66705fc0e7e"
+    "enabled_candidate_blob": "7cf0d9ff74f3f5a7e763b332b7684078d7ee009d"
   },
   "other": [
     {
@@ -67,10 +67,10 @@
     }
   ],
   "schema_version": 1,
-  "rollout_status": "offline_enable_audit_candidate_not_deployed",
+  "rollout_status": "offline_skill_protocol_and_github_findings_candidate_not_deployed",
   "observed_on": "2026-10-26",
-  "aw_candidate": "0b3bbff90509d638a7928af5c369b3105eec2c53",
-  "aw_candidate_status": "independently_reviewed_agent_context_candidate_pending_tape_deployment",
+  "aw_candidate": "5c557da6cd408fe2c81d39626cfe9f922c2ec330",
+  "aw_candidate_status": "offline_github_only_findings_candidate_pending_independent_review_and_deployment",
   "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
   "existing_issue_ci_prefix": {
     "length": 1793,
@@ -201,5 +201,13 @@
     "Immutable action/reusable references and aw-ref are bound in this candidate; runtime/toolchain/package downloads remain separately documented in ci-dependency-pins-candidate.json."
   ],
   "aw_published_base_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
-  "aw_published_base_url": "https://github.com/faberline/aw/pull/86"
+  "aw_published_base_url": "https://github.com/faberline/aw/pull/86",
+  "findings_offline_candidate": {
+    "workflow": ".github/workflows/claude-findings.yml",
+    "blob": "18146e8004c008a37ec95265f0dbe83ef99ea82b",
+    "aw_pin": "5c557da6cd408fe2c81d39626cfe9f922c2ec330",
+    "permissions_activation_authorized": false,
+    "delivery": "github_only_practical_deduplication_not_exactly_once",
+    "live_validation": "pending_one_new_approved_gke_review_and_findings_run"
+  }
 }
