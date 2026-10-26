@@ -191,12 +191,19 @@ out `github.workflow_sha`, not a PR head, with credentials not persisted. Only
 its final immutable shared-action step receives the existing named OAuth secret.
 No token value or validity call is part of this offline work. The reviewer has
 no tools/MCP and runs in an isolated temporary home as defined by the pinned
-shared implementation. Managed machine/account policy still needs inspection;
-the settings flags cannot override administrator-managed hooks.
+shared implementation. The trusted deployment profile is `personal-claude-max-oauth`, bound by the
+deployment owner to the opaque credential from that personal Max setup. This
+is profile selection, not a token-identity attestation. The official server-
+managed delivery is Team/Enterprise-only; Max is not held for that inapplicable
+feature. Linux endpoint-managed state is checked separately with lstat: only
+known absence of /etc/claude-code passes; existing/symlink/unknown state refuses.
+Safe mode, no tools and empty strict MCP remain defense in depth; safe mode
+does not override managed hooks for a different, unsupported account profile.
 
-The review action stays pinned to AW
-`cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, published in
-[AW draft #86](https://github.com/faberline/aw/pull/86). The review producer reuses
+The review action candidate is pinned to AW
+`07e8a01a80ad8014d57200cb41e1f1706f1ab67f`, an unpublished local isolation-contract
+fix based on the published AW draft #86 revision. It must be independently
+reviewed and published before this consumer candidate can be deployed. The review producer reuses
 real workflow ID `394214906` and job `claude-final-review`; its definition blob
 is recomputed from the actual conditional workflow bytes. GKE keeps real ID
 `389097869`, all exact job names, and candidate definition blob
@@ -244,10 +251,10 @@ permission expansion, mutable pins, stale producer blobs, removed gates or
 blockers, mismatched integrity receipts and a false deployment claim. Source-only
 validation does not prove an actual GitHub runner or OAuth/model response.
 
-Still required: independent review of this complete enable/dependency diff,
-publication permission covering its GKE path effects, publishing the reviewed AW
-workflow/scripts commit, separately authorized infrastructure deployment, managed
-CLI policy inspection and real current-head gates/review transport evidence.
+Still required: independent review of this complete enable/dependency/isolation
+diff, publication permission covering its GKE path effects, publishing both
+reviewed AW source commits, separately authorized infrastructure deployment,
+known-absent Linux endpoint policy and real current-head gates/review evidence.
 Existing product PR heads must contain matching reviewed gate definitions at
 head/base before the collector can accept them; an old green run is insufficient.
 No actual functional/e2e/performance/model run occurred in this offline work.
@@ -278,8 +285,11 @@ PUT alone is not atomic exact-base enforcement.
 No permission, protection, environment, credential or infrastructure change is
 made here. The earlier branch metadata observation reports `protected=false`
 and status-check enforcement off; it is not proof that all rulesets are absent.
-Effective deployment permissions and managed-policy behavior require independent
-inspection. Do not infer live readiness from an offline candidate or clear true
+Effective deployment permissions and endpoint state require independent
+inspection. If a credential is later replaced or its setup is unknown, the
+deployment owner must re-establish the personal Max binding; another or unknown
+profile refuses. No account identifiers or token bytes are recorded in policy.
+Do not infer live readiness from an offline candidate or clear true
 coverage blockers to activate it.
 
 ## Offline test-workflow dependency pin candidate

@@ -27,7 +27,7 @@
     "producer": {
       "path": ".github/workflows/issue-ci.yml",
       "id": 394214906,
-      "definition_sha": "5312454b6fd49b17214fffc19b99733cb4c40789",
+      "definition_sha": "188839e5906da3027f959313de66c97fdd0f4e47",
       "job": "claude-final-review"
     },
     "gates": {
@@ -67,6 +67,7 @@
     ],
     "cli_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
     "merge_producer": null,
-    "merge_method": null
+    "merge_method": null,
+    "credential_profile": "personal-claude-max-oauth"
   }
 }

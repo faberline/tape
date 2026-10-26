@@ -18,7 +18,7 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+      - uses: faberline/aw/.github/actions/claude-review@07e8a01a80ad8014d57200cb41e1f1706f1ab67f
         with:
           operation: discover
           review-run: ${{ github.event.workflow_run.id }}

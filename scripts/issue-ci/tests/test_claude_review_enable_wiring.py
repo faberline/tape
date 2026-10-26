@@ -7,7 +7,7 @@ import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
-PIN = "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3"
+PIN = "07e8a01a80ad8014d57200cb41e1f1706f1ab67f"
 PREFLIGHT_IF = "${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}"
 REVIEW_IF = "${{ needs.claude-preflight.result == 'success' && needs.claude-preflight.outputs.eligible == 'true' }}"
 PARSER = r'''
@@ -79,12 +79,14 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
                              "definition_sha": git_blob(review_source.encode()), "job": "claude-final-review"}
     gate_blob = provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {}).get(".github/workflows/gke-test.yml", provenance["gke"]["blob"])
     assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": gate_blob}}
+    assert p["credential_profile"] == "personal-claude-max-oauth"
     assert p["merge_producer"] is None and p["merge_method"] is None
     contract = json.loads((ROOT / ".github/claude-review-test-contract.json").read_text())
     assert contract["held_test_root"] in p["protected_paths"]
     assert set(contract["held_build_and_target_paths"]) <= set(p["protected_paths"])
     assert "crates/tape/tests/" in p["protected_paths"] and "Cargo.toml" in p["protected_paths"]
-    assert "crates/tape/src/" not in p["protected_paths"]
+    product = "crates/tape/src/service.rs"
+    assert not any(product == root.rstrip("/") or product.startswith(root.rstrip("/") + "/") for root in p["protected_paths"])
     fixture = ROOT / "scripts/issue-ci/tests/fixtures/claude-native-2.1.310/manifest.json"
     manifest = json.loads(fixture.read_text())
     assert supply["manifest_sha256"] == hashlib.sha256(fixture.read_bytes()).hexdigest()
@@ -156,6 +158,12 @@ class OfflineEnableWiringTests(unittest.TestCase):
             value = copy.deepcopy(self.policy)
             value["claude_final_review"]["protected_paths"].remove(path)
             with self.subTest(path=path), self.assertRaises(AssertionError): self.check(policy=value)
+
+    def test_unknown_or_changed_credential_profile_is_rejected(self):
+        for profile in (None, "team-enterprise-oauth", "unknown"):
+            value = copy.deepcopy(self.policy)
+            value["claude_final_review"]["credential_profile"] = profile
+            with self.subTest(profile=profile), self.assertRaises(AssertionError): self.check(policy=value)
 
     def test_stale_producer_blob_or_false_deployment_claim_is_rejected(self):
         value = copy.deepcopy(self.policy)

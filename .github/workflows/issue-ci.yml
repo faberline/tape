@@ -59,7 +59,7 @@ jobs:
       pr: ${{ steps.preflight.outputs.pr }}
       head: ${{ steps.preflight.outputs.head }}
     steps:
-      - uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+      - uses: faberline/aw/.github/actions/claude-review@07e8a01a80ad8014d57200cb41e1f1706f1ab67f
         id: preflight
         with:
           operation: preflight
@@ -93,7 +93,7 @@ jobs:
           VERIFIED_BINARY: ${{ steps.provision.outputs.binary }}
         run: sudo install -m 0755 -- "$VERIFIED_BINARY" /usr/local/bin/claude
       - name: Review exact current head after all existing required gates
-        uses: faberline/aw/.github/actions/claude-review@cc157b0eb296d1ac4a428db7ed0c023d42b87ac3
+        uses: faberline/aw/.github/actions/claude-review@07e8a01a80ad8014d57200cb41e1f1706f1ab67f
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         with:

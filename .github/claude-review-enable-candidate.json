@@ -3,11 +3,11 @@
   "status": "offline_enable_audit_candidate_not_deployed",
   "dependency_base_commit": "8d1433e7b74cac42c90b4c86619a490e3b3dab50",
   "binary_evidence_source_commit": "dd88d7989260a13dfa8d5cedaaa6057153a8f0a1",
-  "aw_review_action_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
+  "aw_review_action_commit": "07e8a01a80ad8014d57200cb41e1f1706f1ab67f",
   "aw_test_workflow_and_scripts_commit": "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc",
   "producer_workflow_id": 394214906,
   "producer_job": "claude-final-review",
-  "producer_candidate_blob": "5312454b6fd49b17214fffc19b99733cb4c40789",
+  "producer_candidate_blob": "188839e5906da3027f959313de66c97fdd0f4e47",
   "required_test_workflow_id": 389097869,
   "required_test_candidate_blob": "d1530edc69924ee42ff630a477ecef4735cd68d4",
   "supply_configuration": "reviewed_pinned_expected_hashes_verified_binary_no_execution",
@@ -26,7 +26,7 @@
     "Publish the independently reviewed AW test-workflow/scripts commit before this Tape reusable reference.",
     "Separately authorize default-branch infrastructure merge/deployment; this candidate cannot approve itself.",
     "Existing product PR heads must contain the reviewed matching gate definitions before review can qualify.",
-    "Inspect ephemeral Linux machine/account managed CLI policy; no assumption that managed hooks are absent.",
+    "Verify Linux endpoint-managed policy absence; this pilot supports only the trusted personal Max OAuth profile, not Team/Enterprise or unknown profiles.",
     "Real current-head required-gate, runner OAuth/structured-output and authenticated producer-log evidence.",
     "Review residual runtime/toolchain supply limits; pinning YAML refs is not hermetic runtime attestation.",
     "Keep the corresponding hourly Claude cloud review alongside CI until actual exact-HEAD Claude job conclusion, authenticated valid receipt and guard negative evidence establish CI review operation; installation or ordinary CI green is insufficient."
@@ -37,5 +37,8 @@
     "authenticated_review_receipt": null,
     "guard_negative_evidence": null
   },
-  "cron_change_performed": false
+  "cron_change_performed": false,
+  "aw_review_published_base_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
+  "credential_profile": "personal-claude-max-oauth",
+  "credential_binding_contract": "Deployment owner binds opaque credential to the personal Max setup; no token/account identifiers or runtime principal attestation are stored."
 }

@@ -52,7 +52,7 @@
     "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
     "observed_run": 40015552646,
     "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
-    "enabled_candidate_blob": "5312454b6fd49b17214fffc19b99733cb4c40789"
+    "enabled_candidate_blob": "188839e5906da3027f959313de66c97fdd0f4e47"
   },
   "other": [
     {
@@ -69,8 +69,8 @@
   "schema_version": 1,
   "rollout_status": "offline_enable_audit_candidate_not_deployed",
   "observed_on": "2026-10-26",
-  "aw_candidate": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
-  "aw_candidate_status": "published_exact_commit_in_aw_draft_pr_86",
+  "aw_candidate": "07e8a01a80ad8014d57200cb41e1f1706f1ab67f",
+  "aw_candidate_status": "offline_isolation_contract_candidate_unpublished",
   "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
   "existing_issue_ci_prefix": {
     "length": 1793,
@@ -184,7 +184,6 @@
     "gke-test.yml references faberline/aw reusable workflow at mutable main",
     "tape-test-image.yml references mutable action/toolchain tags; complete dependency supply review pending"
   ],
-  "aw_candidate_url": "https://github.com/faberline/aw/pull/86",
   "dependency_pin_candidate": {
     "status": "offline_unpublished_candidate_not_qualified",
     "base_commit": "542942fff0ab051a328f1290f6a0abbb8d3c758c",
@@ -200,5 +199,7 @@
   "deployment_activated": false,
   "current_dependency_limits": [
     "Immutable action/reusable references and aw-ref are bound in this candidate; runtime/toolchain/package downloads remain separately documented in ci-dependency-pins-candidate.json."
-  ]
+  ],
+  "aw_published_base_commit": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
+  "aw_published_base_url": "https://github.com/faberline/aw/pull/86"
 }
