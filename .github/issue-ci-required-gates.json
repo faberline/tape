@@ -43,7 +43,7 @@
       "k8s/",
       "Dockerfile.test"
     ],
-    "cli_sha256": null,
+    "cli_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
     "merge_producer": null,
     "merge_method": null
   }

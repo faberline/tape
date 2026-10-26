@@ -69,7 +69,7 @@
   "rollout_status": "disabled_review_only_candidate",
   "observed_on": "2026-10-26",
   "aw_candidate": "cc157b0eb296d1ac4a428db7ed0c023d42b87ac3",
-  "aw_candidate_status": "local_unpublished_pending_independent_review",
+  "aw_candidate_status": "published_exact_commit_in_aw_draft_pr_86",
   "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
   "existing_issue_ci_prefix": {
     "length": 1793,
@@ -97,8 +97,8 @@
     "version_evidence": "local claude --version (no authentication)",
     "manifest_url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json",
     "manifest_result": "not_obtained_web_reader_unavailable_and_public_https_URLError_cause_unknown",
-    "actual_linux_binary_hash": "unverified",
-    "signature_verification": "not_executed",
+    "actual_linux_binary_hash": "not_measured_expected_checksum_from_authenticated_manifest_only",
+    "signature_verification": "verified_independently_with_existing_cloud_gpg",
     "binary_download": "not_executed",
     "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
     "bounded_public_https_retry": {
@@ -112,7 +112,7 @@
       "timeout_seconds": 15,
       "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/manifest.json"
     },
-    "current_manifest_status": "approved_read_context_http_200_signature_pending_missing_verifier",
+    "current_manifest_status": "independent_gpg_signature_verified_binary_verification_and_supply_review_pending",
     "alternative_distribution_option": {
       "status": "review_only_not_selected_not_executed",
       "package": "@anthropic-ai/claude-code@2.1.310",
@@ -134,11 +134,26 @@
       "binary_downloaded": false,
       "binary_executed": false,
       "selected_supply_modified": false
+    },
+    "independent_signature_verification": {
+      "method": "independent_existing_cloud_gpg_isolated_keyring",
+      "verifier": "/usr/bin/gpg",
+      "gpg_verify_exit_code": 0,
+      "public_key_import_succeeded": true,
+      "good_signature_reported": true,
+      "validsig_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
+      "matches_official_documented_fingerprint": true,
+      "exact_resource_sizes_and_sha256_matched": true,
+      "local_mac_verification_performed": false,
+      "binary_downloaded": false,
+      "binary_hash_checked": false,
+      "verification_evidence": "independent_verification_report_for_exact_preserved_public_artifacts"
     }
   },
   "merge_status": "hard_disabled_in_aw_no_provider_write",
   "known_test_dependency_limits": [
     "gke-test.yml references faberline/aw reusable workflow at mutable main",
     "tape-test-image.yml references mutable action/toolchain tags; complete dependency supply review pending"
-  ]
+  ],
+  "aw_candidate_url": "https://github.com/faberline/aw/pull/86"
 }

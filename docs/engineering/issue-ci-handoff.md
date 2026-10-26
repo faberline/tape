@@ -181,8 +181,8 @@ bytes and policy fields are unchanged. The review producer reuses the real
 Issue CI workflow ID `394214906`, with exact job `claude-final-review` and the
 new local workflow blob. The required GKE ID is `389097869`, definition blob
 `052a2e83dcac71da8b6292661d4200c985b3c1d3`; all eight exact jobs are retained.
-The candidate AW action pin is `cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, currently
-local/unpublished and pending independent review. It contains a hard merge hold
+The AW action pin is `cc157b0eb296d1ac4a428db7ed0c023d42b87ac3`, published as the
+exact immutable head of [AW draft #86](https://github.com/faberline/aw/pull/86). It contains a hard merge hold
 and does not require merge workflow registration for review-only operation.
 
 `.github/claude-review-pilot-provenance.json` distinguishes existing default-
@@ -206,14 +206,13 @@ matching downloaded bytes. GPG uses an isolated temporary keyring and receives
 no credentials. These checks follow the official
 [release integrity instructions](https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing).
 
-The actual official manifest could not be obtained in this preparation: the web
+Initial normal-context requests did not obtain the official manifest: the web
 reader reported it unavailable and a public HTTPS fetch returned URLError, with
-cause unknown. No Linux binary or signing key was downloaded, signature checked
-or CLI executed. `.github/claude-review-cli-supply.json` therefore stays disabled,
-with manifest/binary hashes null; review policy CLI hash is also null. This is
-an explicit live-validation refusal, not evidence of denied credentials or a
-verified release. Actual manifest structure and binary path availability also
-remain to be confirmed against the signed release bytes before activation.
+cause unknown. At that initial checkpoint no Linux binary or signing key had
+been downloaded, signature checked or CLI executed, and the disabled supply and
+policy hashes were null. Those failures did not establish access denial or a
+verified release. The subsequent authenticated-manifest result below supersedes
+that initial state; binary download availability and bytes remain unverified.
 
 One subsequent bounded ordinary HTTPS retry used the same exact URL, a
 15-second timeout and a 256 KiB limit. It failed in DNS resolution with
@@ -251,12 +250,27 @@ Manifest SHA256 is `895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad84
 These are **observed candidate values, not trusted supply pins**. No installed
 GPG, GPGV or Sequoia verifier was found in the checked standard locations; no
 tool was installed. The public-key fingerprint and detached signature have not
-been independently verified. Candidate metadata explicitly records this blocker.
-The selected supply file stays disabled with null hashes, review-policy CLI
-hash remains null, and no Linux binary was downloaded or executed. Complete
-isolated-keyring verification against the documented fingerprint, independently
-review the result, and separately approve any supply change before copying
-these observations into active provisioning fields.
+been independently verified at that retrieval checkpoint. No Linux binary was
+downloaded or executed.
+
+The exact preserved public bytes were subsequently verified independently using
+an existing cloud `/usr/bin/gpg` and an isolated temporary keyring. All three
+artifact sizes and SHA256 values matched. Public-key import succeeded; signature
+verification exited 0 with GOODSIG and VALIDSIG fingerprint
+`31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE`, matching the official documented trust
+anchor. This is independently reported cryptographic verification of the
+manifest, not local Mac verification and not verification of downloaded binary
+bytes. The local Mac verifier remains unavailable and no tools were installed.
+
+The authenticated manifest hash and expected linux-x64 binary checksum are now
+staged in the disabled supply file and review policy. The supply's status is
+`manifest_signature_verified_binary_verification_pending`, with `enabled=false`.
+The binary has not been downloaded, hashed or executed. Even changing only
+`enabled` to true remains a refusal while this pending status is present.
+Independently review the supply helper and this pin/provenance update, verify
+actual binary bytes against the signed expected checksum, and obtain separate
+deployment authorization before any activation. No draft PR was updated with
+this unreviewed follow-up.
 
 Only the final shared review action step references the existing same-name OAuth
 Actions secret. Its presence/value has not been inspected. The new jobs override

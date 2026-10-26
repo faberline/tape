@@ -1,16 +1,31 @@
 {
+  "activation_authorized": false,
   "binary_downloaded": false,
   "binary_executed": false,
   "cli_version": "2.1.310",
   "documentation": "https://code.claude.com/docs/en/setup#binary-integrity-and-code-signing",
   "expected_signing_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
   "fixtures": "scripts/issue-ci/tests/fixtures/claude-native-2.1.310",
+  "independent_signature_verification": {
+    "binary_downloaded": false,
+    "binary_hash_checked": false,
+    "exact_resource_sizes_and_sha256_matched": true,
+    "good_signature_reported": true,
+    "gpg_verify_exit_code": 0,
+    "local_mac_verification_performed": false,
+    "matches_official_documented_fingerprint": true,
+    "method": "independent_existing_cloud_gpg_isolated_keyring",
+    "public_key_import_succeeded": true,
+    "validsig_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
+    "verification_evidence": "independent_verification_report_for_exact_preserved_public_artifacts",
+    "verifier": "/usr/bin/gpg"
+  },
   "linux_x64_manifest_binary": "claude",
   "linux_x64_manifest_checksum": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
   "linux_x64_manifest_size": 291638640,
   "manifest_sha256": "895e85ce24c3df3fdb77ac1006bdb2b66f1c42dd557000e65ced1e4aad847e74",
   "observed_on": "2026-10-26",
-  "observed_signing_fingerprint": null,
+  "observed_signing_fingerprint": "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE",
   "origin": "https://downloads.claude.ai",
   "platform": "linux-x64",
   "request_context": "normal_require_escalated_approval_read_only",
@@ -40,9 +55,9 @@
       "url": "https://downloads.claude.ai/keys/claude-code.asc"
     }
   ],
-  "selected_supply_modified": false,
-  "signature_blocker": "no_installed_gpg_gpgv_or_sequoia_found_no_tool_installation_authorized",
-  "signature_verified": false,
-  "status": "retrieved_public_metadata_signature_not_verified_not_selected",
+  "selected_supply_modified": true,
+  "signature_blocker": null,
+  "signature_verified": true,
+  "status": "manifest_signature_verified_binary_verification_and_supply_review_pending",
   "version": 1
 }

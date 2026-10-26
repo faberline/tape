@@ -37,6 +37,18 @@ class SupplyTests(unittest.TestCase):
             network.assert_not_called()
             self.assertFalse(target.exists())
 
+    def test_verified_manifest_pins_are_not_binary_verification_or_activation(self):
+        supply = json.loads((ROOT / ".github/claude-review-cli-supply.json").read_text())
+        self.assertEqual(supply["status"], "manifest_signature_verified_binary_verification_pending")
+        self.assertIsNotNone(supply["manifest_sha256"])
+        self.assertIsNotNone(supply["binary_sha256"])
+        for enabled in (False, True):
+            value = dict(supply, enabled=enabled)
+            with tempfile.TemporaryDirectory() as directory, patch.object(p, "fetch", side_effect=AssertionError("no network")) as network:
+                with self.assertRaisesRegex(p.Refused, "supply_not_enabled"):
+                    p.provision(value, Path(directory) / "claude", reader=network)
+                network.assert_not_called()
+
     def test_synthetic_positive_and_corruption_negative_then_restored_positive(self):
         supply, values = self.fixture()
         with tempfile.TemporaryDirectory() as directory:

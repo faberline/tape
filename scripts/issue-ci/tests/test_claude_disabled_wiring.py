@@ -77,8 +77,16 @@ def check_disabled(policy, review_source, merge_source, supply, provenance):
                              "definition_sha": git_blob(review_source.encode()), "job": "claude-final-review"}
     assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": "052a2e83dcac71da8b6292661d4200c985b3c1d3"}}
     assert p["merge_producer"] is None and p["merge_method"] is None
-    assert p["cli_sha256"] is None and supply["binary_sha256"] is None and supply["manifest_sha256"] is None
+    fixture = ROOT / "scripts/issue-ci/tests/fixtures/claude-native-2.1.310/manifest.json"
+    manifest = json.loads(fixture.read_text())
+    assert supply["manifest_sha256"] == hashlib.sha256(fixture.read_bytes()).hexdigest()
+    assert p["cli_sha256"] == supply["binary_sha256"] == manifest["platforms"]["linux-x64"]["checksum"]
+    assert supply["status"] == "manifest_signature_verified_binary_verification_pending"
     assert supply["enabled"] is False
+    verification = provenance["cli_observation"]["independent_signature_verification"]
+    assert verification["gpg_verify_exit_code"] == 0
+    assert verification["validsig_fingerprint"] == "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
+    assert verification["binary_downloaded"] is False and verification["binary_hash_checked"] is False
     assert provenance["aw_candidate"] == PIN and provenance["rollout_status"] == "disabled_review_only_candidate"
 
 
