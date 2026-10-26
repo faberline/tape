@@ -21,4 +21,4 @@ jobs:
       issues: write
     steps:
       - name: Verify review and publish linked-issue findings
-        uses: faberline/aw/.github/actions/claude-findings@5c557da6cd408fe2c81d39626cfe9f922c2ec330
+        uses: faberline/aw/.github/actions/claude-findings@e06e407972685df3d5b50adeeca1d8ae913b4cea
