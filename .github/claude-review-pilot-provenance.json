@@ -52,7 +52,7 @@
     "observed_blob": "cce42010cf5f4e59d20783fe5039e2742b53ac89",
     "observed_run": 40015552646,
     "candidate_blob": "509a9f45b43005fba8cec2b5ea09dcb2a91dbbc0",
-    "enabled_candidate_blob": "94f84f347a49dd5f16cd33306a9b41a4eb76f4a6"
+    "enabled_candidate_blob": "6d039236e8715fae575406e289819804f54a3d20"
   },
   "other": [
     {
@@ -69,7 +69,7 @@
   "schema_version": 1,
   "rollout_status": "offline_skill_protocol_and_github_findings_candidate_not_deployed",
   "observed_on": "2026-10-26",
-  "aw_candidate": "e06e407972685df3d5b50adeeca1d8ae913b4cea",
+  "aw_candidate": "c9ec41e3e01c2a0c9462e3de5c64ed0a5ea320d5",
   "aw_candidate_status": "offline_github_only_findings_candidate_pending_independent_review_and_deployment",
   "baseline_policy_canonical_sha256": "eb916317262f1229224c8b185bdc3f82833db1011b5c1ef1877e3e26d42e66a0",
   "existing_issue_ci_prefix": {
@@ -204,8 +204,8 @@
   "aw_published_base_url": "https://github.com/faberline/aw/pull/86",
   "findings_offline_candidate": {
     "workflow": ".github/workflows/claude-findings.yml",
-    "blob": "8c3aa9b1d295d0dde365898b5dd303c577e6e7c8",
-    "aw_pin": "e06e407972685df3d5b50adeeca1d8ae913b4cea",
+    "blob": "44376776112f0bc0aa2cf2ad2a7f7744c8b2d23c",
+    "aw_pin": "c9ec41e3e01c2a0c9462e3de5c64ed0a5ea320d5",
     "permissions_activation_authorized": false,
     "delivery": "github_only_practical_deduplication_not_exactly_once",
     "live_validation": "pending_one_new_approved_gke_review_and_findings_run"
