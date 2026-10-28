@@ -85,6 +85,20 @@ so it was not used for the passing controls. Workflow YAML parsed with three
 jobs. Rust product tests and builds were not run during this preparation.
 Normal online PR execution and independent adoption review remain required.
 
+The first online run at `3f7c32b9d679b09a4a1e5e38c1bb35969bb0f5a7`
+completed formatting, inventory and 13 matrix rows successfully. Five rows
+failed the nonempty-target rule: the operator library had no unit tests, and
+the benchmark binary had no unit tests in its four feature profiles. All
+other existing targets passed. These failures did not justify an exception.
+
+The repair adds four operator rendering tests for durable storage and shutdown,
+child identity and selectors, fail-closed credential projection, and backup
+creation and pruning. It adds five benchmark CLI tests per feature profile for
+argument contracts, invalid input, the empty-sweep guard and feature-gated
+commands. The tests use no cluster or network. Production behavior, existing
+test assertions and every gate threshold stay unchanged. Their product test
+and Clippy results must come from the next exact-head online run.
+
 The local inspection commands are:
 
 ```sh
