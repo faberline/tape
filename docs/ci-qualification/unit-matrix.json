@@ -1,0 +1,76 @@
+{
+  "include": [
+    {
+      "package": "tape",
+      "profile": "default"
+    },
+    {
+      "package": "tape-access",
+      "profile": "default"
+    },
+    {
+      "package": "tape-bench",
+      "profile": "default"
+    },
+    {
+      "package": "tape-journal",
+      "profile": "default"
+    },
+    {
+      "package": "tape-operator",
+      "profile": "default"
+    },
+    {
+      "package": "tape-replication",
+      "profile": "default"
+    },
+    {
+      "package": "tape-shared-kernel",
+      "profile": "default"
+    },
+    {
+      "package": "tape-storage",
+      "profile": "default"
+    },
+    {
+      "package": "tape",
+      "profile": "all-features"
+    },
+    {
+      "package": "tape",
+      "profile": "feature:backup"
+    },
+    {
+      "package": "tape",
+      "profile": "feature:issue"
+    },
+    {
+      "package": "tape",
+      "profile": "feature:operator"
+    },
+    {
+      "package": "tape",
+      "profile": "feature:otel"
+    },
+    {
+      "package": "tape",
+      "profile": "feature:self-update"
+    },
+    {
+      "package": "tape",
+      "profile": "no-default"
+    },
+    {
+      "package": "tape-bench",
+      "profile": "all-features"
+    },
+    {
+      "package": "tape-bench",
+      "profile": "feature:jetstream-benchmark"
+    },
+    {
+      "package": "tape-bench",
+      "profile": "no-default"
+    }
+  ]
+}
