@@ -243,8 +243,26 @@ impl TapeRaft {
         topic: String,
         name: String,
     ) -> Result<(Index, Option<TapeOutcome>)> {
-        self.propose_and_claim(TapeCommand::SubscriptionCreate { topic, name })
-            .await
+        self.propose_subscription_create_with_deadline(
+            topic,
+            name,
+            tape_shared_kernel::DEFAULT_ACK_DEADLINE_SECONDS,
+        )
+        .await
+    }
+
+    pub async fn propose_subscription_create_with_deadline(
+        &self,
+        topic: String,
+        name: String,
+        ack_deadline_seconds: u64,
+    ) -> Result<(Index, Option<TapeOutcome>)> {
+        self.propose_and_claim(TapeCommand::SubscriptionCreate {
+            topic,
+            name,
+            ack_deadline_seconds,
+        })
+        .await
     }
 
     pub async fn propose_subscription_delete(

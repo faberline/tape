@@ -339,7 +339,6 @@ async fn assert_absent(client: &reqwest::Client, addr: SocketAddr, topic: &str, 
 /// — a subscriber must be able to discover its deadline without being told the
 /// number out of band, which is the entire point of making it configuration.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn create_without_ack_deadline_seconds_defaults_to_ten() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -391,7 +390,6 @@ async fn create_without_ack_deadline_seconds_defaults_to_ten() {
 /// body, or keeps one deadline per topic, or keeps the last one written,
 /// passes a single-subscription round trip and fails here.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn an_in_range_ack_deadline_seconds_is_stored_per_subscription_and_echoed() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -463,7 +461,6 @@ async fn an_in_range_ack_deadline_seconds_is_stored_per_subscription_and_echoed(
 /// created — a deadline quietly clamped up to 10 would be a subscription whose
 /// configuration disagrees with what its owner asked for.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn ack_deadline_seconds_of_nine_is_refused_with_400() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -478,7 +475,6 @@ async fn ack_deadline_seconds_of_nine_is_refused_with_400() {
 /// of the range cannot be given different shapes. This is the case the work
 /// item's negative control drives red by dropping the upper bound.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn ack_deadline_seconds_of_six_hundred_one_is_refused_with_400() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -498,7 +494,6 @@ async fn ack_deadline_seconds_of_six_hundred_one_is_refused_with_400() {
 /// wrong implementation: the status by a parser that rejects `null` for the
 /// wrong reason, the absence by a server that refuses every create.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn a_null_ack_deadline_seconds_is_refused_and_never_coerced_to_the_default() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -528,7 +523,6 @@ async fn a_null_ack_deadline_seconds_is_refused_and_never_coerced_to_the_default
 /// off-by-one in either direction — accepting `11..=599` — satisfies every
 /// refusal case above while rejecting the two values the promise cites.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn the_range_bounds_ten_and_six_hundred_are_inclusive() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -565,7 +559,6 @@ async fn the_range_bounds_ten_and_six_hundred_are_inclusive() {
 /// negative, or a float that silently truncates into range would each be a
 /// deadline nobody configured.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn malformed_ack_deadline_seconds_values_are_refused_and_create_nothing() {
     let addr = start_server().await;
     let client = reqwest::Client::new();
@@ -683,7 +676,6 @@ async fn authorization_is_answered_before_ack_deadline_seconds_is_read() {
 /// ordering guard by never validating on the authenticated path would be
 /// trading one defect for another.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "red until #11 lands ackDeadlineSeconds"]
 async fn an_authorized_create_still_enforces_the_range() {
     let addr = start_server_with_auth().await;
     let client = reqwest::Client::new();

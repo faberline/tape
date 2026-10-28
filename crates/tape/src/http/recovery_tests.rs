@@ -47,6 +47,7 @@ async fn recovered_startup_subscription_does_not_append_a_second_wal_frame() {
         .apply_mutation(TapeCommand::SubscriptionCreate {
             topic: "orders".into(),
             name: "billing".into(),
+            ack_deadline_seconds: 10,
         })
         .await
         .expect("seed subscription through WAL");

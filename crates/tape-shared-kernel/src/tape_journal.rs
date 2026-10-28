@@ -11,7 +11,8 @@ use super::error::{SubscriptionAckError, SubscriptionError, TapeError};
 use super::event::{ConsumerCheckpoint, TapeEvent};
 use super::retention::{RetentionOutcome, RetentionPolicy};
 use super::subscription::{
-    PullSubscriptionBatch, Subscription, DEFAULT_PULL_BATCH, MAX_PULL_BATCH,
+    PullSubscriptionBatch, Subscription, DEFAULT_ACK_DEADLINE_SECONDS, DEFAULT_PULL_BATCH,
+    MAX_PULL_BATCH,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -161,13 +162,27 @@ impl TapeJournal {
         topic: impl Into<String>,
         name: impl Into<String>,
     ) -> Result<Subscription, SubscriptionError> {
+        self.create_subscription_with_deadline(topic, name, DEFAULT_ACK_DEADLINE_SECONDS)
+    }
+
+    /// Create a topic-scoped subscription with an explicit ack deadline without moving a pull checkpoint.
+    pub fn create_subscription_with_deadline(
+        &mut self,
+        topic: impl Into<String>,
+        name: impl Into<String>,
+        ack_deadline_seconds: u64,
+    ) -> Result<Subscription, SubscriptionError> {
         let topic = topic.into();
         let name = name.into();
         let key = subscription_key(&topic, &name);
         if self.subscriptions.contains_key(&key) {
             return Err(SubscriptionError::AlreadyExists { topic, name });
         }
-        let subscription = Subscription { topic, name };
+        let subscription = Subscription {
+            topic,
+            name,
+            ack_deadline_seconds,
+        };
         self.subscriptions.insert(key, subscription.clone());
         Ok(subscription)
     }

@@ -186,15 +186,27 @@ pub(super) fn schemas() -> Value {
             "additionalProperties": false,
             "required": ["name"],
             "properties": {
-                "name": {"type": "string"}
+                "name": {"type": "string"},
+                "ackDeadlineSeconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 600,
+                    "default": 10
+                }
             }
         },
         "Subscription": {
             "type": "object",
-            "required": ["topic", "name"],
+            "required": ["topic", "name", "ackDeadlineSeconds"],
             "properties": {
                 "topic": {"type": "string"},
-                "name": {"type": "string"}
+                "name": {"type": "string"},
+                "ackDeadlineSeconds": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 600,
+                    "default": 10
+                }
             }
         },
         "SubscriptionListResponse": {
