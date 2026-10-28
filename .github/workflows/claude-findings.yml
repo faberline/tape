@@ -3,7 +3,7 @@ name: Claude issue findings
 run-name: claude-findings-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
 on:
   workflow_run:
-    workflows: ["Issue CI handoff"]
+    workflows: ["Claude final review"]
     types: [completed]
 permissions: {}
 concurrency:
@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish-findings:
-    if: ${{ github.event.workflow_run.event == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    if: ${{ github.event.workflow_run.event == 'workflow_run' && (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure') && github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -21,4 +21,4 @@ jobs:
       issues: write
     steps:
       - name: Verify review and publish linked-issue findings
-        uses: faberline/aw/.github/actions/claude-findings@c9ec41e3e01c2a0c9462e3de5c64ed0a5ea320d5
+        uses: faberline/aw/.github/actions/claude-findings@28637704225692e5a1766b9c6b9778ef2b52e155
