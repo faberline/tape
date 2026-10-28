@@ -17,9 +17,9 @@ Formatting runs separately, so a format failure cannot hide the unit matrix.
 `scripts/pr-gates/plan.py` and its controls are copied byte for byte from
 `faberline/core@140b30f550d974d088f9b2f018c2b2ca3ff423e2`. That source's review
 does not constitute independent review of this Tape adoption. The new workflow
-uses pinned actions and preserves the existing GKE, Claude, docs-copy and
-qualification files. The narrow runbook-copy contract in issue #40 and the
-operator-documentation validation in issue #44 remain separate work.
+uses pinned actions and preserves the existing GKE assertions, Claude,
+docs-copy and qualification policy. The narrow runbook-copy contract in issue
+#40 and the operator-documentation validation in issue #44 remain separate work.
 
 ## Manifest-derived coverage
 
@@ -133,6 +133,24 @@ Saved events and Compute audit records identify `SSD_TOTAL_GB`, regional limit
 before the shared N4/16 GB migration. A quota read on 2026-10-28 reported
 0/500 GB for that metric. It does not prove another quota's usage or a new product pass.
 The old product PR's head and failed evidence remain unchanged by this work.
+
+The current candidate's GKE run at `bc04493` reached a different, confirmed
+blocker before deployment: the pinned AW pool manifest still required
+`e2-standard-2`, while the actual Tape pools were already `n4-standard-2`.
+The repair keeps the reusable workflow at
+`f5b4c093ca2b5525e594c6ea154f0159af1fb9cc` and sets its `aw-ref` input to
+`23ce1028e73e8c6342ac14b0bc650c19db5898a3`, the applied N4/16 GB revision.
+The GKE scripts are identical between these revisions. This keeps every
+execution assertion and the machine-type consistency check intact.
+
+The test-only Tape CR also explicitly selects the cluster's `dynamic-rwo`
+StorageClass. The default `standard-rwo` provisions PD Balanced, which N4
+cannot attach. `dynamic-rwo` selects Hyperdisk Balanced on these nodes. Its
+minimum data-volume size is
+[4 GiB](https://docs.cloud.google.com/compute/docs/disks/hd-types/hyperdisk-balanced),
+so the test fixture requests `4Gi` instead of `1Gi`. This data PVC is separate
+from each node's unchanged 16 GB boot disk. No production default, test
+assertion, resource limit, timeout or performance bound changes.
 
 This candidate neither completes any product issue nor authorizes lifecycle
 activation, automatic merge or release. The existing product tests, runbook
