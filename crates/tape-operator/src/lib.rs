@@ -4,6 +4,9 @@
 //! PodDisruptionBudget, and the downward-API StatefulSet raft-runtime consumes.
 //! Behind the `operator` feature; the service image enables it because that
 //! same image also runs the checked-in operator Deployment.
+//! [`render`] constructs the desired child objects without cluster I/O;
+//! [`reconcile`] connects Tape's `ManagedService` implementation to the shared
+//! Kubernetes controller.
 //!
 //! ```text
 //! Tape (tape.dev/v1alpha1)  --reconcile-->  ServiceAccount, StatefulSet,
