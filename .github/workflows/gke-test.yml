@@ -230,11 +230,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+    uses: faberline/aw/.github/workflows/gke-test.yml@6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb
     with:
-      # Keep the reusable workflow pinned above. Its scripts and pool manifest
-      # use the N4/16 GB infrastructure revision already applied to the cluster.
-      aw-ref: 23ce1028e73e8c6342ac14b0bc650c19db5898a3
+      aw-ref: 6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb
       image: ${{ needs.resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape

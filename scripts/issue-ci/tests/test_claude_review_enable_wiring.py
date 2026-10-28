@@ -77,7 +77,9 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
     p = policy["claude_final_review"]
     assert p["producer"] == {"path": ".github/workflows/issue-ci.yml", "id": 394214906,
                              "definition_sha": git_blob(review_source.encode()), "job": "claude-final-review"}
-    gate_blob = provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {}).get(".github/workflows/gke-test.yml", provenance["gke"]["blob"])
+    runtime = provenance["n4_runtime_binding"]
+    assert runtime["dependency_published"] is True and runtime["qualification_approved"] is False
+    gate_blob = runtime["consumer_workflow_blob"]
     assert p["gates"] == {".github/workflows/gke-test.yml": {"id": 389097869, "definition_sha": gate_blob}}
     assert p["credential_profile"] == "personal-claude-max-oauth"
     assert p["merge_producer"] is None and p["merge_method"] is None
@@ -99,6 +101,8 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
     assert enable_candidate["status"] == "offline_skill_protocol_and_github_findings_candidate_not_deployed"
     assert enable_candidate["publication_authorized"] is False and enable_candidate["live_deployment_activated"] is False
     assert enable_candidate["producer_candidate_blob"] == git_blob(review_source.encode())
+    assert enable_candidate["required_test_candidate_blob"] == gate_blob
+    assert enable_candidate["aw_test_workflow_and_scripts_commit"] == runtime["aw_commit"]
     assert enable_candidate["parallel_hourly_claude_review_required_until_ci_operational"] is True
     assert enable_candidate["cron_change_performed"] is False
     assert enable_candidate["ci_review_operational_proof"] == dict(exact_head_claude_job_conclusion=None,
@@ -175,8 +179,7 @@ class OfflineEnableWiringTests(unittest.TestCase):
         with self.assertRaises(AssertionError): self.check(enable_candidate=candidate)
 
     def test_runtime_gke_matches_declared_candidate_and_docs_remain_observed_bytes(self):
-        candidate = self.provenance.get("dependency_pin_candidate", {}).get("candidate_workflow_blobs", {})
-        self.assertEqual(git_blob((ROOT / ".github/workflows/gke-test.yml").read_bytes()), candidate.get(".github/workflows/gke-test.yml", self.provenance["gke"]["blob"]))
+        self.assertEqual(git_blob((ROOT / ".github/workflows/gke-test.yml").read_bytes()), self.provenance["n4_runtime_binding"]["consumer_workflow_blob"])
         self.assertEqual(self.provenance["gke"]["blob"], "052a2e83dcac71da8b6292661d4200c985b3c1d3")
         for entry in self.provenance["other"]:
             self.assertEqual(git_blob((ROOT / entry["path"]).read_bytes()), entry["blob"])

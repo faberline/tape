@@ -137,11 +137,25 @@ The old product PR's head and failed evidence remain unchanged by this work.
 The current candidate's GKE run at `bc04493` reached a different, confirmed
 blocker before deployment: the pinned AW pool manifest still required
 `e2-standard-2`, while the actual Tape pools were already `n4-standard-2`.
-The repair keeps the reusable workflow at
-`f5b4c093ca2b5525e594c6ea154f0159af1fb9cc` and sets its `aw-ref` input to
-`23ce1028e73e8c6342ac14b0bc650c19db5898a3`, the applied N4/16 GB revision.
-The GKE scripts are identical between these revisions. This keeps every
-execution assertion and the machine-type consistency check intact.
+The repair binds both the reusable workflow and `aw-ref` input to
+[`6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb`](https://github.com/faberline/aw/commit/6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb).
+Its parent is the applied N4/16 GB revision `23ce1028`, and its workflow is
+byte-identical to the prior pinned `f5b4c09` workflow. Scripts are identical
+across all three revisions. The new AW commit changes only five action refs
+from mutable tags to the existing immutable refs. Its branch leaves AW main,
+the applied infrastructure and other sessions' migration schedules unchanged.
+
+The infrastructure controls also require the workflow and scripts refs to
+match. The failed intermediate split-ref proposal at `e3cc54e` did not meet
+that identity contract. The final proposal preserves the same-ref rule and
+exact normalized workflow baseline. A separate `n4_runtime_binding` records
+the published dependency, its parent and source object hashes. It explicitly
+denies qualification approval. Historical offline provenance remains intact.
+Current gate-definition hashes follow the new consumer workflow. All four
+qualification blockers, protected paths and lifecycle restrictions remain.
+The 82 isolated infrastructure controls passed locally, including rejection
+of mutable refs, changed commands, altered source identities and false
+qualification claims. Online evidence at the final head is still required.
 
 The test-only Tape CR also explicitly selects the cluster's `dynamic-rwo`
 StorageClass. The default `standard-rwo` provisions PD Balanced, which N4
