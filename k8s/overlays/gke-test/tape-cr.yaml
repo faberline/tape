@@ -11,7 +11,9 @@ spec:
   shardCount: 1
   replicasPerShard: 1
   voterCount: 1
-  storage: 1Gi
+  # N4 requires Hyperdisk. Four GiB is its minimum data-volume size.
+  storage: 4Gi
+  storageClass: dynamic-rwo
   graceSecs: 1
   logLevel: info
   # Stated, not omitted: an absent spec.auth defaults to required, and a CR
@@ -19,7 +21,7 @@ spec:
   # startup. The recovery suite tests PVC-retained replay, not auth.
   auth: disabled
   # The defaults (1 CPU, 4Gi) do not fit next to the node's system pods on
-  # an e2-standard-2.
+  # the shared n4-standard-2 test node.
   resources:
     cpu: 250m
     memory: 512Mi
