@@ -39,6 +39,26 @@ def check(sources, evidence, policy, provenance):
     assert blob(image.encode()) == BASELINES[".github/workflows/tape-test-image.yml"]
     aw = evidence["aw_reusable"]["candidate_commit"]
     assert re.fullmatch("[0-9a-f]{40}", aw) and evidence["aw_reusable"]["published"] is False
+    # The offline packet stays historical. Current runtime identities have a
+    # separate, exact binding; publication does not approve qualification.
+    assert aw == "f5b4c093ca2b5525e594c6ea154f0159af1fb9cc"
+    runtime = evidence["n4_runtime_binding"]
+    assert runtime == {
+        "status": "published_immutable_dependency_not_qualified",
+        "repository": "faberline/aw",
+        "source_url": "https://api.github.com/repos/faberline/aw/git/commits/6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb",
+        "aw_commit": "6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb",
+        "aw_parent_commit": "23ce1028e73e8c6342ac14b0bc650c19db5898a3",
+        "aw_workflow_blob": evidence["aw_reusable"]["candidate_workflow_blob"],
+        "aw_scripts_tree": "3ec5c28a352328246308716949b0fb52313ef2d6",
+        "aw_pool_manifest_blob": "0375be8380978e76c979731565cc2a7819765e9f",
+        "consumer_workflow_blob": evidence["workflows"][".github/workflows/gke-test.yml"]["candidate_blob"],
+        "dependency_published": True,
+        "qualification_approved": False,
+    }
+    assert runtime["aw_workflow_blob"] == "74202e4d7aa87e2a69f7804ac68866ca9b7f193d"
+    assert provenance["n4_runtime_binding"] == runtime
+    aw = runtime["aw_commit"]
     gke = sources[".github/workflows/gke-test.yml"]
     assert gke.count("      aw-ref: " + aw + "\n") == 1
     normalized = gke.replace("faberline/aw/.github/workflows/gke-test.yml@" + aw,
@@ -77,11 +97,26 @@ class DependencyPinTests(unittest.TestCase):
 
     def test_mismatched_aw_scripts_ref_or_invented_source_owner_rejected(self):
         path = ".github/workflows/gke-test.yml"
-        changed = dict(self.sources, **{path: self.sources[path].replace("      aw-ref: " + self.evidence["aw_reusable"]["candidate_commit"], "      aw-ref: main")})
+        changed = dict(self.sources, **{path: self.sources[path].replace("      aw-ref: " + self.evidence["n4_runtime_binding"]["aw_commit"], "      aw-ref: main")})
         with self.assertRaises(AssertionError): check(changed, self.evidence, self.policy, self.provenance)
         evidence = copy.deepcopy(self.evidence)
         evidence["references"][0]["source_url"] = "https://api.github.com/repos/foreign/action/git/ref/tags/v4"
         with self.assertRaises(AssertionError): check(self.sources, evidence, self.policy, self.provenance)
+
+    def test_unpublished_changed_or_qualified_runtime_binding_is_rejected(self):
+        for key, value in (("dependency_published", False),
+                           ("qualification_approved", True),
+                           ("aw_commit", "main"),
+                           ("aw_parent_commit", "f" * 40),
+                           ("aw_scripts_tree", "f" * 40),
+                           ("aw_pool_manifest_blob", "f" * 40),
+                           ("aw_workflow_blob", "f" * 40),
+                           ("source_url", "https://api.github.com/repos/foreign/aw/git/commits/" + "f" * 40)):
+            evidence = copy.deepcopy(self.evidence)
+            evidence["n4_runtime_binding"][key] = value
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                check(self.sources, evidence, self.policy, self.provenance)
+        check(self.sources, self.evidence, self.policy, self.provenance)
 
 
 if __name__ == "__main__":

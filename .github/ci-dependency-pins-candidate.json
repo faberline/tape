@@ -142,7 +142,7 @@
     },
     ".github/workflows/gke-test.yml": {
       "baseline_blob": "052a2e83dcac71da8b6292661d4200c985b3c1d3",
-      "candidate_blob": "d1530edc69924ee42ff630a477ecef4735cd68d4"
+      "candidate_blob": "9b19e74c3b1ba3a0f14260460474c702d1f40c84"
     }
   },
   "replacements": [
@@ -182,5 +182,18 @@
       "before": "docker/build-push-action@v6",
       "after": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8"
     }
-  ]
+  ],
+  "n4_runtime_binding": {
+    "status": "published_immutable_dependency_not_qualified",
+    "repository": "faberline/aw",
+    "source_url": "https://api.github.com/repos/faberline/aw/git/commits/6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb",
+    "aw_commit": "6eb7ebcdf38343e0d4c77f8674b6bc30976d86bb",
+    "aw_parent_commit": "23ce1028e73e8c6342ac14b0bc650c19db5898a3",
+    "aw_workflow_blob": "74202e4d7aa87e2a69f7804ac68866ca9b7f193d",
+    "aw_scripts_tree": "3ec5c28a352328246308716949b0fb52313ef2d6",
+    "aw_pool_manifest_blob": "0375be8380978e76c979731565cc2a7819765e9f",
+    "consumer_workflow_blob": "9b19e74c3b1ba3a0f14260460474c702d1f40c84",
+    "dependency_published": true,
+    "qualification_approved": false
+  }
 }

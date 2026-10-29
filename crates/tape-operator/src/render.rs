@@ -229,3 +229,6 @@ pub fn prunes(tape: &Tape) -> Vec<PruneTarget> {
     }
     targets
 }
+
+#[cfg(test)]
+mod tests;

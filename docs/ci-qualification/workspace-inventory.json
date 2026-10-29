@@ -1,0 +1,292 @@
+{
+  "baseline_comparison": null,
+  "execution_selection": "complete workspace",
+  "packages": [
+    {
+      "dependencies": [
+        "anyhow",
+        "axum",
+        "build-stamp",
+        "clap",
+        "cli-std",
+        "futures",
+        "http-body-util",
+        "openapi-codegen",
+        "peer-tls",
+        "raft-runtime",
+        "rcgen",
+        "reqwest",
+        "rig",
+        "serde",
+        "serde_json",
+        "serde_yaml",
+        "server-lifecycle",
+        "service-auth",
+        "service-backup",
+        "service-http",
+        "service-k8s",
+        "storage-durable",
+        "tape-access",
+        "tape-journal",
+        "tape-operator",
+        "tape-replication",
+        "tape-shared-kernel",
+        "tape-storage",
+        "tempfile",
+        "tokio",
+        "tower",
+        "tracing",
+        "tracing-subscriber",
+        "transport-h2c"
+      ],
+      "directory": "crates/tape",
+      "features": {
+        "backup": [
+          "service-backup/http-client",
+          "service-backup/s3"
+        ],
+        "default": [],
+        "issue": [
+          "cli-std/online"
+        ],
+        "operator": [
+          "dep:tape-operator",
+          "dep:service-k8s"
+        ],
+        "otel": [
+          "service-http/otlp"
+        ],
+        "self-update": [
+          "cli-std/online"
+        ]
+      },
+      "name": "tape",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape",
+          "required-features": [],
+          "test": true
+        },
+        {
+          "harness": true,
+          "kind": [
+            "bin"
+          ],
+          "name": "tape",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "anyhow",
+        "service-auth"
+      ],
+      "directory": "crates/tape-access",
+      "features": {},
+      "name": "tape-access",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_access",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "anyhow",
+        "async-nats",
+        "clap",
+        "futures",
+        "reqwest",
+        "serde",
+        "serde_json",
+        "service-http",
+        "tape",
+        "tape-journal",
+        "tape-shared-kernel",
+        "tape-storage",
+        "tempfile",
+        "tokio"
+      ],
+      "directory": "crates/tape-bench",
+      "features": {
+        "jetstream-benchmark": [
+          "dep:async-nats",
+          "dep:futures"
+        ]
+      },
+      "name": "tape-bench",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_bench",
+          "required-features": [],
+          "test": true
+        },
+        {
+          "harness": true,
+          "kind": [
+            "bin"
+          ],
+          "name": "tape-bench",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "axum",
+        "cli-std",
+        "metrics-prometheus",
+        "serde",
+        "serde_json",
+        "serde_yaml",
+        "service-auth",
+        "service-backup",
+        "service-http",
+        "tape-access",
+        "tape-shared-kernel",
+        "thiserror",
+        "tracing",
+        "utoipa"
+      ],
+      "directory": "crates/tape-journal",
+      "features": {},
+      "name": "tape-journal",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_journal",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "anyhow",
+        "k8s-openapi",
+        "kube",
+        "schemars",
+        "serde",
+        "serde_json",
+        "serde_yaml",
+        "service-backup",
+        "service-k8s"
+      ],
+      "directory": "crates/tape-operator",
+      "features": {},
+      "name": "tape-operator",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_operator",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "anyhow",
+        "axum",
+        "peer-tls",
+        "raft-runtime",
+        "serde",
+        "serde_json",
+        "server-lifecycle",
+        "tape-shared-kernel",
+        "tokio",
+        "tracing"
+      ],
+      "directory": "crates/tape-replication",
+      "features": {},
+      "name": "tape-replication",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_replication",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "serde",
+        "serde_json",
+        "thiserror",
+        "utoipa"
+      ],
+      "directory": "crates/tape-shared-kernel",
+      "features": {},
+      "name": "tape-shared-kernel",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_shared_kernel",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    },
+    {
+      "dependencies": [
+        "anyhow",
+        "serde_json",
+        "storage-durable",
+        "tape-shared-kernel",
+        "tempfile",
+        "tokio",
+        "tracing"
+      ],
+      "directory": "crates/tape-storage",
+      "features": {},
+      "name": "tape-storage",
+      "targets": [
+        {
+          "harness": true,
+          "kind": [
+            "lib"
+          ],
+          "name": "tape_storage",
+          "required-features": [],
+          "test": true
+        }
+      ]
+    }
+  ],
+  "provenance": {
+    "inspection_only": true
+  },
+  "qualification": "not evaluated",
+  "source_baseline": "caf41306974493c35d95b56e21fd73ded9f8dc0b",
+  "source_driver": "faberline/core@140b30f550d974d088f9b2f018c2b2ca3ff423e2:scripts/pr-gates/plan.py"
+}

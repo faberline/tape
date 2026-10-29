@@ -129,3 +129,6 @@ fn durable(args: DurableArgs) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
