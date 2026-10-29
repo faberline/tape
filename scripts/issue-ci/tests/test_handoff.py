@@ -40,7 +40,8 @@ def evidence():
 class HandoffTests(unittest.TestCase):
     def test_controller_matches_verified_aw_merge(self):
         self.assertEqual(hashlib.sha256((SCRIPTS / 'handoff.py').read_bytes()).hexdigest(), '8313b8c5bf88a42c4cd8b3131fc576360fb0d2b6d120aa30d1a820f4e5ada773')
-        self.assertIn('693e45bded9a4ec8167573e82b423c823c193ec0', CONFIG['controller_source'])
+        self.assertIn('693e45bded9a4ec8167573e82b423c823c193ec0', CONFIG['ci_handoff_policy']['controller_source'])
+        self.assertEqual(CONFIG['controller_source'], 'faberline/aw@8e2e93e5ba8feb30b6668de39139980ea3bb085c:plugins/faberline/skills/issue-ci/scripts/native_merge.py')
 
     def test_exact_complete_inventory(self):
         inventory = json.loads((SCRIPTS / 'tests/fixtures/gate-inventory.json').read_text())
@@ -136,7 +137,7 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(api.call_args_list[0].args, ('repos/o/r/pulls/7',))
 
     def test_trusted_workflow_guard_precedes_controller(self):
-        workflow = (ROOT / '.github/workflows/issue-ci.yml').read_text()
+        workflow = (SCRIPTS / 'tests/fixtures/historical-claude-candidate/issue-ci.yml').read_text()
         self.assertIn('ref: ${{ github.event.repository.default_branch }}', workflow)
         self.assertIn('persist-credentials: false', workflow)
         self.assertLess(workflow.index('python3 scripts/issue-ci/check-policy.py'), workflow.index('python3 scripts/issue-ci/handoff.py'))
@@ -146,6 +147,17 @@ class HandoffTests(unittest.TestCase):
         self.assertNotIn('pull_request_target', workflow.replace('# This is a trusted default-branch workflow, NOT pull_request_target execution.', ''))
         for forbidden in ('pull_request.head', 'download-artifact', 'workflow_dispatch:', 'id-token:', 'packages:'):
             self.assertNotIn(forbidden, workflow)
+
+    def test_live_native_writer_remains_qualification_guarded(self):
+        workflow=(ROOT / '.github/workflows/issue-ci.yml').read_text()
+        self.assertIn('group: issue-ci-handoff',workflow)
+        self.assertIn('branches: [main]',workflow)
+        self.assertIn('faberline/aw/.github/actions/native-auto-merge@8e2e93e5ba8feb30b6668de39139980ea3bb085c',workflow)
+        self.assertNotIn('actions/checkout@',workflow)
+        self.assertNotIn('CLAUDE_CODE_OAUTH_TOKEN',workflow)
+        self.assertEqual(CONFIG['lifecycle_mode'],'failure-only')
+        self.assertEqual(len(CONFIG['qualification_blockers']),4)
+        self.assertEqual(CONFIG['ci_handoff_policy']['workflows'],CONFIG['workflows'])
 
 class FailureOnlyApplyTests(unittest.TestCase):
     def setUp(self):

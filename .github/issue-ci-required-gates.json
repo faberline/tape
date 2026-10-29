@@ -1,5 +1,5 @@
 {
-  "controller_source": "faberline/aw@693e45bded9a4ec8167573e82b423c823c193ec0:plugins/faberline/skills/issue-ci/scripts/handoff.py",
+  "controller_source": "faberline/aw@8e2e93e5ba8feb30b6668de39139980ea3bb085c:plugins/faberline/skills/issue-ci/scripts/native_merge.py",
   "qualification_blockers": [
     "No general pull_request unit workflow exists on the default branch.",
     "Existing gke-test is path-filtered and does not establish affected functional and E2E coverage for every product change.",
@@ -25,10 +25,10 @@
   "claude_final_review": {
     "version": 1,
     "producer": {
-      "path": ".github/workflows/issue-ci.yml",
-      "id": 394214906,
-      "definition_sha": "6d039236e8715fae575406e289819804f54a3d20",
-      "job": "claude-final-review"
+      "path": ".github/workflows/claude-final-review.yml",
+      "id": 399790212,
+      "definition_sha": "3413f6cec8d62789ed2a5d8cab86d0e0ee4ddad4",
+      "job": "review"
     },
     "gates": {
       ".github/workflows/gke-test.yml": {
@@ -66,14 +66,107 @@
       "crates/tape-storage/build.rs"
     ],
     "cli_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+    "credential_profile": "personal-claude-max-oauth",
     "merge_producer": null,
-    "merge_method": null,
-    "credential_profile": "personal-claude-max-oauth"
+    "merge_method": null
   },
   "claude_findings": {
     "version": 1,
     "path": ".github/workflows/claude-findings.yml",
-    "definition_sha": "44376776112f0bc0aa2cf2ad2a7f7744c8b2d23c",
+    "definition_sha": "5273defcafaa29f0eb1d1878c8291200ed123b65",
     "job": "publish-findings"
+  },
+  "ci_handoff_policy": {
+    "controller_source": "faberline/aw@693e45bded9a4ec8167573e82b423c823c193ec0:plugins/faberline/skills/issue-ci/scripts/handoff.py",
+    "qualification_blockers": [
+      "No general pull_request unit workflow exists on the default branch.",
+      "Existing gke-test is path-filtered and does not establish affected functional and E2E coverage for every product change.",
+      "No declared affected performance pull_request gate exists; manual/release workflows are not PR qualification.",
+      "A reviewed coverage selection policy and real qualifying jobs are needed before clearing these blockers; no blanket docs-only zero-check bypass is approved."
+    ],
+    "workflows": [
+      {
+        "path": ".github/workflows/gke-test.yml",
+        "jobs": [
+          "build test-client image",
+          "build server image / build (x86_64-unknown-linux-musl)",
+          "build server image / build (aarch64-unknown-linux-musl)",
+          "build server image / publish ghcr test image",
+          "resolve image identity",
+          "image e2e (arm64)",
+          "GKE e2e (operator_recovery) / deploy + test on shared GKE",
+          "GKE e2e (operator_ha) / deploy + test on shared GKE"
+        ]
+      }
+    ],
+    "lifecycle_mode": "failure-only",
+    "claude_final_review": {
+      "version": 1,
+      "producer": {
+        "path": ".github/workflows/issue-ci.yml",
+        "id": 394214906,
+        "definition_sha": "6d039236e8715fae575406e289819804f54a3d20",
+        "job": "claude-final-review"
+      },
+      "gates": {
+        ".github/workflows/gke-test.yml": {
+          "id": 389097869,
+          "definition_sha": "d1530edc69924ee42ff630a477ecef4735cd68d4"
+        }
+      },
+      "protected_paths": [
+        "scripts/issue-ci/",
+        "scripts/gke-test/",
+        "acceptance/gcp/",
+        "k8s/",
+        "Dockerfile.test",
+        "Cargo.toml",
+        "Cargo.lock",
+        ".cargo/",
+        "rust-toolchain",
+        "rust-toolchain.toml",
+        "crates/tape/tests/",
+        "crates/tape/Cargo.toml",
+        "crates/tape-access/Cargo.toml",
+        "crates/tape-bench/Cargo.toml",
+        "crates/tape-journal/Cargo.toml",
+        "crates/tape-operator/Cargo.toml",
+        "crates/tape-replication/Cargo.toml",
+        "crates/tape-shared-kernel/Cargo.toml",
+        "crates/tape-storage/Cargo.toml",
+        "crates/tape/build.rs",
+        "crates/tape-access/build.rs",
+        "crates/tape-bench/build.rs",
+        "crates/tape-journal/build.rs",
+        "crates/tape-operator/build.rs",
+        "crates/tape-replication/build.rs",
+        "crates/tape-shared-kernel/build.rs",
+        "crates/tape-storage/build.rs"
+      ],
+      "cli_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56",
+      "merge_producer": null,
+      "merge_method": null,
+      "credential_profile": "personal-claude-max-oauth"
+    },
+    "claude_findings": {
+      "version": 1,
+      "path": ".github/workflows/claude-findings.yml",
+      "definition_sha": "44376776112f0bc0aa2cf2ad2a7f7744c8b2d23c",
+      "job": "publish-findings"
+    }
+  },
+  "native_auto_merge": {
+    "version": 1,
+    "enabled": true,
+    "status_context": "claude/verified-merge",
+    "status_app_id": 15368,
+    "merge_method": "SQUASH",
+    "ruleset_id": 26069023,
+    "producer": {
+      "path": ".github/workflows/issue-ci.yml",
+      "id": 394214906,
+      "definition_sha": "e7bef63eb67b55947aaad91e42bd5d461f7c7906",
+      "job": "native-auto-merge"
+    }
   }
 }

@@ -116,8 +116,10 @@ def check_wiring(policy, review_source, merge_source, supply, provenance, binary
 
 class OfflineEnableWiringTests(unittest.TestCase):
     def setUp(self):
-        self.policy = json.loads((ROOT / ".github/issue-ci-required-gates.json").read_text())
-        self.review = (ROOT / ".github/workflows/issue-ci.yml").read_text()
+        # These immutable fixtures describe the historical offline proposal, not live deployment.
+        historical = ROOT / "scripts/issue-ci/tests/fixtures/historical-claude-candidate"
+        self.policy = json.loads((historical / "issue-ci-required-gates.json").read_text())
+        self.review = (historical / "issue-ci.yml").read_text()
         self.merge = (ROOT / ".github/workflows/claude-guarded-merge.yml").read_text()
         self.supply = json.loads((ROOT / ".github/claude-review-cli-supply.json").read_text())
         self.provenance = json.loads((ROOT / ".github/claude-review-pilot-provenance.json").read_text())
