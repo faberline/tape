@@ -19,10 +19,14 @@ spec:
   # startup. The recovery suite tests PVC-retained replay, not auth.
   auth: disabled
   # The defaults (1 CPU, 4Gi) do not fit next to the node's system pods on
-  # an e2-standard-2.
+  # an n4-standard-2.
   resources:
     cpu: 250m
     memory: 512Mi
+  # N4 nodes attach only Hyperdisk, not the cluster default standard-rwo
+  # (PD). Without this the PVC data-tape-0 has no storageClassName, and the
+  # autoscaler cannot place tape-0 on the tape-server pool.
+  storageClass: dynamic-rwo
   imagePullSecrets:
     - name: ghcr-pull
   placement:
