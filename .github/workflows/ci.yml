@@ -350,9 +350,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+    uses: faberline/aw/.github/workflows/gke-test.yml@7ca7c1c8d24f0d29263cc43e7c37987bd853f202
     with:
-      aw-ref: f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+      aw-ref: 7ca7c1c8d24f0d29263cc43e7c37987bd853f202
       image: ${{ needs.e2e-resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
