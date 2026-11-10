@@ -1,15 +1,17 @@
-{
-  "workflow_name": "gke-test",
-  "path": ".github/workflows/gke-test.yml",
-  "jobs": [
-    "build test-client image",
-    "build server image / build (x86_64-unknown-linux-musl)",
-    "build server image / build (aarch64-unknown-linux-musl)",
-    "build server image / publish ghcr test image",
-    "resolve image identity",
-    "image e2e (arm64)",
-    "GKE e2e (operator_recovery) / deploy + test on shared GKE",
-    "GKE e2e (operator_ha) / deploy + test on shared GKE"
-  ],
-  "inventory_run_url": "https://github.com/faberline/tape/actions/runs/39731235238"
-}
+[
+  {
+    "workflow_name": "gke-test",
+    "path": ".github/workflows/gke-test.yml",
+    "jobs": [
+      "build test-client image",
+      "build server image / build (x86_64-unknown-linux-musl)",
+      "build server image / build (aarch64-unknown-linux-musl)",
+      "build server image / publish ghcr test image",
+      "resolve image identity",
+      "image e2e (arm64)",
+      "GKE e2e (operator_recovery) / deploy + test on shared GKE",
+      "GKE e2e (operator_ha) / deploy + test on shared GKE"
+    ],
+    "inventory_run_url": "https://github.com/faberline/tape/actions/runs/39731235238"
+  }
+]

@@ -230,8 +230,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@main
+    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
     with:
+      aw-ref: f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
       image: ${{ needs.resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
