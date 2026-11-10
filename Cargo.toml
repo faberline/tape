@@ -9,7 +9,7 @@ members = ["crates/*"]
 # .github/workflows/tape-release.yml). Every member inherits this version.
 version = "0.6.0"
 edition = "2021"
-authors = ["Chris Cheng <chris.cheng.c4@gmail.com>"]
+authors = ["Faberline contributors"]
 license = "MIT"
 repository = "https://github.com/faberline/tape"
 
