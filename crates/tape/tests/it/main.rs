@@ -26,6 +26,7 @@ mod operator;
 mod operator_render_provision_topics;
 mod producer_at_least_once;
 mod provision_topics_via_spec;
+mod quickstart_docs;
 mod raft_cluster;
 mod raft_failover;
 mod raft_peer_mtls;

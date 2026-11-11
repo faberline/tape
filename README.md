@@ -83,6 +83,8 @@ behaviour.
      -H 'content-type: application/json' -d '{"offset":1}'
    ```
 
+New here? Follow [docs/quickstart.md](docs/quickstart.md).
+
 The same verbs exist offline against a journal file for local inspection:
 `tape append`, `tape subscription create|list|show|pull|ack|delete`,
 `tape replay`, and `tape checkpoint`, each taking `--store <path>`.

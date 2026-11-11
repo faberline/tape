@@ -6,6 +6,7 @@ Project-level documentation for tape. Usage starts at the root
 
 | Document | What it answers |
 |----------|-----------------|
+| [quickstart.md](quickstart.md) | How a new user goes from install to a published and pulled message, and to a 3-replica group. |
 | [architecture.md](architecture.md) | How the workspace is cut into crates, bounded contexts and layers, what may depend on what, and which rule breaks are allowed and why. |
 | [delivery-semantics.md](delivery-semantics.md) | What an append guarantees on retry, what the envelope `key` does and does not do, and where deduplication belongs. |
 | [glossary.md](glossary.md) | The terms tape's code, API and docs use, and what each one means here. |
