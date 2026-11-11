@@ -34,6 +34,7 @@ mod raft_persistence;
 mod raft_provisioning_convergence;
 mod retention_backfill;
 mod rig_stateful_adapter;
+mod runbook_index;
 mod seed_ha_bootstrap;
 mod service_admission;
 mod service_auth;

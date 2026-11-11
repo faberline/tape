@@ -13,6 +13,7 @@ Project-level documentation for tape. Usage starts at the root
 | [domain/](domain/) | One page per context: what it models, its ports, its invariants, and its recorded exceptions. |
 | [adr/](adr/) | Architecture decisions and the reasons behind them. |
 | [operations/](operations/README.md) | Deploying, running, benchmarking and checking tape, with links to the runbooks. |
+| [runbooks/](runbooks/README.md) | The alert index and one page per operator procedure: restore, disk full, node drain, raft member loss. |
 | [product/](product/README.md) | What tape promises per capability area. |
 
 The architecture contract itself is [`ddd.toml`](../ddd.toml) at the repository
