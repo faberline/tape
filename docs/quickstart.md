@@ -23,8 +23,10 @@ set `GH_TOKEN` to a GitHub token.
 
 ```bash
 docker pull ghcr.io/faberline/tape:latest
-docker run --rm -p 7137:7137 ghcr.io/faberline/tape:latest serve
+docker run --rm -p 7137:7137 ghcr.io/faberline/tape:latest serve --bind 0.0.0.0:7137
 ```
+
+`--bind 0.0.0.0:7137` makes the server listen on the container's interface, so the port mapping reaches it.
 
 ## Run one node
 
@@ -100,7 +102,7 @@ the end-to-end suites is `k8s/overlays/gke-test/tape-cr.yaml`; it runs one repli
 Check the group. The CR must exist, and each pod answers `GET /raftz`:
 
 ```bash
-kubectl get tape
+kubectl get tape -n tape-app
 ```
 
 Then run a command against the group. `tape connect` port-forwards to the Service
