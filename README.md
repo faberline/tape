@@ -123,7 +123,7 @@ readback oracle for the current acceptance scripts.
 | Support state per Pub/Sub surface | [STATUS.md](STATUS.md) |
 | Future outcomes and non-goals | [ROADMAP.md](ROADMAP.md) |
 | Typed clients | [`clients/README.md`](clients/README.md) |
-| Serve flags, environment, ports, probes, runbooks | [`docs/deployment-handoff.md`](docs/deployment-handoff.md) |
+| Serve flags, environment, ports, probes, runbooks | [`docs/operations/`](docs/operations/README.md) |
 | Kubernetes custom resource | `tape k8s crd render`; the operator and instance layers come from `tape k8s operator render` and `tape k8s instance render`. |
 | Reaching an in-cluster node | `tape connect --namespace <ns> --cr <name> -- <command>` port-forwards to the Service and runs the command with `TAPE_URL` set; `tape connect --help`. |
 | Backup destinations | `tape backup --help` lists the accepted schemes: `file://`, `s3://` (feature `backup`), and `gs://`. |
@@ -254,7 +254,7 @@ source below states its direct contribution.
   pair with status conditions; ship a direct-install base for a durable
   singleton; provision topics and subscriptions declaratively. The CRD
   versioning policy, CRD-first upgrade order, and journal rollback contract
-  are in [`docs/deployment-handoff.md`](docs/deployment-handoff.md) section 3e;
+  are in [`docs/operations/crd-capacity-and-quotas.md`](docs/operations/crd-capacity-and-quotas.md) section 3e;
   capacity planning, on-disk layout, per-event storage formulas, and PVC
   sizing are in section 3f; the per-topic quota boundary is in section 3g.
 - Sources:
@@ -332,7 +332,7 @@ evidence; it does not define the current contract.
 | [STATUS.md](STATUS.md) | Current support per Cloud Pub/Sub surface, with limits and gates |
 | [ROADMAP.md](ROADMAP.md) | Future outcomes and explicit non-goals |
 | [Generated clients](clients/README.md) | Client generation, language matrix, connection inputs, and current limits |
-| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract, PVC sizing, per-topic quota boundary |
+| [Operations](docs/operations/README.md) | Images, CLI, serve flags, environment, HTTP surface, smoke sequence, release gates, CRD upgrade order and rollback contract, PVC sizing, per-topic quota boundary, backup and restore runbooks |
 | [Node drain and PodDisruptionBudget](docs/runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](docs/benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Tape edit rules and required verification commands |

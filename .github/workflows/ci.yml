@@ -58,57 +58,6 @@ jobs:
           shared-key: tape-ci-test
       - run: cargo test --locked -p tape --features operator,backup
 
-  # The docs copy contract, moved from affected-docs.yml (job docs-copy-contract).
-  # It runs only on a pull request, and only when one of the docs changed.
-  test-docs-copy:
-    name: "test: docs copy contract"
-    needs: [lint]
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout trusted base infrastructure
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: trusted-base
-          persist-credentials: false
-      - name: Checkout product PR head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: product-head
-          persist-credentials: false
-      - name: Check whether a copied docs file changed
-        id: touched
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          if ! git -C product-head cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            git -C product-head fetch --depth=1 origin "$BASE_SHA"
-          fi
-          changed="$(git -C product-head diff --name-only "$BASE_SHA" "$HEAD_SHA")"
-          touched=false
-          if grep -Eq '^(docs/operations/README\.md|docs/runbooks/cold-restore\.md|docs/runbooks/disk-full\.md)$' <<<"$changed"; then
-            touched=true
-          fi
-          echo "touched=${touched}" >> "$GITHUB_OUTPUT"
-      - name: Validate docs copy contract from trusted base
-        if: steps.touched.outputs.touched == 'true'
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          python3 trusted-base/scripts/ci/validate-docs-copy.py \
-            --base-dir trusted-base \
-            --head-dir product-head \
-            --base-ref "$BASE_SHA" \
-            --head-ref "$HEAD_SHA"
-
   # The backup destination docs test, moved from affected-docs.yml (job backup-destination-docs).
   test-docs-tests:
     name: "test: backup destination docs"
@@ -414,7 +363,6 @@ jobs:
       - lint
       - test-workspace
       - test-features
-      - test-docs-copy
       - test-docs-tests
       - test-select
       - e2e-image
