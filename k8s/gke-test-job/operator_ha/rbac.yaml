@@ -1,7 +1,8 @@
 # What the suite reads and does in the run's namespace: it reads the operator
 # pods, the Lease, and the metrics Service's endpoints, deletes the leader for
 # the handover check, and patches the Tape CR's logLevel for the reconcile
-# heartbeat. Draining a node is cluster-wide, so that grant is
+# heartbeat, and patches the operator Deployment's replicas for the SIGTERM
+# case. Draining a node is cluster-wide, so that grant is
 # ClusterRole/tape-e2e-node-drain in k8s/overlays/gke-test.
 apiVersion: v1
 kind: ServiceAccount
@@ -23,6 +24,9 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
     verbs: ["get", "list", "watch"]

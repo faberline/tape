@@ -33,6 +33,7 @@ use super::{
 const SUITE: &str = "operator_ha";
 const TAPE: &str = "tape";
 const OPERATOR_LABEL: &str = "app.kubernetes.io/name=tape-operator";
+const SCALE_TO_ONE: &str = r#"{"spec":{"replicas":1}}"#;
 const SERVER_LABEL: &str =
     "app.kubernetes.io/name=tape,app.kubernetes.io/instance=tape,app.kubernetes.io/component=server";
 /// The Lease is named for the manager and lives in the operator's own
@@ -139,6 +140,16 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         .timeout(Duration::from_secs(15))
         .build()
         .unwrap();
+
+    // 1 operator + 3 tape pods need 4 nodes; the pool allows 4. Two operators would need 5. The suite runs with --test-threads=1 in name order, so the 2-replica case has already run, and the namespace is deleted after the run: do not scale back.
+    #[rustfmt::skip]
+    kubectl(&["patch", "deployment", "tape-operator", "--type=merge", "-p", SCALE_TO_ONE]);
+    let operators = wait_for_ready_replicas(1);
+    evidence(
+        SUITE,
+        "scaled operator to 1 replica",
+        json!({ "operators": operators.iter().map(|p| p.name.clone()).collect::<Vec<_>>() }),
+    );
 
     // Patch Tape CR tape to replicasPerShard: 3, voterCount: 3, graceSecs: GRACE_SECS
     let patch = json!({
