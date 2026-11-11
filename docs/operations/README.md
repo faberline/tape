@@ -7,6 +7,7 @@ How to deploy, run, benchmark and check tape. The runbook pages keep their paths
 | [Images and CLI](images-and-cli.md) | Image lines and first-level CLI commands |
 | [Environment and HTTP surface](environment-and-http.md) | Environment variables, HTTP surface and probes |
 | [CRD upgrade order, capacity and quotas](crd-capacity-and-quotas.md) | CRD versioning and upgrade order, PVC sizing, per-topic quotas |
+| [Version compatibility](compatibility.md) | What a client, data directory, raft peer or CRD may meet across adjacent releases |
 | [Smoke sequence and release gates](smoke-and-release-gates.md) | End-to-end smoke sequence and release-readiness gates |
 | [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |
 | [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |
