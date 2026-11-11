@@ -57,9 +57,10 @@ pub fn routes_json() -> String {
 pub const fn llm_workflow_md() -> &'static str {
     r#"# tape workflow
 
-Tape is the historical topic replay journal. Relay owns online broker delivery;
-Tape owns append-only topic history, offset/time replay, consumer checkpoints,
-retention, and backfill/audit reads.
+Tape is a Pub/Sub-style message service: publishers append messages to a topic,
+and each subscription pulls every message at its own offset. Relay owns
+low-latency online delivery; Tape owns append-only topic history, offset/time
+replay, consumer checkpoints, retention, and backfill/audit reads.
 
 Start with:
 
@@ -122,7 +123,7 @@ pub const fn llm_boundaries_md() -> &'static str {
 /// Prose companion to the `TopicSection::Generated` section in
 /// [`LLM_BACKUP_TOPICS`] — everything about Tape's own backup usage except
 /// the destination scheme list. #2483 found three hand-copied
-/// `file://`+`s3://`-only claims (CLI help, deployment-handoff.md, README)
+/// `file://`+`s3://`-only claims (CLI help, the deployment docs, README)
 /// that had drifted stale against the unconditionally-shipped `gs://`
 /// scheme; #2494 is the durable fix: derive the scheme list from
 /// `service_backup::SUPPORTED_SCHEMES` at call time instead of freezing a

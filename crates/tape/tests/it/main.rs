@@ -30,6 +30,7 @@ mod raft_cluster;
 mod raft_failover;
 mod raft_peer_mtls;
 mod raft_persistence;
+mod raft_provisioning_convergence;
 mod retention_backfill;
 mod rig_stateful_adapter;
 mod seed_ha_bootstrap;

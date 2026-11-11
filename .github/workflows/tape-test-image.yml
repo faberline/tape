@@ -85,11 +85,11 @@ jobs:
             arch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.ref || github.ref }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
           targets: ${{ matrix.target }}
 
@@ -101,7 +101,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           shared-key: tape-test-${{ matrix.target }}
 
@@ -112,7 +112,7 @@ jobs:
         # reconcile or snapshot.
         run: cargo build --release --locked -p tape --bin tape --features "operator backup self-update issue" --target ${{ matrix.target }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tape-test-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/tape
@@ -128,7 +128,7 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
       tag: ${{ steps.ver.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.ref || github.ref }}
 
@@ -146,12 +146,12 @@ jobs:
       # Standard multi-arch-from-prebuilt-binaries pattern: stage each arch's
       # binary at dist/linux/<arch>/tape so Dockerfile.test's TARGETARCH-aware
       # COPY picks the right one per --platform leg during the buildx build.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tape-test-amd64
           path: dist/linux/amd64
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tape-test-arm64
           path: dist/linux/arm64
@@ -159,11 +159,11 @@ jobs:
       - name: Make staged binaries executable
         run: chmod +x dist/linux/amd64/tape dist/linux/arm64/tape
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -171,7 +171,7 @@ jobs:
 
       - name: Build and push multi-arch test image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.test
