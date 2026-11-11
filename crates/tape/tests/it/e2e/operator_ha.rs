@@ -19,6 +19,7 @@
 //! The monitoring component's render (the rest of AC4) needs no cluster; it
 //! is checked offline in observability_assets.rs.
 
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -212,6 +213,32 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
             .unwrap_or_default()
     });
 
+    // Watch the leader pod from before the delete, so its terminated state is
+    // seen even when the pod object is removed right after the container ends.
+    let watch_ns = required_env("NAMESPACE");
+    let mut watch = std::process::Command::new("kubectl")
+        .args([
+            "-n",
+            &watch_ns,
+            "get",
+            "pod",
+            &leader_pod,
+            "-w",
+            "-o",
+            "json",
+            "--output-watch-events",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("start kubectl pod watch");
+    let mut watch_out = watch.stdout.take().expect("pod watch stdout");
+    let watch_reader = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = watch_out.read_to_string(&mut out);
+        out
+    });
+
     let deletion_time = Instant::now();
     let deletion_epoch_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -227,42 +254,6 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
             "deletion_epoch_secs": deletion_epoch_secs,
         }),
     );
-
-    // Poll for container termination status while the leader pod shuts down
-    let mut terminated_status = None;
-    let poll_deadline = Instant::now() + Duration::from_secs(15);
-    while Instant::now() < poll_deadline {
-        if let Ok(pod_json) = try_kubectl(&["get", "pod", &leader_pod, "-o", "json"])
-            .map(|out| serde_json::from_str::<Value>(&out).unwrap())
-        {
-            let uid = pod_json["metadata"]["uid"].as_str().unwrap_or_default();
-            if uid == leader_uid {
-                if let Some(statuses) = pod_json["status"]["containerStatuses"].as_array() {
-                    if let Some(server) = statuses.iter().find(|s| s["name"] == "server") {
-                        if let Some(term) = server["state"]["terminated"].as_object() {
-                            let exit_code =
-                                term.get("exitCode").and_then(Value::as_i64).unwrap_or(-1);
-                            let finished_at = term
-                                .get("finishedAt")
-                                .and_then(Value::as_str)
-                                .unwrap_or_default()
-                                .to_owned();
-                            let finished_epoch = rfc3339_to_unix_secs(&finished_at);
-                            terminated_status = Some((exit_code, finished_epoch));
-                            break;
-                        }
-                    }
-                }
-            } else {
-                // Pod with leader_uid was already removed and replaced
-                break;
-            }
-        } else {
-            // Pod deleted from API server
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(200));
-    }
 
     // A survivor takes over within the drain delay (graceSecs); manual run saw 5.56s.
     let survivors: Vec<String> = pods.iter().filter(|p| *p != &leader_pod).cloned().collect();
@@ -280,6 +271,26 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
             "handoff_secs": handoff_elapsed.as_secs_f64(),
         }),
     );
+
+    // Wait until the old pod object is gone, then stop the watch. The watch
+    // holds the leader's terminated state; a replacement pod has another uid.
+    let gone_deadline = Instant::now() + Duration::from_secs(60);
+    while Instant::now() < gone_deadline
+        && try_kubectl(&["get", "pod", &leader_pod, "-o", "jsonpath={.metadata.uid}"])
+            .is_ok_and(|uid| uid == leader_uid)
+    {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let _ = watch.kill();
+    let _ = watch.wait();
+    let watch_stream = watch_reader.join().expect("pod watch thread joined");
+    let (exit_code, finished_epoch) = terminated_from_watch(&watch_stream, &leader_uid)
+        .unwrap_or_else(|| {
+            panic!("no terminated server status for the leader in the pod watch:\n{watch_stream}")
+        });
+    let finished_epoch = finished_epoch.unwrap_or_else(|| {
+        panic!("finishedAt missing or unparseable for the leader in the pod watch:\n{watch_stream}")
+    });
 
     // Collect leader shutdown logs
     let mut logs = log_stream.join().expect("log stream thread joined");
@@ -318,14 +329,7 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         "http_drain_aborted must be absent from leader's log:\n{logs}"
     );
 
-    let (exit_code, shutdown_secs) = match terminated_status {
-        Some((code, Some(finished_epoch))) => {
-            let secs = finished_epoch.saturating_sub(deletion_epoch_secs);
-            (code, secs)
-        }
-        Some((code, None)) => (code, deletion_time.elapsed().as_secs()),
-        None => (0, deletion_time.elapsed().as_secs()),
-    };
+    let shutdown_secs = finished_epoch.saturating_sub(deletion_epoch_secs);
     assert_eq!(exit_code, 0, "container exitCode must be 0");
     assert!(
         shutdown_secs < GRACE_SECS,
@@ -991,6 +995,36 @@ fn assert_replica_replay(pod: &str, topic: &str, want: &[&str]) {
     );
 }
 
+/// Reads the server container's terminated state of the pod with `uid` from
+/// `kubectl get pod -w -o json --output-watch-events` output (concatenated
+/// watch events). Returns (exitCode, finishedAt as epoch seconds); the epoch
+/// is None when finishedAt is missing or unparseable. None when no event
+/// shows a terminated server container for that uid.
+fn terminated_from_watch(stream: &str, uid: &str) -> Option<(i64, Option<u64>)> {
+    for event in serde_json::Deserializer::from_str(stream).into_iter::<Value>() {
+        let event = event.ok()?;
+        let pod = &event["object"];
+        if pod["metadata"]["uid"].as_str() != Some(uid) {
+            continue;
+        }
+        let Some(statuses) = pod["status"]["containerStatuses"].as_array() else {
+            continue;
+        };
+        let Some(server) = statuses.iter().find(|s| s["name"] == "server") else {
+            continue;
+        };
+        if let Some(term) = server["state"]["terminated"].as_object() {
+            let exit_code = term.get("exitCode").and_then(Value::as_i64)?;
+            let finished = term
+                .get("finishedAt")
+                .and_then(Value::as_str)
+                .and_then(rfc3339_to_unix_secs);
+            return Some((exit_code, finished));
+        }
+    }
+    None
+}
+
 fn rfc3339_to_unix_secs(s: &str) -> Option<u64> {
     let (date, time) = s.split_once('T')?;
     let time = time.trim_end_matches('Z');
@@ -1029,6 +1063,24 @@ fn rfc3339_to_unix_secs_computes_correct_epoch_timestamp() {
         rfc3339_to_unix_secs("2026-10-23T17:50:05.123Z"),
         Some(1792777805)
     );
+}
+
+#[test]
+fn terminated_from_watch_reads_the_leader_terminated_state() {
+    let stream = concat!(
+        "{\"type\":\"ADDED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"running\":{}}}]}}}\n",
+        "{\"type\":\"MODIFIED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"terminated\":{\"exitCode\":0,\"finishedAt\":\"2026-10-23T17:50:05Z\"}}}]}}}\n",
+    );
+    assert_eq!(
+        terminated_from_watch(stream, "u1"),
+        Some((0, Some(1792777805)))
+    );
+}
+
+#[test]
+fn terminated_from_watch_without_terminated_state_is_none() {
+    let stream = "{\"type\":\"ADDED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"running\":{}}}]}}}\n";
+    assert_eq!(terminated_from_watch(stream, "u1"), None);
 }
 
 #[test]
