@@ -311,9 +311,10 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
         spawn_raft_leader_poller(state.metrics(), raft_for_poller);
     }
 
-    // Ensure CR-declared subscriptions after journal/raft is ready but before listener starts.
-    // This is idempotent and tolerates AlreadyExists errors, so repeated boots converge safely.
-    ensure_subscriptions(&state).await;
+    // In single-node mode, ensure CR-declared subscriptions before listener starts.
+    if state.raft().is_none() {
+        ensure_subscriptions(&state).await;
+    }
 
     let app = if peer_transport.is_some() {
         router_without_raft_routes_with_admission(state.clone(), admission)
@@ -347,6 +348,16 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
     };
 
     let http = PublicHttp::spawn(listener, app);
+
+    // In HA mode, startup does not wait for leadership: the listeners bind first,
+    // and provisioning runs in a spawned task that retries an unavailable or
+    // not-yet-leader error with bounded backoff.
+    if state.raft().is_some() {
+        let state_for_provision = state.clone();
+        tokio::spawn(async move {
+            ensure_subscriptions(&state_for_provision).await;
+        });
+    }
     shutdown_on_signal(
         state,
         http,
