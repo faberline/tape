@@ -13,7 +13,7 @@ import sys
 
 EXPECTED_TESTS = [
     "backup_destination_docs::readme_backup_sections_list_every_supported_scheme",
-    "backup_destination_docs::deployment_handoff_lists_every_supported_scheme",
+    "backup_destination_docs::cold_restore_runbook_lists_every_supported_scheme",
     "backup_destination_docs::backup_help_lists_every_supported_scheme",
     "backup_destination_docs::file_and_gs_sinks_are_unconditional_per_supported_schemes",
     "backup_destination_docs::tape_llm_backup_sectioned_topic_conforms",
