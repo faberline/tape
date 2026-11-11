@@ -283,7 +283,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
 /// loop on a CR carrying `spec.bootstrapSeedUri` is ambiguous until the log
 /// decision field is read, so the runbook's job is to make the three outcomes
 /// distinguishable rather than to describe the symptom.
-const POD_RESTARTING_RUNBOOK: &str = "#2485: Differentiate seed-failure restarts by checking if `spec.bootstrapSeedUri` is set on the CR and examining the pod log for structured decision fields: (1) `decision=\"seeded\"` = seed succeeded, look for other causes (probe failures, image pull, resource limits); (2) `decision=\"skipped_existing_state\"` = seed was skipped (PVC already had data), pod is healthy; (3) NEITHER line present before a crash = seed fetch/decode failed (bad URI, IAM, corrupt object) — restore logs show which. #2468: the one-shot seed cleared bit is separate. See docs/deployment-handoff.md Cold restore runbook.";
+const POD_RESTARTING_RUNBOOK: &str = "#2485: Differentiate seed-failure restarts by checking if `spec.bootstrapSeedUri` is set on the CR and examining the pod log for structured decision fields: (1) `decision=\"seeded\"` = seed succeeded, look for other causes (probe failures, image pull, resource limits); (2) `decision=\"skipped_existing_state\"` = seed was skipped (PVC already had data), pod is healthy; (3) NEITHER line present before a crash = seed fetch/decode failed (bad URI, IAM, corrupt object) — restore logs show which. #2468: the one-shot seed cleared bit is separate. See docs/runbooks/cold-restore.md.";
 
 /// #2485's consumer-liveness triage, verbatim from the static component.
 /// Growing lag is only sometimes a fault — the runbook exists to separate a
