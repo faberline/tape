@@ -7,6 +7,8 @@ the product docs link to them.
 | Document | What it answers |
 |----------|-----------------|
 | [Deployment handoff](../deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks |
+| [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |
+| [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |
 | [Node drain and PodDisruptionBudget](../runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](../benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 

@@ -8,7 +8,7 @@ pub(super) fn openapi() -> Value {
         "info": {
             "title": "Tape API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Topic replay journal API for append, replay, subscription resource inventory, checkpoints, retention, and standard service endpoints."
+            "description": "Pub/Sub message delivery API for append, replay, subscription resource inventory, checkpoints, retention, and standard service endpoints."
         },
         "paths": {
             "/healthz": {"get": {"summary": "Liveness probe", "responses": ok_text()}},
