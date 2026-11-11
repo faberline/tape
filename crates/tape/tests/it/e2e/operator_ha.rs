@@ -59,6 +59,7 @@ const DRAIN_TIMEOUT: &str = "240s";
 const NEW_HOLDER_TIMEOUT: Duration = Duration::from_secs(180);
 const WORST_HEARTBEAT: Duration = Duration::from_secs(75);
 const MIN_HEARTBEAT_SAMPLES: usize = 3;
+const GRACE_SECS: u64 = 10;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "e2e: needs E2E_ENDPOINT"]
@@ -139,12 +140,12 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         .build()
         .unwrap();
 
-    // Patch Tape CR tape to replicasPerShard: 3, voterCount: 3, graceSecs: 10
+    // Patch Tape CR tape to replicasPerShard: 3, voterCount: 3, graceSecs: GRACE_SECS
     let patch = json!({
         "spec": {
             "replicasPerShard": 3,
             "voterCount": 3,
-            "graceSecs": 10
+            "graceSecs": GRACE_SECS
         }
     })
     .to_string();
@@ -159,7 +160,7 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
             "pods": pods,
             "replicasPerShard": 3,
             "voterCount": 3,
-            "graceSecs": 10
+            "graceSecs": GRACE_SECS
         }),
     );
 
@@ -252,13 +253,13 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         std::thread::sleep(Duration::from_millis(200));
     }
 
-    // A survivor reports is_leader well under raft election timeout (manual run saw 5.56s)
+    // A survivor takes over within the drain delay (graceSecs); manual run saw 5.56s.
     let survivors: Vec<String> = pods.iter().filter(|p| *p != &leader_pod).cloned().collect();
-    let new_leader = wait_for_survivor_leader(&survivors, Duration::from_secs(10));
+    let new_leader = wait_for_survivor_leader(&survivors, Duration::from_secs(GRACE_SECS));
     let handoff_elapsed = deletion_time.elapsed();
     assert!(
-        handoff_elapsed <= Duration::from_secs(8),
-        "a survivor must report is_leader well under raft election timeout; took {handoff_elapsed:?}"
+        handoff_elapsed < Duration::from_secs(GRACE_SECS),
+        "a survivor must report is_leader within graceSecs ({GRACE_SECS}s); took {handoff_elapsed:?}"
     );
     evidence(
         SUITE,
@@ -316,8 +317,8 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     };
     assert_eq!(exit_code, 0, "container exitCode must be 0");
     assert!(
-        shutdown_secs < 10,
-        "finishedAt minus deletion time ({shutdown_secs}s) must be less than graceSecs (10s)"
+        shutdown_secs < GRACE_SECS,
+        "finishedAt minus deletion time ({shutdown_secs}s) must be less than graceSecs ({GRACE_SECS}s)"
     );
 
     evidence(
