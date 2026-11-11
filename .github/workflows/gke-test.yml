@@ -12,7 +12,7 @@
 # at a time, each on a fresh deploy:
 #   operator_recovery  k8s/gke-test-job/operator_recovery
 #   operator_ha        k8s/gke-test-job/operator_ha
-# A pull request runs all of them; a dispatch can pick one.
+# ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a
 # cluster: the image-arm64 job runs crates/tape/tests/it/e2e/image.rs on
@@ -28,14 +28,6 @@
 name: gke-test
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/gke-test.yml"
-      - ".github/workflows/tape-test-image.yml"
-      - "Dockerfile.test"
-      - "k8s/**"
-      - "crates/tape-operator/**"
-      - "crates/tape/tests/it/e2e/**"
   workflow_dispatch:
     inputs:
       suite:
@@ -230,8 +222,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@main
+    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
     with:
+      aw-ref: f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
       image: ${{ needs.resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
