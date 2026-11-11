@@ -7,12 +7,12 @@ A tape group of 3 voters needs 2 replicas for quorum. This page covers one repli
 Each replica answers `GET /raftz` with JSON that includes `is_leader` and `applied_index`. Read it on every pod:
 
 ```sh
-kubectl get pods -l app=tape
-kubectl get tape
-tape connect --namespace <ns> --cr tape -- curl -s $TAPE_URL/raftz
+kubectl -n <ns> get pods -l app=tape
+kubectl -n <ns> get tape
+tape connect --namespace <ns> --cr tape -- sh -c 'curl -s "$TAPE_URL/raftz"'
 ```
 
-`tape connect` sets `TAPE_URL` for the pod it reaches. You can also run `curl -s http://<pod>:7137/raftz` against each pod directly.
+`tape connect` goes through the Service, so it reaches one replica. To read each replica, forward to the pod and query it: `kubectl -n <ns> port-forward pod/<pod> 7137:7137`, then `curl -s http://127.0.0.1:7137/raftz`.
 
 Exactly one replica must report `is_leader: true`. The metric `tape_raft_leader_known` is `0` when no leader is known.
 
