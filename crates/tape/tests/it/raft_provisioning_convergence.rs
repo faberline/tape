@@ -167,10 +167,14 @@ async fn follower_restart_with_same_stanza_preserves_union_idempotently() {
         dirs[follower_idx].path(),
         &peers_csv,
         |command| {
-            let stderr_out = std::fs::File::create(&log_path).unwrap();
+            // The tracing fmt layer writes to stdout, and spawn_node_with nulls
+            // stdout by default, so capture both streams into the log file.
+            let stdout_out = std::fs::File::create(&log_path).unwrap();
+            let stderr_out = stdout_out.try_clone().unwrap();
             command
                 .env("TAPE_PROVISION_TOPICS", stanzas[follower_idx])
                 .env("RUST_LOG", "info")
+                .stdout(std::process::Stdio::from(stdout_out))
                 .stderr(std::process::Stdio::from(stderr_out));
         },
     );
@@ -186,11 +190,22 @@ async fn follower_restart_with_same_stanza_preserves_union_idempotently() {
     let post_restart_deadline = Instant::now() + Duration::from_secs(15);
     wait_subscriptions_converged(&client, &nodes, "orders", &expected, post_restart_deadline).await;
 
-    // Give a brief moment for any background provisioning logging to flush
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Wait until the restarted node's background provisioning logs its decision
+    // (or a failure), bounded, instead of sleeping for a fixed time.
+    let log_deadline = Instant::now() + Duration::from_secs(15);
+    let logs = loop {
+        let logs = std::fs::read_to_string(&log_path).unwrap_or_default();
+        if logs.contains("already_exists")
+            || logs.contains("subscription ensure failed")
+            || Instant::now() >= log_deadline
+        {
+            break logs;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
 
     // Verify the restarted node logged no failure for the already-existing subscriptions
-    let logs = std::fs::read_to_string(&log_path).unwrap_or_default();
+
     assert!(
         !logs.contains("subscription ensure failed"),
         "restarted follower logged a subscription ensure failure: {logs}"
