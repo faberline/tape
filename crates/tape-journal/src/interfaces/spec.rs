@@ -57,9 +57,10 @@ pub fn routes_json() -> String {
 pub const fn llm_workflow_md() -> &'static str {
     r#"# tape workflow
 
-Tape is the historical topic replay journal. Relay owns online broker delivery;
-Tape owns append-only topic history, offset/time replay, consumer checkpoints,
-retention, and backfill/audit reads.
+Tape is a Pub/Sub-style message service: publishers append messages to a topic,
+and each subscription pulls every message at its own offset. Relay owns
+low-latency online delivery; Tape owns append-only topic history, offset/time
+replay, consumer checkpoints, retention, and backfill/audit reads.
 
 Start with:
 

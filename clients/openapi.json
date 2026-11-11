@@ -3,7 +3,7 @@
   "info": {
     "title": "Tape API",
     "version": "0.6.0",
-    "description": "Topic replay journal API for append, replay, subscription resource inventory, checkpoints, retention, and standard service endpoints."
+    "description": "Pub/Sub message delivery API for append, replay, subscription resource inventory, checkpoints, retention, and standard service endpoints."
   },
   "paths": {
     "/healthz": {
