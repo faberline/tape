@@ -19,6 +19,7 @@
 //! The monitoring component's render (the rest of AC4) needs no cluster; it
 //! is checked offline in observability_assets.rs.
 
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -26,13 +27,16 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::{
-    assert_pods_run, assert_version, endpoint, evidence, kubectl, kubectl_json, try_kubectl,
-    wait_for, wait_healthy, Expected,
+    append, assert_pods_run, assert_replay, assert_version, endpoint, evidence, kubectl,
+    kubectl_json, required_env, try_kubectl, wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_ha";
 const TAPE: &str = "tape";
 const OPERATOR_LABEL: &str = "app.kubernetes.io/name=tape-operator";
+const SCALE_TO_ONE: &str = r#"{"spec":{"replicas":1}}"#;
+const SERVER_LABEL: &str =
+    "app.kubernetes.io/name=tape,app.kubernetes.io/instance=tape,app.kubernetes.io/component=server";
 /// The Lease is named for the manager and lives in the operator's own
 /// namespace; its holderIdentity is the holder's pod name.
 const LEASE: &str = "tape-operator";
@@ -57,6 +61,7 @@ const DRAIN_TIMEOUT: &str = "240s";
 const NEW_HOLDER_TIMEOUT: Duration = Duration::from_secs(180);
 const WORST_HEARTBEAT: Duration = Duration::from_secs(75);
 const MIN_HEARTBEAT_SAMPLES: usize = 3;
+const GRACE_SECS: u64 = 10;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "e2e: needs E2E_ENDPOINT"]
@@ -126,6 +131,244 @@ async fn leader_election_survives_a_leader_delete_and_a_node_drain() {
     // AC3: drain the leader's node with a live reconcile heartbeat.
     let drain = prove_drain_completes(&pods, &holder);
     evidence(SUITE, "AC3 drain keeps reconciling", drain);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "e2e: needs E2E_ENDPOINT"]
+async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
+    let tape_endpoint = endpoint();
+    let http = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap();
+
+    // 1 operator + 3 tape pods need 4 nodes; the pool allows 4. Two operators would need 5. The suite runs with --test-threads=1 in name order, so the 2-replica case has already run, and the namespace is deleted after the run: do not scale back.
+    #[rustfmt::skip]
+    kubectl(&["patch", "deployment", "tape-operator", "--type=merge", "-p", SCALE_TO_ONE]);
+    let operators = wait_for_ready_replicas(1);
+    evidence(
+        SUITE,
+        "scaled operator to 1 replica",
+        json!({ "operators": operators.iter().map(|p| p.name.clone()).collect::<Vec<_>>() }),
+    );
+
+    // Patch Tape CR tape to replicasPerShard: 3, voterCount: 3, graceSecs: GRACE_SECS
+    let patch = json!({
+        "spec": {
+            "replicasPerShard": 3,
+            "voterCount": 3,
+            "graceSecs": GRACE_SECS
+        }
+    })
+    .to_string();
+    kubectl(&["patch", "tape", TAPE, "--type=merge", "-p", &patch]);
+
+    // Wait for tape-0..2 Ready
+    let pods = wait_for_ready_tape_replicas(3);
+    evidence(
+        SUITE,
+        "scaled tape to 3 replicas",
+        json!({
+            "pods": pods,
+            "replicasPerShard": 3,
+            "voterCount": 3,
+            "graceSecs": GRACE_SECS
+        }),
+    );
+
+    // Find raft leader via GET /raftz through pod proxy
+    let leader_pod = wait_for_raft_leader(&pods);
+    evidence(
+        SUITE,
+        "found raft leader via /raftz proxy",
+        json!({ "leader": leader_pod }),
+    );
+
+    // Append a few events through the Service before deletion
+    const TOPIC: &str = "ha.sigterm";
+    for id in ["sigterm-1", "sigterm-2"] {
+        append(&http, &tape_endpoint, TOPIC, id).await;
+    }
+    evidence(
+        SUITE,
+        "appended events before deletion",
+        json!({ "topic": TOPIC, "ids": ["sigterm-1", "sigterm-2"] }),
+    );
+
+    // Record deletion time and delete the leader pod
+    let leader_uid: String = kubectl_json(&["get", "pod", &leader_pod])["metadata"]["uid"]
+        .as_str()
+        .expect("leader pod uid")
+        .to_owned();
+
+    // Stream logs from the leader pod in background through its graceful shutdown
+    let ns = required_env("NAMESPACE");
+    let target_pod = leader_pod.clone();
+    let log_stream = std::thread::spawn(move || {
+        let output = std::process::Command::new("kubectl")
+            .args(["-n", &ns, "logs", "-f", &target_pod, "-c", "server"])
+            .output();
+        output
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    });
+
+    // Watch the leader pod from before the delete, so its terminated state is
+    // seen even when the pod object is removed right after the container ends.
+    let watch_ns = required_env("NAMESPACE");
+    let mut watch = std::process::Command::new("kubectl")
+        .args([
+            "-n",
+            &watch_ns,
+            "get",
+            "pod",
+            &leader_pod,
+            "-w",
+            "-o",
+            "json",
+            "--output-watch-events",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("start kubectl pod watch");
+    let mut watch_out = watch.stdout.take().expect("pod watch stdout");
+    let watch_reader = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = watch_out.read_to_string(&mut out);
+        out
+    });
+
+    let deletion_time = Instant::now();
+    let deletion_epoch_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    kubectl(&["delete", "pod", &leader_pod, "--wait=false"]);
+    evidence(
+        SUITE,
+        "deleted raft leader pod",
+        json!({
+            "deleted_pod": leader_pod,
+            "leader_uid": leader_uid,
+            "deletion_epoch_secs": deletion_epoch_secs,
+        }),
+    );
+
+    // A survivor takes over within the drain delay (graceSecs); manual run saw 5.56s.
+    let survivors: Vec<String> = pods.iter().filter(|p| *p != &leader_pod).cloned().collect();
+    let new_leader = wait_for_survivor_leader(&survivors, Duration::from_secs(GRACE_SECS));
+    let handoff_elapsed = deletion_time.elapsed();
+    assert!(
+        handoff_elapsed < Duration::from_secs(GRACE_SECS),
+        "a survivor must report is_leader within graceSecs ({GRACE_SECS}s); took {handoff_elapsed:?}"
+    );
+    evidence(
+        SUITE,
+        "survivor became raft leader",
+        json!({
+            "new_leader": new_leader,
+            "handoff_secs": handoff_elapsed.as_secs_f64(),
+        }),
+    );
+
+    // Wait until the old pod object is gone, then stop the watch. The watch
+    // holds the leader's terminated state; a replacement pod has another uid.
+    let gone_deadline = Instant::now() + Duration::from_secs(60);
+    while Instant::now() < gone_deadline
+        && try_kubectl(&["get", "pod", &leader_pod, "-o", "jsonpath={.metadata.uid}"])
+            .is_ok_and(|uid| uid == leader_uid)
+    {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let _ = watch.kill();
+    let _ = watch.wait();
+    let watch_stream = watch_reader.join().expect("pod watch thread joined");
+    let (exit_code, finished_epoch) = terminated_from_watch(&watch_stream, &leader_uid)
+        .unwrap_or_else(|| {
+            panic!("no terminated server status for the leader in the pod watch:\n{watch_stream}")
+        });
+    let finished_epoch = finished_epoch.unwrap_or_else(|| {
+        panic!("finishedAt missing or unparseable for the leader in the pod watch:\n{watch_stream}")
+    });
+
+    // Collect leader shutdown logs
+    let mut logs = log_stream.join().expect("log stream thread joined");
+    if logs.trim().is_empty() || !logs.contains("raft_shutdown") {
+        let fallback = try_kubectl(&["logs", &leader_pod, "-c", "server", "--previous"])
+            .or_else(|_| try_kubectl(&["logs", &leader_pod, "-c", "server"]))
+            .unwrap_or_default();
+        if fallback.contains("raft_shutdown") {
+            logs = fallback;
+        }
+    }
+    let log_events = parse_json_log_events(&logs);
+
+    let raft_shutdown = log_events
+        .iter()
+        .find(|e| e.event == "raft_shutdown")
+        .unwrap_or_else(|| panic!("no raft_shutdown event in leader's log:\n{logs}"));
+    assert!(
+        raft_shutdown.raw.contains("Transferred"),
+        "raft_shutdown must have handoff Transferred: {:?}",
+        raft_shutdown.raw
+    );
+
+    assert!(
+        log_events.iter().any(|e| e.event == "http_drained"),
+        "http_drained must be present in leader's log:\n{logs}"
+    );
+    assert!(
+        !log_events
+            .iter()
+            .any(|e| e.event == "http_drain_incomplete"),
+        "http_drain_incomplete must be absent from leader's log:\n{logs}"
+    );
+    assert!(
+        !log_events.iter().any(|e| e.event == "http_drain_aborted"),
+        "http_drain_aborted must be absent from leader's log:\n{logs}"
+    );
+
+    let shutdown_secs = finished_epoch.saturating_sub(deletion_epoch_secs);
+    assert_eq!(exit_code, 0, "container exitCode must be 0");
+    assert!(
+        shutdown_secs < GRACE_SECS,
+        "finishedAt minus deletion time ({shutdown_secs}s) must be less than graceSecs ({GRACE_SECS}s)"
+    );
+
+    evidence(
+        SUITE,
+        "verified leader graceful shutdown logs and status",
+        json!({
+            "exit_code": exit_code,
+            "shutdown_secs": shutdown_secs,
+            "raft_shutdown": raft_shutdown.raw,
+            "http_drained": true,
+            "http_drain_incomplete": false,
+            "http_drain_aborted": false,
+        }),
+    );
+
+    // After the pod rejoins, an append through the Service succeeds and
+    // every replica's replay returns the identical event list
+    let all_rejoined = wait_for_ready_tape_replicas(3);
+    append(&http, &tape_endpoint, TOPIC, "sigterm-3").await;
+
+    let expected_events = ["sigterm-1", "sigterm-2", "sigterm-3"];
+    assert_replay(&http, &tape_endpoint, TOPIC, &expected_events).await;
+
+    for pod in &all_rejoined {
+        assert_replica_replay(pod, TOPIC, &expected_events);
+    }
+    evidence(
+        SUITE,
+        "every replica replayed identical events after rejoin",
+        json!({
+            "topic": TOPIC,
+            "replicas": all_rejoined,
+            "events": expected_events,
+        }),
+    );
 }
 
 #[derive(Debug)]
@@ -612,4 +855,243 @@ fn sample_reads_the_last_value_of_a_series() {
         Some("7")
     );
     assert_eq!(sample(body, "tape_operator_missing"), None);
+}
+
+fn wait_for_ready_tape_replicas(want: usize) -> Vec<String> {
+    wait_for(
+        &format!("{want} Ready tape server replicas"),
+        SERVER_TIMEOUT,
+        || {
+            let pods: Value = try_kubectl(&["get", "pods", "-l", SERVER_LABEL, "-o", "json"])
+                .map(|out| serde_json::from_str(&out).unwrap())?;
+            let all = pods["items"].as_array().cloned().unwrap_or_default();
+            let mut ready: Vec<String> = all
+                .iter()
+                .filter(|p| p["metadata"]["deletionTimestamp"].is_null() && is_ready(p))
+                .filter_map(|p| p["metadata"]["name"].as_str().map(str::to_owned))
+                .collect();
+            ready.sort();
+            if ready.len() >= want {
+                Ok(ready)
+            } else {
+                let mut detail = format!("{} Ready of {} pods", ready.len(), all.len());
+                for p in &all {
+                    if let Some(conds) = p["status"]["conditions"].as_array() {
+                        if let Some(unsched) = conds.iter().find(|c| {
+                            c["type"] == "PodScheduled"
+                                && c["status"] == "False"
+                                && c["reason"] == "Unschedulable"
+                        }) {
+                            let name = p["metadata"]["name"].as_str().unwrap_or_default();
+                            let msg = unsched["message"].as_str().unwrap_or_default();
+                            detail.push_str(&format!("; {name} unschedulable: {msg}"));
+                        }
+                    }
+                }
+                Err(detail)
+            }
+        },
+    )
+}
+
+fn raftz_of(pod: &str) -> Result<Value, String> {
+    let ns = required_env("NAMESPACE");
+    let raw = format!("/api/v1/namespaces/{ns}/pods/{pod}:7137/proxy/raftz");
+    let out = try_kubectl(&["get", "--raw", &raw])?;
+    serde_json::from_str(&out).map_err(|err| format!("not JSON: {err}"))
+}
+
+fn wait_for_raft_leader(pods: &[String]) -> String {
+    wait_for("raft leader via /raftz proxy", LEASE_TIMEOUT, || {
+        let mut leader = None;
+        for pod in pods {
+            if let Ok(raftz) = raftz_of(pod) {
+                if raftz["is_leader"].as_bool().unwrap_or(false) {
+                    if leader.is_some() {
+                        return Err("multiple leaders seen in /raftz".to_owned());
+                    }
+                    leader = Some(pod.clone());
+                }
+            }
+        }
+        leader.ok_or_else(|| "no leader in /raftz".to_owned())
+    })
+}
+
+fn wait_for_survivor_leader(survivors: &[String], timeout: Duration) -> String {
+    let deadline = Instant::now() + timeout;
+    loop {
+        for pod in survivors {
+            if let Ok(raftz) = raftz_of(pod) {
+                if raftz["is_leader"].as_bool().unwrap_or(false) {
+                    return pod.clone();
+                }
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no survivor reported is_leader within {timeout:?}"
+        );
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[derive(Debug, Clone)]
+struct LogEvent {
+    event: String,
+    raw: String,
+}
+
+fn parse_json_log_events(logs: &str) -> Vec<LogEvent> {
+    logs.lines()
+        .filter_map(|line| {
+            let val: Value = serde_json::from_str(line).ok()?;
+            let event = val
+                .get("event")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    val.get("fields")
+                        .and_then(|f| f.get("event"))
+                        .and_then(Value::as_str)
+                })
+                .or_else(|| {
+                    val.get("attributes")
+                        .and_then(|a| a.get("event"))
+                        .and_then(Value::as_str)
+                })?
+                .to_owned();
+            Some(LogEvent {
+                event,
+                raw: line.to_owned(),
+            })
+        })
+        .collect()
+}
+
+fn assert_replica_replay(pod: &str, topic: &str, want: &[&str]) {
+    wait_for(
+        &format!("replica {pod} replay catch-up for {topic}"),
+        Duration::from_secs(30),
+        || {
+            let ns = required_env("NAMESPACE");
+            let raw =
+                format!("/api/v1/namespaces/{ns}/pods/{pod}:7137/proxy/topics/{topic}/replay");
+            let out = try_kubectl(&["get", "--raw", &raw])?;
+            let body: Value =
+                serde_json::from_str(&out).map_err(|e| format!("replay not json: {e}"))?;
+            let events = body["events"]
+                .as_array()
+                .ok_or_else(|| format!("no events array in {body}"))?;
+            let ids: Vec<&str> = events
+                .iter()
+                .filter_map(|e| e["payload"]["id"].as_str())
+                .collect();
+            if ids == want {
+                Ok(())
+            } else {
+                Err(format!("got {ids:?}, want {want:?}"))
+            }
+        },
+    );
+}
+
+/// Reads the server container's terminated state of the pod with `uid` from
+/// `kubectl get pod -w -o json --output-watch-events` output (concatenated
+/// watch events). Returns (exitCode, finishedAt as epoch seconds); the epoch
+/// is None when finishedAt is missing or unparseable. None when no event
+/// shows a terminated server container for that uid.
+fn terminated_from_watch(stream: &str, uid: &str) -> Option<(i64, Option<u64>)> {
+    for event in serde_json::Deserializer::from_str(stream).into_iter::<Value>() {
+        let event = event.ok()?;
+        let pod = &event["object"];
+        if pod["metadata"]["uid"].as_str() != Some(uid) {
+            continue;
+        }
+        let Some(statuses) = pod["status"]["containerStatuses"].as_array() else {
+            continue;
+        };
+        let Some(server) = statuses.iter().find(|s| s["name"] == "server") else {
+            continue;
+        };
+        if let Some(term) = server["state"]["terminated"].as_object() {
+            let exit_code = term.get("exitCode").and_then(Value::as_i64)?;
+            let finished = term
+                .get("finishedAt")
+                .and_then(Value::as_str)
+                .and_then(rfc3339_to_unix_secs);
+            return Some((exit_code, finished));
+        }
+    }
+    None
+}
+
+fn rfc3339_to_unix_secs(s: &str) -> Option<u64> {
+    let (date, time) = s.split_once('T')?;
+    let time = time.trim_end_matches('Z');
+    let mut date_parts = date.split('-');
+    let year: u64 = date_parts.next()?.parse().ok()?;
+    let month: u64 = date_parts.next()?.parse().ok()?;
+    let day: u64 = date_parts.next()?.parse().ok()?;
+    let mut time_parts = time.split(':');
+    let hour: u64 = time_parts.next()?.parse().ok()?;
+    let min: u64 = time_parts.next()?.parse().ok()?;
+    let sec_str = time_parts.next()?;
+    let sec: u64 = sec_str.split('.').next()?.parse().ok()?;
+
+    let mut y = year;
+    let mut m = month;
+    if m <= 2 {
+        y -= 1;
+        m += 12;
+    }
+    let era = y / 400;
+    let yoe = y - era * 400;
+    let doy = (153 * (m - 3) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+    Some(days * 86400 + hour * 3600 + min * 60 + sec)
+}
+
+#[test]
+fn rfc3339_to_unix_secs_computes_correct_epoch_timestamp() {
+    assert_eq!(rfc3339_to_unix_secs("1970-01-01T00:00:00Z"), Some(0));
+    assert_eq!(
+        rfc3339_to_unix_secs("2026-10-23T17:50:00Z"),
+        Some(1792777800)
+    );
+    assert_eq!(
+        rfc3339_to_unix_secs("2026-10-23T17:50:05.123Z"),
+        Some(1792777805)
+    );
+}
+
+#[test]
+fn terminated_from_watch_reads_the_leader_terminated_state() {
+    let stream = concat!(
+        "{\"type\":\"ADDED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"running\":{}}}]}}}\n",
+        "{\"type\":\"MODIFIED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"terminated\":{\"exitCode\":0,\"finishedAt\":\"2026-10-23T17:50:05Z\"}}}]}}}\n",
+    );
+    assert_eq!(
+        terminated_from_watch(stream, "u1"),
+        Some((0, Some(1792777805)))
+    );
+}
+
+#[test]
+fn terminated_from_watch_without_terminated_state_is_none() {
+    let stream = "{\"type\":\"ADDED\",\"object\":{\"metadata\":{\"uid\":\"u1\"},\"status\":{\"containerStatuses\":[{\"name\":\"server\",\"state\":{\"running\":{}}}]}}}\n";
+    assert_eq!(terminated_from_watch(stream, "u1"), None);
+}
+
+#[test]
+fn parse_json_log_events_extracts_event_name_and_fields() {
+    let sample = "{\"event\":\"http_drained\",\"message\":\"drained\"}\n\
+{\"attributes\":{\"event\":\"raft_shutdown\",\"handoff\":\"Transferred\"}}\n\
+{\"fields\":{\"event\":\"other\"},\"level\":\"info\"}\n\
+invalid json line\n";
+    let events = parse_json_log_events(sample);
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].event, "http_drained");
+    assert_eq!(events[1].event, "raft_shutdown");
+    assert_eq!(events[2].event, "other");
 }
