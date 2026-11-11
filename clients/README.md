@@ -77,5 +77,5 @@ committed `openapi.json` agree byte for byte.
 
 - [README.md](../README.md) for the product workflow and capabilities.
 - [STATUS.md](../STATUS.md) for the support state of each route family.
-- [Deployment handoff](../docs/deployment-handoff.md) for serve flags, ports,
+- [Environment and HTTP surface](../docs/operations/environment-and-http.md) for serve flags, ports,
   and environment.

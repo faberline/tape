@@ -1,12 +1,13 @@
 # Operations
 
-How to deploy, run, benchmark and check tape. The deployment and runbook pages
-predate this directory and keep their paths, because generated alert rules and
-the product docs link to them.
+How to deploy, run, benchmark and check tape. The runbook pages keep their paths, because generated alert rules and the product docs link to them.
 
 | Document | What it answers |
 |----------|-----------------|
-| [Deployment handoff](../deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks |
+| [Images and CLI](images-and-cli.md) | Image lines and first-level CLI commands |
+| [Environment and HTTP surface](environment-and-http.md) | Environment variables, HTTP surface and probes |
+| [CRD upgrade order, capacity and quotas](crd-capacity-and-quotas.md) | CRD versioning and upgrade order, PVC sizing, per-topic quotas |
+| [Smoke sequence and release gates](smoke-and-release-gates.md) | End-to-end smoke sequence and release-readiness gates |
 | [Cold restore runbook](../runbooks/cold-restore.md) | Ad-hoc backups, destination storage schemes, and cold restore via bootstrap-if-empty |
 | [Disk-full runbook](../runbooks/disk-full.md) | Degraded read-only mode on ENOSPC, metric diagnosis, and volume recovery |
 | [Node drain and PodDisruptionBudget](../runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
