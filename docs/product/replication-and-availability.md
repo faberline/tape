@@ -51,8 +51,9 @@ change.
 - Promise: a replica-count change adds a learner, promotes it once caught
   up, or removes a voter, without restarting the surviving members, while a
   publisher keeps appending and no committed message is lost.
-- Non-goals: shard count; the shared runtime's learner and promotion calls
-  already exist and are not redesigned here.
+- Non-goals: shard count; a membership controller of tape's own. Core's
+  `membership-controller` drives the change, and tape adopts it when it
+  moves onto core's engine (core ADR 0002, phase 3).
 - Open: none; the ROADMAP boundary is complete.
 - Neighbours: extends Replicated group with peer mTLS and
   [operations.md](operations.md) § Kubernetes operator and direct install.
@@ -62,12 +63,15 @@ change.
 
 - Problem: `shardCount` is fixed at 1, so one group carries every topic.
 - Who: operators running more topics or throughput than one group holds.
-- Promise: a `Tape` custom resource can declare more than one shard, topics
-  are placed across shards, and ordering keys keep their promise within a
-  key across a shard split. Shards never appear in the public API.
-- Non-goals: cross-shard transactions; a public partition API.
-- Open: the placement rule for topics across shards and whether it is stable
-  under a shard-count change.
+- Promise: a `Tape` instance can run more than one shard, topics are placed
+  across shards, and ordering keys keep their promise within a key across a
+  shard split. Core decides when a shard splits and forwards each request;
+  tape's hooks classify requests and export and import messages. Shards never
+  appear in the public API.
+- Non-goals: cross-shard transactions; a public partition API; a split or
+  routing mechanism of tape's own.
+- Open: whether the placement key is the topic alone or the topic and its
+  ordering key, and how a subscription pull reads a topic that spans shards.
 - Neighbours: extends Live replica membership; carries
   [subscriptions.md](subscriptions.md) § Ordering keys across shards.
 - Outcome: `multi-shard-topology`. Tracking: [Milestone #16](https://github.com/faberline/tape/milestone/16)

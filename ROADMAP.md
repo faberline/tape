@@ -17,6 +17,14 @@ libraries, same reasons, same shape — and belong to no Pub/Sub checklist group
 The last near-term outcome is the other exception: it bounds tape's one
 peer-broker performance comparison and closes no checklist group either.
 
+Operations move into `core`, as core
+[ADR 0002](https://github.com/faberline/core/blob/main/docs/adr/0002-core-owned-service-operations.md)
+records. Tape keeps its product: topics, subscriptions, messages, ordering,
+and quotas. Core decides how tape runs: replica membership, shards and their
+split, routing between pods, rollout, and monitoring. The later outcomes that
+change replicas or shards adopt the core outcome that does that work, and
+keep tape's own proof.
+
 ## Near-term outcomes
 
 ### Kubernetes-delegated authentication
@@ -242,9 +250,14 @@ peer-broker performance comparison and closes no checklist group either.
 - Outcome: A replica-count change on the custom resource adds a learner,
   promotes it once caught up, or removes a voter, without restarting the
   surviving members.
-- Boundary: The shared runtime already exposes learner and promotion calls;
-  this outcome wires the operator to them and proves the transition. Shard
-  count is not part of it.
+- Boundary: Tape adopts core's
+  [`membership-controller`](https://github.com/faberline/core/blob/main/crates/service-k8s/ROADMAP.md#membership-controller)
+  instead of wiring an operator of its own to the runtime's learner and
+  promotion calls. Tape delivers this outcome when it moves onto core's engine
+  and deletes `tape-operator`, in phase 3 of ADR 0002. Every tape replica is a
+  voter: scaling out adds a learner, waits until it catches up, and promotes
+  it; scaling in transfers leadership first, then demotes and removes the
+  member. Shard count is not part of this outcome.
 - Completion evidence: An operator case scales one to three and three to one
   while a publisher keeps appending, and proves no committed message is lost
   and no surviving member restarts.
@@ -253,13 +266,21 @@ peer-broker performance comparison and closes no checklist group either.
 ### Multi-shard topology
 
 - ID: `multi-shard-topology`
-- Outcome: A `Tape` custom resource can declare more than one shard, and
-  topics are placed across shards while ordering keys keep their promise
-  within a key.
-- Boundary: Shards remain internal topology and never appear in the public
-  API. Cross-shard transactions are outside this outcome.
-- Completion evidence: An operator case renders and reconciles a two-shard
-  instance, and an end-to-end case proves keyed order across a shard split.
+- Outcome: A `Tape` instance can run more than one shard, and topics are
+  placed across shards while ordering keys keep their promise within a key.
+- Boundary: Core owns shards and their split. Core's
+  [`bucketed-resharding`](https://github.com/faberline/core/blob/main/crates/service-k8s/ROADMAP.md#bucketed-resharding)
+  decides when a shard splits and moves its data, and
+  [`shard-routing`](https://github.com/faberline/core/blob/main/crates/service-k8s/ROADMAP.md#shard-routing)
+  forwards each request to its shard. Tape switches to
+  `Partitioning::Bucketed` and supplies the data-plane hooks: they classify
+  each request by a placement key built from its topic and possibly its
+  ordering key, merge results that span shards, and export and import the
+  messages of a bucket. Shards remain internal topology and never appear in
+  the public API. Cross-shard transactions are outside this outcome.
+- Completion evidence: An end-to-end case splits one shard into two while
+  publishers keep appending keyed messages, and proves no committed message
+  is lost and per-key order holds across the split.
 - Tracking: [Milestone #16](https://github.com/faberline/tape/milestone/16)
 
 ### Quotas and scale transition
@@ -267,8 +288,12 @@ peer-broker performance comparison and closes no checklist group either.
 - ID: `quotas-and-scale-transition`
 - Outcome: Per-topic and per-subscription quotas are enforced, the default
   router enables bounded admission, and a scale transition is proven on GKE.
-- Boundary: Quotas are counts and bytes per window; billing-style accounting
-  is outside this outcome. The GKE proof stays zonal.
+- Boundary: Quotas and admission stay in tape. Quotas are counts and bytes
+  per window; billing-style accounting is outside this outcome. The scale
+  transition runs through core's `membership-controller`, which
+  `live-replica-membership` adopts. This outcome proves that transition under
+  tape's load on GKE and does not drive membership itself. The GKE proof
+  stays zonal.
 - Completion evidence: End-to-end cases prove a quota refusal with the shared
   error envelope, and the GCP acceptance script proves a replica-count
   transition under load with no committed loss.
