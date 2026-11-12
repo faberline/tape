@@ -7,7 +7,7 @@ A tape group of 3 voters needs 2 replicas for quorum. This page covers one repli
 Each replica answers `GET /raftz` with JSON that includes `is_leader` and `applied_index`. Read it on every pod:
 
 ```sh
-kubectl -n <ns> get pods -l app=tape
+kubectl -n <ns> get pods -l app.kubernetes.io/instance=tape,app.kubernetes.io/component=server
 kubectl -n <ns> get tape
 tape connect --namespace <ns> --cr tape -- sh -c 'curl -s "$TAPE_URL/raftz"'
 ```
@@ -32,7 +32,7 @@ Writes cannot commit: append and checkpoint-put both stop. Reads of data that is
 
 Do not restart the remaining replica to reset the election. This makes quorum loss worse, as the `TapeRaftLeaderAbsent` annotation says.
 
-Do not delete any PVC. First bring the lost pods back. Run `kubectl describe pod` on each one for the reason: node loss, eviction, image pull, or PVC attach. When one lost pod returns, quorum is back and a leader is elected.
+Do not delete any PVC. First bring the lost pods back. Run `kubectl -n <ns> describe pod <pod>` on each one for the reason: node loss, eviction, image pull, or PVC attach. When one lost pod returns, quorum is back and a leader is elected.
 
 If both lost pods have lost their PVC data for good, the data of this group is not recoverable from the survivors alone. Restore it from a backup with [cold-restore.md](cold-restore.md).
 
