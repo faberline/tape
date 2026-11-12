@@ -27,8 +27,8 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::{
-    append, assert_pods_run, assert_replay, assert_version, endpoint, evidence, kubectl,
-    kubectl_json, required_env, try_kubectl, wait_for, wait_healthy, Expected,
+    assert_pods_run, assert_replay, assert_version, endpoint, evidence, kubectl, kubectl_json,
+    required_env, try_kubectl, wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_ha";
@@ -59,7 +59,8 @@ const HANDOVER_LIMIT: Duration = Duration::from_secs(90);
 const HANDOVER_TIMEOUT: Duration = Duration::from_secs(180);
 const DRAIN_TIMEOUT: &str = "240s";
 const NEW_HOLDER_TIMEOUT: Duration = Duration::from_secs(180);
-const APPEND_SETTLE_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+// The first append can run while the last pod is still scheduled and its volume provisioned.
+const APPEND_SETTLE_TIMEOUT: Duration = Duration::from_secs(4 * 60);
 const WORST_HEARTBEAT: Duration = Duration::from_secs(75);
 const MIN_HEARTBEAT_SAMPLES: usize = 3;
 const GRACE_SECS: u64 = 10;
@@ -188,7 +189,7 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     // Append a few events through the Service before deletion
     const TOPIC: &str = "ha.sigterm";
     for id in ["sigterm-1", "sigterm-2"] {
-        append(&http, &tape_endpoint, TOPIC, id).await;
+        append_when_settled(&http, &tape_endpoint, TOPIC, id, &pods).await;
     }
     evidence(
         SUITE,
@@ -1189,4 +1190,29 @@ fn non_503_is_not_transient() {
         500,
         &json!({ "error": "raft_unavailable" })
     ));
+}
+
+#[test]
+fn append_settle_timeout_covers_a_node_pool_scale_up() {
+    assert_eq!(APPEND_SETTLE_TIMEOUT, Duration::from_secs(4 * 60));
+}
+
+#[test]
+fn sigterm_test_appends_only_through_append_when_settled() {
+    let src = include_str!("operator_ha.rs");
+    let start = src
+        .find(&["async fn leader_sigterm", "_hands_off"].concat())
+        .expect("test fn present");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("end of fn");
+    let body = &body[..end];
+    assert!(
+        !body.contains(&["append(", "&http"].concat()),
+        "plain append call left in the sigterm test"
+    );
+    assert_eq!(
+        body.matches("append_when_settled(").count(),
+        2,
+        "the loop and sigterm-3 must both use append_when_settled"
+    );
 }
