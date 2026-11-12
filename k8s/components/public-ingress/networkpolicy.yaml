@@ -1,0 +1,26 @@
+# Admits the public API port 7137 from the ingress controller's namespace
+# only. NetworkPolicies are additive: this policy is added next to the
+# existing tape-server-ingress policy of k8s/components/network-policy and
+# does not replace it. It needs a CNI that enforces NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tape-server-public-ingress
+  labels:
+    app: tape
+    role: server
+spec:
+  podSelector:
+    matchLabels:
+      app: tape
+      role: server
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              tape.cclab.dev/ingress-controller: "true"
+      ports:
+        - protocol: TCP
+          port: 7137
