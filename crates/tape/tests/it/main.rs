@@ -9,6 +9,7 @@ mod backup_destination_docs;
 mod bootstrap;
 mod cli_contract;
 mod cluster_connect;
+mod compatibility_docs;
 mod deploy_cli;
 mod direct_k8s_assets;
 mod durable_crash_recovery;
