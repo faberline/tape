@@ -1190,3 +1190,28 @@ fn non_503_is_not_transient() {
         &json!({ "error": "raft_unavailable" })
     ));
 }
+
+#[test]
+fn append_settle_timeout_covers_a_node_pool_scale_up() {
+    assert_eq!(APPEND_SETTLE_TIMEOUT, Duration::from_secs(4 * 60));
+}
+
+#[test]
+fn sigterm_test_appends_only_through_append_when_settled() {
+    let src = include_str!("operator_ha.rs");
+    let start = src
+        .find(&["async fn leader_sigterm", "_hands_off"].concat())
+        .expect("test fn present");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("end of fn");
+    let body = &body[..end];
+    assert!(
+        !body.contains(&["append(", "&http"].concat()),
+        "plain append call left in the sigterm test"
+    );
+    assert_eq!(
+        body.matches("append_when_settled(").count(),
+        2,
+        "the loop and sigterm-3 must both use append_when_settled"
+    );
+}
