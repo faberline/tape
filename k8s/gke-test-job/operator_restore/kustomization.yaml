@@ -1,0 +1,17 @@
+# GKE e2e suite `operator_restore` (crates/tape/tests/it/e2e/operator_restore.rs):
+# a backup to gs:// and a restore of the Tape CR `tape`, reached at
+# http://tape:7137. Dispatch only: it is paid and needs backup_bucket, so it
+# is never in `all` and never in ci.yml.
+#
+# faberline/aw's run.sh deploys k8s/overlays/gke-test, waits for the operator
+# rollout, sets this folder's namespace and test image, adds the ConfigMap
+# gke-test-env (E2E_EXPECTED_* and E2E_BACKUP_BUCKET), applies it, and passes
+# only when Job/tape-e2e completes and its log does not say `running 0 tests`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tape
+
+resources:
+  - rbac.yaml
+  - job.yaml

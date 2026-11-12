@@ -1,0 +1,49 @@
+# What the suite does in the run's namespace, and nothing cluster-wide: it
+# reads the pods, the PVCs and the backup CronJob, creates one backup Job from
+# that CronJob and reads its log, deletes the group's PVCs and the Tape CR
+# `tape` for the drill, then creates the CR again from the saved copy.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tape-e2e
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tape.dev"]
+    resources: ["tapes"]
+    verbs: ["get", "list", "create", "delete", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tape-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tape-e2e
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape

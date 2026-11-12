@@ -16,6 +16,7 @@
 mod image;
 mod operator_ha;
 mod operator_recovery;
+mod operator_restore;
 
 use std::process::Command;
 use std::time::{Duration, Instant};

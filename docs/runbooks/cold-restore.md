@@ -49,3 +49,56 @@ still set crash-looped on the non-empty-PVC refusal).
    re-seed from the (possibly now-stale) backup object. Removing the field
    after a successful bootstrap makes that recreate-then-restart sequence
    fail loudly (no seed configured) instead of silently reseeding old data.
+
+## GKE restore drill (e2e::operator_restore)
+
+The GKE suite `operator_restore` runs these steps in the namespace `tape`.
+`<bucket>` is the bucket that `backup_bucket` names in the dispatch. The
+suite gets it from `E2E_BACKUP_BUCKET`. Each command runs as the case runs
+it; the case keeps the saved CR in memory and writes the restore file under
+`TMPDIR` (`/work` in the Job).
+
+(a) Scale the group to three replicas and set a yearly backup schedule, so
+no backup starts on its own:
+
+```bash
+kubectl -n tape patch tape tape --type=merge -p '{"spec":{"replicasPerShard":3,"voterCount":3,"graceSecs":10,"backup":{"schedule":"0 0 1 1 *","destination":"gs://<bucket>/restore-drill"}}}'
+```
+
+(b) Run one backup from the CronJob and read the object key it wrote. The
+case polls the Job until `status.succeeded` is 1. To check by hand:
+
+```bash
+kubectl -n tape create job tape-backup-drill --from=cronjob/tape-backup
+kubectl -n tape get job tape-backup-drill -o json
+kubectl -n tape logs job/tape-backup-drill
+```
+
+The `object.key` in the log names the backup. The seed is
+`gs://<bucket>/<key>`.
+
+(c) Save the CR, then destroy the group and its PVCs:
+
+```bash
+kubectl -n tape get tape tape -o json > /work/tape-before.json
+kubectl -n tape delete tape tape --wait=true
+kubectl -n tape delete pvc -l app.kubernetes.io/instance=tape --wait=true
+```
+
+(d) Create the CR again from the saved JSON. Remove `metadata.resourceVersion`,
+`metadata.uid`, `metadata.creationTimestamp`, `metadata.generation`,
+`metadata.managedFields`, `metadata.finalizers`, the annotation
+`kubectl.kubernetes.io/last-applied-configuration`, the top-level `status`
+and `spec.backup`. Set `spec.bootstrapSeedUri` to `gs://<bucket>/<key>`. Save
+the result as `/work/tape-restore.json`, then run:
+
+```bash
+kubectl -n tape create -f /work/tape-restore.json
+```
+
+(e) Replay the topic. Every offset 0 to 29 must be back, in order, and a
+new write must still work:
+
+```bash
+curl "$BASE/topics/restore.drill/replay"
+```
