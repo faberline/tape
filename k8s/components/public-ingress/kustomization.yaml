@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Opt in from an environment-specific Kustomization. TLS ends at the
+# ingress; tape itself serves plain HTTP on 7137. Replace the host and the
+# secret name, and label the ingress controller's namespace
+# `tape.cclab.dev/ingress-controller=true` before applying.
+# See docs/operations/public-api-tls.md.
+resources:
+  - ingress.yaml
+  - networkpolicy.yaml

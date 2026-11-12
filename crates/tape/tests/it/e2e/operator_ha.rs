@@ -27,8 +27,8 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::{
-    append, assert_pods_run, assert_replay, assert_version, endpoint, evidence, kubectl,
-    kubectl_json, required_env, try_kubectl, wait_for, wait_healthy, Expected,
+    assert_pods_run, assert_replay, assert_version, endpoint, evidence, kubectl, kubectl_json,
+    required_env, try_kubectl, wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_ha";
@@ -59,6 +59,8 @@ const HANDOVER_LIMIT: Duration = Duration::from_secs(90);
 const HANDOVER_TIMEOUT: Duration = Duration::from_secs(180);
 const DRAIN_TIMEOUT: &str = "240s";
 const NEW_HOLDER_TIMEOUT: Duration = Duration::from_secs(180);
+// The first append can run while the last pod is still scheduled and its volume provisioned.
+const APPEND_SETTLE_TIMEOUT: Duration = Duration::from_secs(4 * 60);
 const WORST_HEARTBEAT: Duration = Duration::from_secs(75);
 const MIN_HEARTBEAT_SAMPLES: usize = 3;
 const GRACE_SECS: u64 = 10;
@@ -187,7 +189,7 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     // Append a few events through the Service before deletion
     const TOPIC: &str = "ha.sigterm";
     for id in ["sigterm-1", "sigterm-2"] {
-        append(&http, &tape_endpoint, TOPIC, id).await;
+        append_when_settled(&http, &tape_endpoint, TOPIC, id, &pods).await;
     }
     evidence(
         SUITE,
@@ -352,7 +354,13 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     // After the pod rejoins, an append through the Service succeeds and
     // every replica's replay returns the identical event list
     let all_rejoined = wait_for_ready_tape_replicas(3);
-    append(&http, &tape_endpoint, TOPIC, "sigterm-3").await;
+    let rejoined_leader = wait_for_raft_leader(&all_rejoined);
+    evidence(
+        SUITE,
+        "raft leader after the rejoin",
+        json!({ "leader": rejoined_leader, "replicas": all_rejoined }),
+    );
+    append_when_settled(&http, &tape_endpoint, TOPIC, "sigterm-3", &all_rejoined).await;
 
     let expected_events = ["sigterm-1", "sigterm-2", "sigterm-3"];
     assert_replay(&http, &tape_endpoint, TOPIC, &expected_events).await;
@@ -901,6 +909,69 @@ fn raftz_of(pod: &str) -> Result<Value, String> {
     serde_json::from_str(&out).map_err(|err| format!("not JSON: {err}"))
 }
 
+/// True only for the 503 that the server returns while a raft proposal cannot
+/// reach a leader yet. Every other error is not transient.
+fn is_transient_raft_error(status: u16, body: &Value) -> bool {
+    status == 503 && body["error"] == "raft_unavailable"
+}
+
+/// Appends `{"id": id}` like `super::append`, but retries only the transient
+/// `raft_unavailable` 503, for at most `APPEND_SETTLE_TIMEOUT`. Any other
+/// error panics at once. On the final failure it prints the server logs.
+async fn append_when_settled(
+    http: &reqwest::Client,
+    base: &str,
+    topic: &str,
+    id: &str,
+    pods: &[String],
+) {
+    let deadline = Instant::now() + APPEND_SETTLE_TIMEOUT;
+    let mut last = String::from("no attempt");
+    loop {
+        if Instant::now() >= deadline {
+            dump_server_logs(pods);
+            panic!("append {id}: still failing after {APPEND_SETTLE_TIMEOUT:?}; last saw: {last}");
+        }
+        match http
+            .post(format!("{base}/topics/{topic}/append"))
+            .json(&json!({ "payload": { "id": id } }))
+            .send()
+            .await
+        {
+            Err(err) => last = err.to_string(),
+            Ok(response) => {
+                let status = response.status();
+                let body: Value = response
+                    .json()
+                    .await
+                    .unwrap_or_else(|err| panic!("append {id}: {err}"));
+                if status.is_success() {
+                    assert_eq!(
+                        body["payload"]["id"], id,
+                        "append {id} echoes the payload: {body}"
+                    );
+                    return;
+                }
+                if !is_transient_raft_error(status.as_u16(), &body) {
+                    panic!("append {id}: {status} {body}");
+                }
+                last = format!("{status} {body}");
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+/// Prints the last 200 lines of the server container of each pod. Runs only on
+/// a failure path, so it never panics.
+fn dump_server_logs(pods: &[String]) {
+    for pod in pods {
+        let out = try_kubectl(&["logs", pod, "-c", "server", "--tail=200"])
+            .unwrap_or_else(|err| format!("kubectl logs failed: {err}"));
+        eprintln!("--- logs {pod} ---\n{out}");
+    }
+}
+
 fn wait_for_raft_leader(pods: &[String]) -> String {
     wait_for("raft leader via /raftz proxy", LEASE_TIMEOUT, || {
         let mut leader = None;
@@ -1094,4 +1165,54 @@ invalid json line\n";
     assert_eq!(events[0].event, "http_drained");
     assert_eq!(events[1].event, "raft_shutdown");
     assert_eq!(events[2].event, "other");
+}
+
+#[test]
+fn raft_unavailable_503_is_transient() {
+    let body = json!({
+        "error": "raft_unavailable",
+        "message": "raft: proposal routing timed out",
+    });
+    assert!(is_transient_raft_error(503, &body));
+}
+
+#[test]
+fn other_503_is_not_transient() {
+    assert!(!is_transient_raft_error(
+        503,
+        &json!({ "error": "overloaded" })
+    ));
+}
+
+#[test]
+fn non_503_is_not_transient() {
+    assert!(!is_transient_raft_error(
+        500,
+        &json!({ "error": "raft_unavailable" })
+    ));
+}
+
+#[test]
+fn append_settle_timeout_covers_a_node_pool_scale_up() {
+    assert_eq!(APPEND_SETTLE_TIMEOUT, Duration::from_secs(4 * 60));
+}
+
+#[test]
+fn sigterm_test_appends_only_through_append_when_settled() {
+    let src = include_str!("operator_ha.rs");
+    let start = src
+        .find(&["async fn leader_sigterm", "_hands_off"].concat())
+        .expect("test fn present");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("end of fn");
+    let body = &body[..end];
+    assert!(
+        !body.contains(&["append(", "&http"].concat()),
+        "plain append call left in the sigterm test"
+    );
+    assert_eq!(
+        body.matches("append_when_settled(").count(),
+        2,
+        "the loop and sigterm-3 must both use append_when_settled"
+    );
 }
