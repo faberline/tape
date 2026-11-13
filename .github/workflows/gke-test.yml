@@ -12,6 +12,7 @@
 # at a time, each on a fresh deploy:
 #   operator_recovery  k8s/gke-test-job/operator_recovery
 #   operator_ha        k8s/gke-test-job/operator_ha
+#   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
 #   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
 # ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
@@ -34,8 +35,13 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha, operator_upgrade]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade]
         default: all
+      backup_bucket:
+        description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
+        type: string
+        required: false
+        default: ""
       previous_image:
         description: "Image under test replaces this one after the first rollout: ghcr.io/faberline/tape@sha256:<64 hex> of the previous release. Needed only by operator_upgrade."
         type: string
@@ -159,6 +165,7 @@ jobs:
           RAW_IMAGE: ${{ needs.image.outputs.image }}
           # A pull request has no inputs, so it runs all suites.
           INPUT_SUITE: ${{ inputs.suite || 'all' }}
+          INPUT_BACKUP_BUCKET: ${{ inputs.backup_bucket }}
           INPUT_PREVIOUS_IMAGE: ${{ inputs.previous_image }}
         run: |
           set -euo pipefail
@@ -187,13 +194,18 @@ jobs:
           case "$INPUT_SUITE" in
             all) suites='["operator_recovery","operator_ha"]' ;;
             operator_recovery | operator_ha) suites="[\"${INPUT_SUITE}\"]" ;;
+            operator_restore)
+              [[ "$INPUT_BACKUP_BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]] \
+                || die "operator_restore needs backup_bucket, got: $INPUT_BACKUP_BUCKET"
+              suites='["operator_restore"]'
+              ;;
             operator_upgrade)
               [[ "$INPUT_PREVIOUS_IMAGE" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] \
                 || die "operator_upgrade needs previous_image ghcr.io/faberline/tape@sha256:<64 hex>, got: $INPUT_PREVIOUS_IMAGE"
               [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
               suites='["operator_upgrade"]'
               ;;
-            *) die "suite must be all, operator_recovery, operator_ha or operator_upgrade, got: $INPUT_SUITE" ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore or operator_upgrade, got: $INPUT_SUITE" ;;
           esac
 
           {
@@ -207,6 +219,9 @@ jobs:
             echo "E2E_EXPECTED_GIT_SHA=${git_sha}"
             echo "E2E_EXPECTED_IMAGE=${image}"
             echo "E2E_EXPECTED_RUNTIME_DIGEST=${runtime_digest}"
+            if [[ "$INPUT_SUITE" == operator_restore ]]; then
+              echo "E2E_BACKUP_BUCKET=${INPUT_BACKUP_BUCKET}"
+            fi
             if [[ "$INPUT_SUITE" == operator_upgrade ]]; then
               echo "E2E_PREVIOUS_IMAGE=${INPUT_PREVIOUS_IMAGE}"
             fi
