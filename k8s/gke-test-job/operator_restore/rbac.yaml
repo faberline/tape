@@ -2,6 +2,8 @@
 # reads the pods, the PVCs and the backup CronJob, creates one backup Job from
 # that CronJob and reads its log, deletes the group's PVCs and the Tape CR
 # `tape` for the drill, then creates the CR again from the saved copy.
+# The ServiceAccount `tape-restore-drill` runs this Job and the restored server
+# pods (the CR sets `spec.serviceAccountName` to it). The bucket grants it.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

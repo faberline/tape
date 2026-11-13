@@ -89,7 +89,9 @@ kubectl -n tape delete pvc -l app.kubernetes.io/instance=tape --wait=true
 `metadata.uid`, `metadata.creationTimestamp`, `metadata.generation`,
 `metadata.managedFields`, `metadata.finalizers`, the annotation
 `kubectl.kubernetes.io/last-applied-configuration`, the top-level `status`
-and `spec.backup`. Set `spec.bootstrapSeedUri` to `gs://<bucket>/<key>`. Save
+and `spec.backup`. Set `spec.bootstrapSeedUri` to `gs://<bucket>/<key>`. Set
+`spec.serviceAccountName` to `tape-restore-drill`, the identity that the drill
+bucket grants; the server pods read the seed with it. Save
 the result as `/work/tape-restore.json`, then run:
 
 ```bash

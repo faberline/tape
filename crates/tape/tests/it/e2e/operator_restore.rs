@@ -22,6 +22,7 @@ const COUNT: usize = 30;
 const BACKUP_JOB: &str = "tape-backup-drill";
 const BACKUP_CRON_JOB: &str = "tape-backup";
 const PREFIX: &str = "restore-drill";
+const RESTORE_SA: &str = "tape-restore-drill";
 const SERVER_LABEL: &str =
     "app.kubernetes.io/name=tape,app.kubernetes.io/instance=tape,app.kubernetes.io/component=server";
 const SERVER_TIMEOUT: Duration = Duration::from_secs(15 * 60);
@@ -181,6 +182,9 @@ async fn backup_destroy_restore_brings_every_offset_back() {
     if let Some(spec) = restore["spec"].as_object_mut() {
         spec.remove("backup");
         spec.insert("bootstrapSeedUri".to_owned(), json!(seed));
+        // The server pods read the seed with their own identity. The bucket
+        // grants that identity, not the default `tape` ServiceAccount.
+        spec.insert("serviceAccountName".to_owned(), json!(RESTORE_SA));
     }
     let dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/work".to_owned());
     let path = format!("{dir}/tape-restore.json");
@@ -191,6 +195,14 @@ async fn backup_destroy_restore_brings_every_offset_back() {
     // i. Wait for the restored group and check its new PVCs.
     let restored_pods = wait_ready_pods(3, RESTORE_TIMEOUT);
     wait_healthy(&http, &base, RESTORE_TIMEOUT).await;
+    let pods: Value = kubectl_json(&["get", "pods", "-l", SERVER_LABEL]);
+    for pod in pods["items"].as_array().into_iter().flatten() {
+        assert_eq!(
+            pod["spec"]["serviceAccountName"], RESTORE_SA,
+            "restored pod {} runs as the wrong ServiceAccount",
+            pod["metadata"]["name"]
+        );
+    }
     let new_pvcs = pvc_items();
     assert_eq!(new_pvcs.len(), 3, "PVCs after the restore: {new_pvcs:?}");
     for (name, uid) in &new_pvcs {
@@ -205,7 +217,7 @@ async fn backup_destroy_restore_brings_every_offset_back() {
     evidence(
         SUITE,
         "restored",
-        json!({ "count": COUNT, "seed": seed, "pods": restored_pods }),
+        json!({ "count": COUNT, "seed": seed, "pods": restored_pods, "service_account": RESTORE_SA }),
     );
 
     // k. The restored group still accepts writes.
