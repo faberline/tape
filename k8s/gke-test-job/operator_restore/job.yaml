@@ -18,7 +18,7 @@ spec:
         app: tape-e2e
     spec:
       restartPolicy: Never
-      serviceAccountName: tape-e2e
+      serviceAccountName: tape-restore-drill
       nodeSelector:
         faberline.dev/pool: tape-client
       tolerations:
