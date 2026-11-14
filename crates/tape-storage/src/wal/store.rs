@@ -6,7 +6,10 @@ use std::sync::Mutex;
 use storage_durable::{FramedLogReader, FramedLogWriter, FsyncPolicy, SnapshotFileStore};
 
 use super::io_error::{flatten_io_error, json_err};
-use super::{DEFAULT_SNAPSHOT_THRESHOLD, SNAPSHOT_EXTENSION, SNAPSHOT_PREFIX, WAL_FILE_NAME};
+use super::{
+    check_format_version, DEFAULT_SNAPSHOT_THRESHOLD, SNAPSHOT_EXTENSION, SNAPSHOT_PREFIX,
+    WAL_FILE_NAME,
+};
 use tape_shared_kernel::{apply_command, TapeCommand, TapeJournal, TapeOutcome};
 
 /// Single-node durable commit coordinator for one `--data-dir`'s journal.
@@ -80,6 +83,7 @@ impl WalStore {
     ) -> std::io::Result<(WalStore, TapeJournal)> {
         let dir = dir.as_ref();
         std::fs::create_dir_all(dir)?;
+        check_format_version(dir)?;
 
         let snapshots = SnapshotFileStore::new(
             dir,

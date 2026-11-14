@@ -14,6 +14,7 @@
 #   operator_ha        k8s/gke-test-job/operator_ha
 #   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
 #   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
+#   operator_rollback  k8s/gke-test-job/operator_rollback (dispatch only, paid: never in all and never in ci.yml)
 # ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a
@@ -35,7 +36,7 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback]
         default: all
       backup_bucket:
         description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
@@ -43,7 +44,7 @@ on:
         required: false
         default: ""
       previous_image:
-        description: "Image under test replaces this one after the first rollout: ghcr.io/faberline/tape@sha256:<64 hex> of the previous release. Needed only by operator_upgrade."
+        description: "Image under test replaces this one after the first rollout: ghcr.io/faberline/tape@sha256:<64 hex> of the previous release. Needed only by operator_upgrade and operator_rollback."
         type: string
         required: false
         default: ""
@@ -205,7 +206,13 @@ jobs:
               [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
               suites='["operator_upgrade"]'
               ;;
-            *) die "suite must be all, operator_recovery, operator_ha, operator_restore or operator_upgrade, got: $INPUT_SUITE" ;;
+            operator_rollback)
+              [[ "$INPUT_PREVIOUS_IMAGE" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] \
+                || die "operator_rollback needs previous_image ghcr.io/faberline/tape@sha256:<64 hex>, got: $INPUT_PREVIOUS_IMAGE"
+              [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
+              suites='["operator_rollback"]'
+              ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade or operator_rollback, got: $INPUT_SUITE" ;;
           esac
 
           {
@@ -222,7 +229,7 @@ jobs:
             if [[ "$INPUT_SUITE" == operator_restore ]]; then
               echo "E2E_BACKUP_BUCKET=${INPUT_BACKUP_BUCKET}"
             fi
-            if [[ "$INPUT_SUITE" == operator_upgrade ]]; then
+            if [[ "$INPUT_SUITE" == operator_upgrade || "$INPUT_SUITE" == operator_rollback ]]; then
               echo "E2E_PREVIOUS_IMAGE=${INPUT_PREVIOUS_IMAGE}"
             fi
             echo "EOF"

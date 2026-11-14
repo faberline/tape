@@ -95,6 +95,51 @@ pub const DEFAULT_SNAPSHOT_THRESHOLD: u64 = 1024;
 /// used to join this onto `--data-dir` before the WAL existed).
 const LEGACY_JOURNAL_FILE_NAME: &str = "journal.json";
 
+/// Version of the data directory layout (WAL frames, snapshots and the
+/// `format-version` file). Raise it only with a layout change that an older
+/// binary cannot read.
+pub const FORMAT_VERSION: u32 = 1;
+
+/// The file that records the data directory's format version.
+const FORMAT_VERSION_FILE_NAME: &str = "format-version";
+
+/// Record the format version in `dir` and refuse a directory written by a
+/// newer binary. A directory without the file counts as version 0: it gets
+/// the file, and its layout is unchanged.
+pub fn check_format_version(dir: &Path) -> std::io::Result<()> {
+    let path = dir.join(FORMAT_VERSION_FILE_NAME);
+    if !path.exists() {
+        let tmp = dir.join("format-version.tmp");
+        {
+            let mut file = std::fs::File::create(&tmp)?;
+            std::io::Write::write_all(&mut file, format!("{FORMAT_VERSION}\n").as_bytes())?;
+            file.sync_all()?;
+        }
+        std::fs::rename(&tmp, &path)?;
+        return Ok(());
+    }
+    let text = std::fs::read_to_string(&path)?;
+    let found: u32 = text.trim().parse().map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "data directory file {} is not a format version number: {:?}",
+                path.display(),
+                text
+            ),
+        )
+    })?;
+    if found > FORMAT_VERSION {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "data directory format version {found} is newer than this binary supports (format version {FORMAT_VERSION}); run a newer tape binary, or restore a copy of the data directory from before the upgrade"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// One-time upgrade path for a `--data-dir` that already has state from
 /// before WI #3052: seed a WAL-store snapshot from the old whole-file
 /// `journal.json` so [`WalStore::open`] (called right after this) recovers

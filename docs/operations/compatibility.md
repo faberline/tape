@@ -21,7 +21,7 @@ The rules below are copied from the "Rollback Contract" in [CRD upgrade order, c
 | Older binary meets a nested record with `deny_unknown_fields` (`Subscription`) | Fails to load and exits non-zero. Fail-loud, with an `unknown field` error. |
 | Older binary meets an unknown `TapeCommand` WAL variant | Fails to load and exits non-zero. Fail-loud, with an `unknown variant` error. |
 
-There is no format-version constant on the durable path.
+The data directory carries a format version in the file `format-version` (constant `FORMAT_VERSION` in `crates/tape-storage/src/wal.rs`, value `1`). A binary refuses to open a directory whose version is higher than its own, exits non-zero and says so. A directory without the file (every `0.x` data directory) loads as version 0, and the binary then writes the file. A binary from before this constant does not know the file and ignores it, so the older-binary rules in the table above still apply to it.
 
 Rule: do not run an older binary on a newer data directory. Copy the directory first.
 
