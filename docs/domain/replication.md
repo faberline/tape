@@ -26,6 +26,7 @@ holds tape's state machine, its bootstrap seeding and its environment names.
   callers share; a fresh volume's `lost+found` does not count as state.
 - **Peer TLS** — `peer_tls::from_env` reads the `TAPE_PEER_*` environment and
   `peer_tls::peer_transport` turns it into raft-runtime's peer transport.
+  `peer_tls::spawn_reload` polls the three files every 30 seconds and reloads the transport when they change (runbook: `docs/runbooks/certificate-rotation.md`).
 
 ## Invariants
 

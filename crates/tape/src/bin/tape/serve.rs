@@ -218,10 +218,15 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
         );
     }
     if replica_mode {
-        let transport = peer_tls::from_env()?
-            .map(|config| peer_tls::peer_transport(&config))
+        let peer_config = peer_tls::from_env()?;
+        let transport = peer_config
+            .as_ref()
+            .map(peer_tls::peer_transport)
             .transpose()
             .context("raft: build shared required-mTLS peer transport")?;
+        if let (Some(transport), Some(config)) = (transport.as_ref(), peer_config) {
+            peer_tls::spawn_reload(transport.clone(), config, peer_tls::RELOAD_INTERVAL);
+        }
         let (peer_port, peer_scheme) = match transport.as_ref() {
             Some(_) => (args.raft_port, "https"),
             None => (
