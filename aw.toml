@@ -19,3 +19,7 @@ codegen.profile = "rust/score-crate"
 build = "cargo test --locked --workspace --lib --no-run"
 test = "cargo test --locked --workspace --lib"
 harness = "cargo"
+
+[standards.coverage]
+line = 0.0   # set to the measured value, see Steps
+target = 100
