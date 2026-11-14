@@ -38,27 +38,36 @@ async fn seeded_group_surfaces_data(up_to: u64) -> Vec<tempfile::TempDir> {
         urls.insert(id, format!("http://{}", l.local_addr().unwrap()));
         listeners.push(l);
     }
-    let membership = Membership {
-        voters: vec![0, 1, 2],
-        learners: vec![],
-    };
+    let membership = Membership::new(
+        vec![
+            raft_runtime::NodeId::new(0),
+            raft_runtime::NodeId::new(1),
+            raft_runtime::NodeId::new(2),
+        ],
+        vec![],
+    );
 
     let dirs: Vec<tempfile::TempDir> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
     let mut journals = Vec::new();
     let mut rafts = Vec::new();
     for (id, listener) in listeners.into_iter().enumerate() {
-        prepare_bootstrap_seed(dirs[id].path(), id as u64, &bytes).unwrap();
+        prepare_bootstrap_seed(
+            dirs[id].path(),
+            raft_runtime::NodeId::new(id as u64),
+            &bytes,
+        )
+        .unwrap();
         let journal = Arc::new(Mutex::new(TapeJournal::default()));
-        let peers: HashMap<u64, String> = urls
+        let peers: HashMap<raft_runtime::NodeId, String> = urls
             .iter()
             .filter(|(k, _)| **k != id as u64)
-            .map(|(k, v)| (*k, v.clone()))
+            .map(|(k, v)| (raft_runtime::NodeId::new(*k), v.clone()))
             .collect();
         let raft = Arc::new(
             TapeRaft::spawn(
                 Arc::clone(&journal),
                 &dirs[id].path().join("raft"),
-                id as u64,
+                raft_runtime::NodeId::new(id as u64),
                 membership.clone(),
                 peers,
                 TapeRaft::host_config(8),
@@ -79,7 +88,7 @@ async fn seeded_group_surfaces_data(up_to: u64) -> Vec<tempfile::TempDir> {
     let want_applied = up_to.max(1);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
-        let applied: Vec<u64> = rafts.iter().map(|r| r.applied_index()).collect();
+        let applied: Vec<u64> = rafts.iter().map(|r| r.applied_index().get()).collect();
         let replayed: Vec<usize> = journals
             .iter()
             .map(|j| {

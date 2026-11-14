@@ -21,7 +21,9 @@ impl ManagedService for Tape {
     const MANAGER: &'static str = "tape-operator";
 
     fn render(&self) -> Vec<serde_json::Value> {
-        render::render(self)
+        // The trait returns no error. `reconcile_plan` propagates the render
+        // error itself; this path renders no children on error.
+        render::render(self).unwrap_or_default()
     }
 
     /// #3071: render as usual, then read the backup CronJob's status
@@ -36,12 +38,13 @@ impl ManagedService for Tape {
         &self,
         client: Client,
     ) -> impl std::future::Future<Output = anyhow::Result<ReconcilePlan>> + Send {
-        let children = self.render();
+        let children = render::render(self).map_err(anyhow::Error::new);
         let name = self.name_any();
         let namespace = self.namespace().unwrap_or_else(|| "default".to_string());
         let backup_configured = self.spec.backup.is_some();
 
         async move {
+            let children = children?;
             let backup_cron_job = if backup_configured {
                 let cron_jobs: Api<k8s_openapi::api::batch::v1::CronJob> =
                     Api::namespaced(client, &namespace);
@@ -61,7 +64,7 @@ impl ManagedService for Tape {
             let context = serde_json::to_value(TapeContext { backup_cron_job })
                 .unwrap_or(serde_json::Value::Null);
 
-            Ok(ReconcilePlan { children, context })
+            Ok(ReconcilePlan::new(children, context))
         }
     }
 
@@ -75,10 +78,7 @@ impl ManagedService for Tape {
     fn readiness_targets(&self) -> Vec<ReadinessTarget> {
         // tape is always a StatefulSet (durable journal + raft state on a
         // PVC); poll it for `.status.readyReplicas`.
-        vec![ReadinessTarget {
-            kind: "StatefulSet",
-            name: self.name_any(),
-        }]
+        vec![ReadinessTarget::new("StatefulSet", self.name_any())]
     }
 
     fn status_patch(&self, ready: &ReadyFacts) -> serde_json::Value {

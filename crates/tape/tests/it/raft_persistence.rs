@@ -17,10 +17,7 @@ use tape_shared_kernel::TapeJournal;
 use tape_shared_kernel::TapeOutcome;
 
 fn single_node_membership() -> Membership {
-    Membership {
-        voters: vec![0],
-        learners: vec![],
-    }
+    Membership::new(vec![raft_runtime::NodeId::new(0)], vec![])
 }
 
 async fn wait_leader(raft: &TapeRaft) {
@@ -49,7 +46,7 @@ async fn restarted_single_node_recovers_applied_floor_and_accepts_new_proposes()
         let raft = TapeRaft::spawn(
             journal,
             &dir.path().join("raft"),
-            0,
+            raft_runtime::NodeId::new(0),
             single_node_membership(),
             HashMap::new(),
             TapeRaft::host_config(1024),
@@ -70,7 +67,7 @@ async fn restarted_single_node_recovers_applied_floor_and_accepts_new_proposes()
             assert!(matches!(outcome, Some(TapeOutcome::Appended(_))));
         }
         applied_after_first_run = raft.applied_index();
-        assert!(applied_after_first_run >= 5);
+        assert!(applied_after_first_run >= raft_runtime::Index::new(5));
         // Dropping `raft` here aborts its tick/pump tasks -- the "process
         // exits" half of a restart.
     }
@@ -82,7 +79,7 @@ async fn restarted_single_node_recovers_applied_floor_and_accepts_new_proposes()
     let raft = TapeRaft::spawn(
         journal,
         &dir.path().join("raft"),
-        0,
+        raft_runtime::NodeId::new(0),
         single_node_membership(),
         HashMap::new(),
         TapeRaft::host_config(1024),
@@ -133,7 +130,7 @@ async fn checkpoint_put_before_restart_is_not_reapplied_on_cold_replay() {
         let raft = TapeRaft::spawn(
             journal,
             &dir.path().join("raft"),
-            0,
+            raft_runtime::NodeId::new(0),
             single_node_membership(),
             HashMap::new(),
             TapeRaft::host_config(1024),
@@ -168,7 +165,7 @@ async fn checkpoint_put_before_restart_is_not_reapplied_on_cold_replay() {
     let raft = TapeRaft::spawn(
         journal,
         &dir.path().join("raft"),
-        0,
+        raft_runtime::NodeId::new(0),
         single_node_membership(),
         HashMap::new(),
         TapeRaft::host_config(1024),
@@ -177,7 +174,7 @@ async fn checkpoint_put_before_restart_is_not_reapplied_on_cold_replay() {
 
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
-        if raft.applied_index() >= 2 {
+        if raft.applied_index() >= raft_runtime::Index::new(2) {
             break;
         }
         assert!(

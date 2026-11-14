@@ -154,7 +154,7 @@ pub(crate) async fn shutdown_on_signal(
 /// When the readiness drain ends: `drain_delay` from now, but never past the
 /// deadline.
 pub(crate) fn drain_until(deadline: ShutdownDeadline, drain_delay: Duration) -> Instant {
-    (Instant::now() + drain_delay).min(deadline.expires_at)
+    (Instant::now() + drain_delay).min(deadline.expires_at())
 }
 
 /// Close the raft peer listener. `close_safe` comes from the host's shutdown
@@ -180,7 +180,7 @@ pub(crate) async fn finish_peer_listener(
         return Ok(());
     }
     let _ = shutdown_tx.send(());
-    match tokio::time::timeout_at(deadline.expires_at, &mut task).await {
+    match tokio::time::timeout_at(deadline.expires_at(), &mut task).await {
         Ok(joined) => {
             tracing::info!(
                 event = "raft_peer_listener_closed",
@@ -204,7 +204,7 @@ pub(crate) async fn finish_peer_listener(
 /// connections by the deadline; the task is aborted only if it overruns that
 /// by [`HTTP_JOIN_SLACK`].
 pub(crate) async fn finish_http(mut task: JoinHandle<()>, deadline: ShutdownDeadline) {
-    if tokio::time::timeout_at(deadline.expires_at + HTTP_JOIN_SLACK, &mut task)
+    if tokio::time::timeout_at(deadline.expires_at() + HTTP_JOIN_SLACK, &mut task)
         .await
         .is_err()
     {
@@ -223,7 +223,7 @@ fn log_raft_report(report: &HostShutdownReport, deadline: ShutdownDeadline) {
         incomplete_phase = ?report.incomplete_phase,
         peer_listener_close_safe = report.peer_listener_close_safe,
         storage_failure = ?report.storage_failure,
-        shutdown_budget_ms = deadline.total.as_millis() as u64,
+        shutdown_budget_ms = deadline.total().as_millis() as u64,
         "raft host shut down"
     );
 }

@@ -210,21 +210,20 @@ fn spec_gen_verbs_parse_and_generate() {
     }
 
     for lang in [GenLang::Ts, GenLang::Py, GenLang::Rust] {
-        let opts = openapi_codegen::GenOptions {
-            lang: match lang {
+        let opts = openapi_codegen::GenOptions::new(
+            match lang {
                 GenLang::Ts => openapi_codegen::Lang::Ts,
                 GenLang::Py => openapi_codegen::Lang::Py,
                 GenLang::Rust => openapi_codegen::Lang::Rust,
             },
-            target: None,
-            spec_path: PathBuf::new(),
-            out_dir: PathBuf::new(),
-            client_name: "createClient".to_string(),
-            http_client: openapi_codegen::HttpClient::Fetch,
-            emit_types: true,
-            emit_client: true,
-            emit_hooks: matches!(lang, GenLang::Ts),
-        };
+            PathBuf::new(),
+            PathBuf::new(),
+            "createClient",
+        )
+        .with_http_client(openapi_codegen::HttpClient::Fetch)
+        .with_emit_types(true)
+        .with_emit_client(true)
+        .with_emit_hooks(matches!(lang, GenLang::Ts));
         let out = openapi_codegen::generate(&tape_spec::openapi_json(), &opts)
             .expect("spec gen should succeed for tape's own OpenAPI document");
         assert!(

@@ -150,13 +150,13 @@ fn llm_backup_destination_contract() -> String {
         "tape",
         env!("CARGO_PKG_VERSION"),
         service_backup::llm::SECTIONED_TOPICS,
-        backing.id,
+        backing.id(),
         cli_std::llm::Format::Md,
     )
     .unwrap_or_else(|e| {
         panic!(
             "service_backup::llm::SECTIONED_TOPICS failed to render its `{}` topic: {e}",
-            backing.id
+            backing.id()
         )
     })
 }
@@ -172,17 +172,17 @@ fn llm_backup_destination_contract() -> String {
 /// `tape llm` (`crates/tape/src/bin/tape/llm.rs`) routes these ids through
 /// `cli_std::llm::render_sectioned`; every other topic stays on the static
 /// `&[cli_std::llm::Topic]` path.
-pub const LLM_BACKUP_TOPICS: &[cli_std::llm::SectionedTopic] = &[cli_std::llm::SectionedTopic {
-    id: "backup",
-    summary: "backup destination schemes, feature gating, and cold-seed restore, composed live from the shared service-backup contract",
-    sections: &[
+pub const LLM_BACKUP_TOPICS: &[cli_std::llm::SectionedTopic] = &[cli_std::llm::SectionedTopic::new(
+    "backup",
+    "backup destination schemes, feature gating, and cold-seed restore, composed live from the shared service-backup contract",
+    &[
         cli_std::llm::TopicSection::Prose(LLM_BACKUP_INTRO),
         cli_std::llm::TopicSection::Generated {
             id: "service-backup-destination-contract",
             render: llm_backup_destination_contract,
         },
     ],
-}];
+)];
 
 /// Return Tape's backup-destination topic in
 /// [`cli_std::llm::SectionedTopic`] form for CLI composition.
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn llm_backup_sectioned_topic_matches_id() {
-        assert_eq!(llm_backup_sectioned_topic().id, "backup");
+        assert_eq!(llm_backup_sectioned_topic().id(), "backup");
         assert_eq!(LLM_BACKUP_TOPICS.len(), 1);
     }
 }

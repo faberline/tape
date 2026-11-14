@@ -36,7 +36,7 @@ tape depends on faberline/core crates by git tag, one entry per crate, all at
 the same tag:
 
 ```toml
-raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 ```
 
 To move to a new core release, change every tag together, refresh

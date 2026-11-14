@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use raft_runtime::{Index, OutcomeWindow, ProposalCache, RaftStateMachine};
+use raft_runtime::{Index, OutcomeWindow, ProposalCache, RaftStateMachine, StateMachineError};
 
 use super::TapeEnvelope;
 use tape_shared_kernel::{
@@ -106,7 +106,10 @@ impl TapeStateMachine {
     /// Remove and return the apply outcome at `index` (the proposing handler
     /// claims it once; unclaimed outcomes age out).
     pub fn claim_outcome(&self, index: Index) -> Option<TapeOutcome> {
-        self.outcomes.lock().expect("outcome window").claim(index)
+        self.outcomes
+            .lock()
+            .expect("outcome window")
+            .claim(index.get())
     }
 
     /// Resolve a committed proposal by its stable id. Unlike the transient
@@ -123,11 +126,11 @@ impl TapeStateMachine {
 }
 
 impl RaftStateMachine for TapeStateMachine {
-    fn apply(&self, index: Index, command: &[u8]) -> Result<()> {
+    fn apply(&self, index: Index, command: &[u8]) -> Result<(), StateMachineError> {
         // Legacy migration floor: entries represented by an imported app
         // snapshot were already applied. New stores start at zero and replay
         // their shared persisted commit range normally.
-        if index <= self.applied.load(Ordering::Acquire) && self.marker.is_some() {
+        if index.get() <= self.applied.load(Ordering::Acquire) && self.marker.is_some() {
             return Ok(());
         }
         let (proposal_id, decoded) = match serde_json::from_slice::<TapeEnvelope>(command) {
@@ -147,7 +150,7 @@ impl RaftStateMachine for TapeStateMachine {
                 Some(apply_command(&mut journal, command))
             }
             (None, Err(e)) => {
-                tracing::warn!(index, error = %e, "raft: undecodable command (entry no-ops)");
+                tracing::warn!(index = index.get(), error = %e, "raft: undecodable command (entry no-ops)");
                 None
             }
         };
@@ -159,32 +162,36 @@ impl RaftStateMachine for TapeStateMachine {
                     .insert(id, outcome.clone());
             }
             let mut window = self.outcomes.lock().expect("outcome window");
-            window.insert(index, outcome);
-            window.advance(index);
+            window.insert(index.get(), outcome);
+            window.advance(index.get());
         }
-        self.applied.store(index, Ordering::Release);
+        self.applied.store(index.get(), Ordering::Release);
         Ok(())
     }
 
-    fn snapshot(&self, writer: &mut dyn std::io::Write) -> Result<()> {
+    fn snapshot(&self, writer: &mut dyn std::io::Write) -> Result<(), StateMachineError> {
         let journal = self.journal.lock().expect("journal mutex poisoned").clone();
         let bytes = serde_json::to_vec(&JournalSnapshot {
-            up_to: self.applied_index(),
+            up_to: self.applied_index().get(),
             journal,
             completed_proposals: self
                 .completed
                 .lock()
                 .expect("completed proposals")
                 .snapshot(),
-        })?;
-        writer.write_all(&bytes)?;
+        })
+        .map_err(StateMachineError::other)?;
+        writer.write_all(&bytes).map_err(StateMachineError::other)?;
         Ok(())
     }
 
-    fn restore(&self, reader: &mut dyn std::io::Read) -> Result<()> {
+    fn restore(&self, reader: &mut dyn std::io::Read) -> Result<(), StateMachineError> {
         let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes)?;
-        let snap: JournalSnapshot = serde_json::from_slice(&bytes)?;
+        reader
+            .read_to_end(&mut bytes)
+            .map_err(StateMachineError::other)?;
+        let snap: JournalSnapshot =
+            serde_json::from_slice(&bytes).map_err(StateMachineError::other)?;
         *self.journal.lock().expect("journal mutex poisoned") = snap.journal;
         self.completed
             .lock()
@@ -195,6 +202,6 @@ impl RaftStateMachine for TapeStateMachine {
     }
 
     fn applied_index(&self) -> Index {
-        self.applied.load(Ordering::Acquire)
+        Index::new(self.applied.load(Ordering::Acquire))
     }
 }

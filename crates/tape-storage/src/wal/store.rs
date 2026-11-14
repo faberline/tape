@@ -112,9 +112,9 @@ impl WalStore {
         let mut next_seq = snapshot_seq + 1;
         let mut frames_since_snapshot = 0u64;
         for frame in frames {
-            let command: TapeCommand = serde_json::from_slice(&frame.payload).map_err(json_err)?;
+            let command: TapeCommand = serde_json::from_slice(frame.payload()).map_err(json_err)?;
             apply_command(&mut journal, command);
-            next_seq = frame.seq + 1;
+            next_seq = frame.seq() + 1;
             frames_since_snapshot += 1;
         }
 

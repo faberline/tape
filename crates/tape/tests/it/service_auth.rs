@@ -108,13 +108,13 @@ fn registry_reload_metrics_follow_real_file_reload_failures() {
     let principal = verifier.authenticate(&headers).unwrap();
     assert!(principal.ensure("orders", Role::Write).is_ok());
 
-    verifier.reload_file(&path).unwrap();
+    verifier.reload_files(std::slice::from_ref(&path)).unwrap();
     let success_after_good = metrics.auth_registry_reload_success_unixtime.get();
     assert!(success_after_good > 0);
     assert_eq!(metrics.auth_registry_reload_failures_total.get(), 0);
 
     std::fs::write(&path, r#"{"broken": "#).unwrap();
-    assert!(verifier.reload_file(&path).is_err());
+    assert!(verifier.reload_files(std::slice::from_ref(&path)).is_err());
     assert_eq!(metrics.auth_registry_reload_failures_total.get(), 1);
 
     let principal = verifier.authenticate(&headers).unwrap();

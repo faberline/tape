@@ -167,7 +167,7 @@ fn crd_flattens_cluster_spec() {
 #[test]
 fn render_emits_expected_child_objects() {
     let tape = Tape::new("tape", spec(3));
-    let objs = render(&tape);
+    let objs = render(&tape).unwrap();
 
     let sts = of_kind(&objs, "StatefulSet");
     // Single raft group: shardCount pinned to 1 → replicas == replicasPerShard.
@@ -299,7 +299,7 @@ fn token_registry_secret_wiring_is_opt_in() {
     // startup naming the field to set, which is the whole point of the flip —
     // the previous default served an open API and said nothing.
     let plain = Tape::new("tape", spec(1));
-    let objs = render(&plain);
+    let objs = render(&plain).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
     let keys: Vec<&str> = env.iter().map(|(k, _)| *k).collect();
@@ -322,7 +322,7 @@ fn token_registry_secret_wiring_is_opt_in() {
     // (a bare `off` in the CRD is read by YAML 1.1 as the boolean `false`).
     let mut open = spec(1);
     open.auth = AuthMode::Off;
-    let objs = render(&Tape::new("tape", open));
+    let objs = render(&Tape::new("tape", open)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
     assert_eq!(
@@ -337,7 +337,7 @@ fn token_registry_secret_wiring_is_opt_in() {
     let mut secured = spec(3);
     secured.auth = AuthMode::Required;
     secured.tokens_secret = Some("tape-token-registry".into());
-    let objs = render(&Tape::new("tape", secured));
+    let objs = render(&Tape::new("tape", secured)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
     let get = |k: &str| env.iter().find(|(n, _)| *n == k).unwrap().1;
@@ -370,7 +370,7 @@ fn token_registry_secret_wiring_is_opt_in() {
     let mut csi = spec(3);
     csi.auth = AuthMode::Required;
     csi.tokens_secret_provider_class = Some("tape-registry-csi".into());
-    let objs = render(&Tape::new("tape", csi));
+    let objs = render(&Tape::new("tape", csi)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
     let get = |k: &str| env.iter().find(|(n, _)| *n == k).unwrap().1;
@@ -402,7 +402,7 @@ fn token_registry_secret_wiring_is_opt_in() {
     both.auth = AuthMode::Required;
     both.tokens_secret = Some("tape-registry-secret".into());
     both.tokens_secret_provider_class = Some("tape-registry-csi".into());
-    let objs = render(&Tape::new("tape", both));
+    let objs = render(&Tape::new("tape", both)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     assert!(
         sts["spec"]["template"]["spec"]["volumes"]
@@ -497,7 +497,7 @@ fn tokens_secret_csi_driver_overrides_the_default_csi_driver_name() {
     csi.auth = AuthMode::Required;
     csi.tokens_secret_provider_class = Some("tape-registry-csi".into());
     csi.tokens_secret_csi_driver = Some("secrets-store-gke.csi.k8s.io".into());
-    let objs = render(&Tape::new("tape", csi));
+    let objs = render(&Tape::new("tape", csi)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let vol = sts["spec"]["template"]["spec"]["volumes"]
         .as_array()
@@ -517,7 +517,7 @@ fn tokens_secret_csi_driver_overrides_the_default_csi_driver_name() {
 #[test]
 fn bootstrap_seed_uri_wiring_is_opt_in() {
     let plain = Tape::new("tape", spec(3));
-    let plain_objects = render(&plain);
+    let plain_objects = render(&plain).unwrap();
     let plain_env = env_of(of_kind(&plain_objects, "StatefulSet"));
     assert!(
         plain_env
@@ -529,7 +529,7 @@ fn bootstrap_seed_uri_wiring_is_opt_in() {
     let mut seeded = spec(3);
     seeded.bootstrap_seed_uri = Some("s3://tape-backups/orders/snapshot-42.json".into());
     let seeded = Tape::new("tape", seeded);
-    let seeded_objects = render(&seeded);
+    let seeded_objects = render(&seeded).unwrap();
     let seeded_env = env_of(of_kind(&seeded_objects, "StatefulSet"));
     let seed = seeded_env
         .iter()
@@ -548,7 +548,7 @@ fn bootstrap_seed_uri_wiring_is_opt_in() {
 /// render it rather than hand-author one alongside the CR.
 #[test]
 fn backup_cron_job_is_opt_in_and_invokes_the_backup_verb() {
-    let plain = render(&Tape::new("tape", spec(3)));
+    let plain = render(&Tape::new("tape", spec(3))).unwrap();
     assert!(
         plain.iter().all(|o| o["kind"] != "CronJob"),
         "no backup policy must render no CronJob"
@@ -563,7 +563,7 @@ fn backup_cron_job_is_opt_in_and_invokes_the_backup_verb() {
         },
         admin_token_secret: Some("tape-backup-token".into()),
     });
-    let objects = render(&Tape::new("tape", configured));
+    let objects = render(&Tape::new("tape", configured)).unwrap();
 
     let cj = of_kind(&objects, "CronJob");
     assert_eq!(cj["metadata"]["name"], "tape-backup");
@@ -632,7 +632,7 @@ fn backup_service_account_exists_independently_of_the_schedule() {
     };
 
     assert_eq!(
-        names(&render(&Tape::new("tape", spec(3)))),
+        names(&render(&Tape::new("tape", spec(3))).unwrap()),
         vec!["tape".to_string(), "tape-backup".to_string()],
         "the backup identity is rendered even with no schedule configured"
     );
@@ -646,7 +646,7 @@ fn backup_service_account_exists_independently_of_the_schedule() {
         },
         admin_token_secret: None,
     });
-    let objects = render(&Tape::new("tape", configured));
+    let objects = render(&Tape::new("tape", configured)).unwrap();
     assert_eq!(
         names(&objects),
         vec!["tape".to_string(), "tape-backup".to_string()],
@@ -676,7 +676,7 @@ fn backup_cron_job_omits_unset_retention_and_token() {
         },
         admin_token_secret: None,
     });
-    let objects = render(&Tape::new("tape", minimal));
+    let objects = render(&Tape::new("tape", minimal)).unwrap();
     let container = &of_kind(&objects, "CronJob")["spec"]["jobTemplate"]["spec"]["template"]
         ["spec"]["containers"][0];
 
@@ -759,7 +759,7 @@ fn observability_pair_is_opt_in() {
             .collect()
     };
 
-    let off = kinds(&render(&Tape::new("tape", spec(3))));
+    let off = kinds(&render(&Tape::new("tape", spec(3))).unwrap());
     assert!(
         !off.contains(&"ServiceMonitor".to_string())
             && !off.contains(&"PrometheusRule".to_string()),
@@ -769,7 +769,7 @@ fn observability_pair_is_opt_in() {
 
     let mut watched = spec(3);
     watched.observability = true;
-    let objects = render(&Tape::new("tape", watched));
+    let objects = render(&Tape::new("tape", watched)).unwrap();
     let on = kinds(&objects);
     assert!(
         on.contains(&"ServiceMonitor".to_string()) && on.contains(&"PrometheusRule".to_string()),
@@ -823,7 +823,7 @@ fn prometheus_rule_reproduces_the_static_component_alert_contract() {
         serde_yaml::from_str(STATIC_COMPONENT).expect("static observability component parses");
     let mut watched = spec(3);
     watched.observability = true;
-    let objects = render(&Tape::new("tape", watched));
+    let objects = render(&Tape::new("tape", watched)).unwrap();
     let rendered = of_kind(&objects, "PrometheusRule");
 
     assert_eq!(
@@ -960,7 +960,7 @@ fn prometheus_rule_exprs_keep_the_metrics_and_thresholds() {
         serde_yaml::from_str(STATIC_COMPONENT).expect("static observability component parses");
     let mut watched = spec(3);
     watched.observability = true;
-    let objects = render(&Tape::new("tape", watched));
+    let objects = render(&Tape::new("tape", watched)).unwrap();
 
     let static_exprs = exprs(&file);
     let rendered_exprs = exprs(of_kind(&objects, "PrometheusRule"));
@@ -1094,7 +1094,7 @@ fn service_monitor_grafts_every_label_the_exprs_select_on() {
 
     let mut watched = spec(3);
     watched.observability = true;
-    let objects = render(&Tape::new("tape", watched));
+    let objects = render(&Tape::new("tape", watched)).unwrap();
 
     let sm = of_kind(&objects, "ServiceMonitor");
     let grafted: Vec<String> = sm["spec"]["targetLabels"]
@@ -1137,24 +1137,22 @@ fn status_patch_reports_pending_reconciling_ready() {
 
     let targets = tape.readiness_targets();
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].kind, "StatefulSet");
-    assert_eq!(targets[0].name, "tape");
+    assert_eq!(targets[0].kind(), "StatefulSet");
+    assert_eq!(targets[0].name(), "tape");
 
     let mut all_ready = HashMap::new();
     all_ready.insert("tape".to_string(), 3i64);
-    let status = tape.status_patch(&ReadyFacts { ready: all_ready });
+    let status = tape.status_patch(&ReadyFacts::new(all_ready));
     assert_eq!(status["status"]["phase"], "Ready");
     assert_eq!(status["status"]["desiredReplicas"], 3);
     assert_eq!(status["status"]["readyReplicas"], 3);
 
     let mut partial = HashMap::new();
     partial.insert("tape".to_string(), 1i64);
-    let status = tape.status_patch(&ReadyFacts { ready: partial });
+    let status = tape.status_patch(&ReadyFacts::new(partial));
     assert_eq!(status["status"]["phase"], "Reconciling");
 
-    let status = tape.status_patch(&ReadyFacts {
-        ready: HashMap::new(),
-    });
+    let status = tape.status_patch(&ReadyFacts::new(HashMap::new()));
     assert_eq!(status["status"]["phase"], "Pending");
 }
 
@@ -1188,7 +1186,7 @@ fn prune_names(
 ) -> Vec<(&'static str, &'static str, String)> {
     targets
         .iter()
-        .map(|t| (t.api_version, t.kind, t.name.clone()))
+        .map(|t| (t.api_version(), t.kind(), t.name().to_string()))
         .collect()
 }
 
@@ -1276,14 +1274,14 @@ fn prunes_never_names_a_kind_a_vanilla_cluster_does_not_serve() {
     for (observability, backup, tape) in permutations() {
         for target in prunes(&tape) {
             assert!(
-                BUILT_IN.contains(&target.api_version),
+                BUILT_IN.contains(&target.api_version()),
                 "prunes() names {}/{} in group `{}`, which a cluster without add-on \
                  CRDs does not serve; the GET returns an unparseable plain-text 404 \
                  and fails the whole reconcile loop (observability={observability} \
                  backup={backup})",
-                target.kind,
-                target.name,
-                target.api_version,
+                target.kind(),
+                target.name(),
+                target.api_version(),
             );
         }
     }
@@ -1300,7 +1298,7 @@ fn prunes_never_names_the_backup_service_account() {
         assert!(
             prunes(&tape)
                 .iter()
-                .all(|t| !(t.kind == "ServiceAccount" && t.name == "tape-backup")),
+                .all(|t| !(t.kind() == "ServiceAccount" && t.name() == "tape-backup")),
             "the backup ServiceAccount is a stable identity rendered unconditionally; \
              prunes() must never name it (observability={observability} backup={backup})"
         );
@@ -1311,14 +1309,14 @@ fn prunes_never_names_the_backup_service_account() {
 /// permutations, in two halves that each catch a different failure.
 ///
 /// - **Disjoint — holds for every target, unconditionally.** An identity that
-///   `prunes()` names while `render()` still emits it makes the controller
+///   `prunes()` names while `render().unwrap()` still emits it makes the controller
 ///   delete an object it re-applies on the next pass, forever: a reconcile loop
 ///   that never converges and a CronJob that fires or does not depending on
 ///   where in the loop the clock lands.
 /// - **Total — holds for the CronJob.** It is rendered or pruned, never
 ///   neither. Neither is the #3054 bug itself: SSA reconciles fields, not
 ///   object lifetimes, so an object that stops being rendered and is never
-///   pruned simply stays. A future conditional branch added to `render()` and
+///   pruned simply stays. A future conditional branch added to `render().unwrap()` and
 ///   not mirrored into `prunes()` fails here rather than in a cluster months
 ///   later — so a new entry belongs in `total` unless it has an explicit
 ///   exemption below.
@@ -1339,6 +1337,7 @@ fn prunes_is_the_exact_inverse_of_the_conditional_render_branches() {
     ];
     for (observability, backup, tape) in permutations() {
         let rendered: Vec<(String, String, String)> = render(&tape)
+            .unwrap()
             .iter()
             .map(|o| {
                 (
@@ -1403,7 +1402,7 @@ fn condition<'a>(
 fn ready_facts(name: &str, count: i64) -> ReadyFacts {
     let mut ready = HashMap::new();
     ready.insert(name.to_string(), count);
-    ReadyFacts { ready }
+    ReadyFacts::new(ready)
 }
 
 /// R2/AC3 — all five conditions are present, each with a non-empty `reason`
@@ -1509,7 +1508,7 @@ fn ready_condition_agrees_with_status_patch_phase() {
 #[test]
 fn service_account_name_unset_renders_existing_shape() {
     let tape = Tape::new("tape", spec(3));
-    let objs = render(&tape);
+    let objs = render(&tape).unwrap();
 
     let kinds_names: Vec<(&str, &str)> = objs
         .iter()
@@ -1546,7 +1545,7 @@ fn service_account_name_configured_omits_service_account_and_updates_statefulset
     let mut configured = spec(3);
     configured.service_account_name = Some("platform-sa".into());
     let tape = Tape::new("tape", configured);
-    let objs = render(&tape);
+    let objs = render(&tape).unwrap();
 
     let has_workload_sa = objs
         .iter()
@@ -1571,7 +1570,7 @@ fn service_account_name_does_not_affect_backup_identity() {
     let mut unset = spec(3);
     unset.backup = Some(configured_backup());
     let tape_unset = Tape::new("tape", unset);
-    let objs_unset = render(&tape_unset);
+    let objs_unset = render(&tape_unset).unwrap();
 
     let sa_backup_unset = objs_unset
         .iter()
@@ -1589,7 +1588,7 @@ fn service_account_name_does_not_affect_backup_identity() {
     set.service_account_name = Some("platform-sa".into());
     set.backup = Some(configured_backup());
     let tape_set = Tape::new("tape", set);
-    let objs_set = render(&tape_set);
+    let objs_set = render(&tape_set).unwrap();
 
     let sa_backup_set = objs_set
         .iter()
@@ -1635,7 +1634,7 @@ fn service_account_name_does_not_affect_prunes() {
 #[test]
 fn log_format_unset_renders_existing_shape() {
     let tape = Tape::new("tape", spec(3));
-    let objs = render(&tape);
+    let objs = render(&tape).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
 
@@ -1671,7 +1670,7 @@ fn log_format_configured_pretty_renders_pretty() {
     let mut configured = spec(3);
     configured.log_format = LogFormat::Pretty;
     let tape = Tape::new("tape", configured);
-    let objs = render(&tape);
+    let objs = render(&tape).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
     let env = env_of(sts);
 
@@ -1688,7 +1687,7 @@ fn log_format_configured_pretty_renders_pretty() {
 fn log_format_and_log_level_are_orthogonal() {
     // 1. Unset logFormat, unset logLevel -> no RUST_LOG
     let tape1 = Tape::new("tape", spec(3));
-    let objs1 = render(&tape1);
+    let objs1 = render(&tape1).unwrap();
     let env1 = env_of(of_kind(&objs1, "StatefulSet"));
     assert!(env1.iter().all(|(k, _)| *k != "RUST_LOG"));
     assert_eq!(
@@ -1702,7 +1701,7 @@ fn log_format_and_log_level_are_orthogonal() {
     // 2. Unset logFormat, logLevel: debug -> RUST_LOG=debug
     let mut spec2 = spec(3);
     spec2.log_level = Some("debug".into());
-    let objs2 = render(&Tape::new("tape", spec2));
+    let objs2 = render(&Tape::new("tape", spec2)).unwrap();
     let env2 = env_of(of_kind(&objs2, "StatefulSet"));
     assert_eq!(
         env2.iter().find(|(k, _)| *k == "RUST_LOG").unwrap().1["value"],
@@ -1719,7 +1718,7 @@ fn log_format_and_log_level_are_orthogonal() {
     // 3. logFormat: pretty, unset logLevel -> no RUST_LOG
     let mut spec3 = spec(3);
     spec3.log_format = LogFormat::Pretty;
-    let objs3 = render(&Tape::new("tape", spec3));
+    let objs3 = render(&Tape::new("tape", spec3)).unwrap();
     let env3 = env_of(of_kind(&objs3, "StatefulSet"));
     assert!(env3.iter().all(|(k, _)| *k != "RUST_LOG"));
     assert_eq!(
@@ -1734,7 +1733,7 @@ fn log_format_and_log_level_are_orthogonal() {
     let mut spec4 = spec(3);
     spec4.log_format = LogFormat::Pretty;
     spec4.log_level = Some("debug".into());
-    let objs4 = render(&Tape::new("tape", spec4));
+    let objs4 = render(&Tape::new("tape", spec4)).unwrap();
     let env4 = env_of(of_kind(&objs4, "StatefulSet"));
     assert_eq!(
         env4.iter().find(|(k, _)| *k == "RUST_LOG").unwrap().1["value"],
@@ -2100,7 +2099,7 @@ fn cron_job_pod_spec(objs: &[Value]) -> &Value {
 fn placement_unset_renders_no_scheduling_constraints() {
     let mut s = spec(3);
     s.backup = Some(configured_backup());
-    let objs = render(&Tape::new("tape", s));
+    let objs = render(&Tape::new("tape", s)).unwrap();
     for (kind, pod) in [
         ("StatefulSet", statefulset_pod_spec(&objs)),
         ("CronJob", cron_job_pod_spec(&objs)),
@@ -2120,7 +2119,7 @@ fn placement_unset_renders_no_scheduling_constraints() {
 /// fails to pull.
 #[test]
 fn placement_and_pull_secrets_reach_every_rendered_pod() {
-    let objs = render(&Tape::new("tape", placed_spec()));
+    let objs = render(&Tape::new("tape", placed_spec())).unwrap();
     let expected_tolerations = serde_json::json!([{
         "key": "faberline.dev/pool",
         "operator": "Equal",
@@ -2152,8 +2151,8 @@ fn placement_and_pull_secrets_reach_every_rendered_pod() {
 /// anti-affinity and never replaces it.
 #[test]
 fn placement_keeps_the_dedicated_node_anti_affinity() {
-    let plain = render(&Tape::new("tape", spec(3)));
-    let placed = render(&Tape::new("tape", placed_spec()));
+    let plain = render(&Tape::new("tape", spec(3))).unwrap();
+    let placed = render(&Tape::new("tape", placed_spec())).unwrap();
     assert_eq!(
         statefulset_pod_spec(&placed)["affinity"],
         statefulset_pod_spec(&plain)["affinity"]

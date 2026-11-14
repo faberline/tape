@@ -14,25 +14,25 @@ pub(crate) struct LlmArgs {
 }
 
 pub(crate) const LLM_TOPICS: &[cli_std::llm::Topic] = &[
-    cli_std::llm::Topic {
-        id: "workflow",
-        summary: "topic replay model, first CLI slice, and deferred production gates",
-        body: spec::llm_workflow_md(),
-    },
-    cli_std::llm::Topic {
-        id: "api",
-        summary: "append, replay, checkpoint, retention, and standard endpoint contract",
-        body: spec::llm_api_md(),
-    },
-    cli_std::llm::Topic {
-        id: "boundaries",
-        summary: "Tape boundary against Relay, Loom, and Keep",
-        body: spec::llm_boundaries_md(),
-    },
-    cli_std::llm::Topic {
-        id: "operations",
-        summary: "deploy artifacts — k8s crd/operator/instance render, dockerfile render",
-        body: "# tape — deploying to Kubernetes\n\n\
+    cli_std::llm::Topic::new(
+        "workflow",
+        "topic replay model, first CLI slice, and deferred production gates",
+        spec::llm_workflow_md(),
+    ),
+    cli_std::llm::Topic::new(
+        "api",
+        "append, replay, checkpoint, retention, and standard endpoint contract",
+        spec::llm_api_md(),
+    ),
+    cli_std::llm::Topic::new(
+        "boundaries",
+        "Tape boundary against Relay, Loom, and Keep",
+        spec::llm_boundaries_md(),
+    ),
+    cli_std::llm::Topic::new(
+        "operations",
+        "deploy artifacts — k8s crd/operator/instance render, dockerfile render",
+        "# tape — deploying to Kubernetes\n\n\
             Deploy artifacts are offline renders; the checked-in files under `` \
             are the fixtures, and these commands are their in-binary form (#1328):\n\n\
             - `tape k8s crd render` — the Tape CustomResourceDefinition (tape.dev/v1alpha1).\n\
@@ -63,7 +63,7 @@ pub(crate) const LLM_TOPICS: &[cli_std::llm::Topic] = &[
             the headless Service for peer DNS. No cluster env = plain single-node.\n\n\
             Backup destinations: `tape llm --topic backup` — rendered at call time \
             from the shared `service-backup` scheme table, never hand-copied (#2483).\n",
-    },
+    ),
 ];
 
 pub(crate) fn llm(args: LlmArgs) -> Result<()> {
@@ -71,10 +71,10 @@ pub(crate) fn llm(args: LlmArgs) -> Result<()> {
     // scheme facts render at call time from service-backup's
     // SUPPORTED_SCHEMES — route it through render_sectioned so the list can
     // never rot; every other topic stays on the static path.
-    if spec::LLM_BACKUP_TOPICS.iter().any(|t| t.id == args.topic) {
+    if spec::LLM_BACKUP_TOPICS.iter().any(|t| t.id() == args.topic) {
         let out = cli_std::llm::render_sectioned(
-            crate::cli::TOOL.project,
-            crate::cli::TOOL.version,
+            crate::cli::TOOL.project(),
+            crate::cli::TOOL.version(),
             spec::LLM_BACKUP_TOPICS,
             &args.topic,
             cli_std::llm::Format::parse(&args.format),
@@ -83,8 +83,8 @@ pub(crate) fn llm(args: LlmArgs) -> Result<()> {
         return Ok(());
     }
     let out = cli_std::llm::render(
-        crate::cli::TOOL.project,
-        crate::cli::TOOL.version,
+        crate::cli::TOOL.project(),
+        crate::cli::TOOL.version(),
         LLM_TOPICS,
         &args.topic,
         cli_std::llm::Format::parse(&args.format),
