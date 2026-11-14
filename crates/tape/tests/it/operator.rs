@@ -1309,14 +1309,14 @@ fn prunes_never_names_the_backup_service_account() {
 /// permutations, in two halves that each catch a different failure.
 ///
 /// - **Disjoint — holds for every target, unconditionally.** An identity that
-///   `prunes()` names while `render().unwrap()` still emits it makes the controller
+///   `prunes()` names while `render()` still emits it makes the controller
 ///   delete an object it re-applies on the next pass, forever: a reconcile loop
 ///   that never converges and a CronJob that fires or does not depending on
 ///   where in the loop the clock lands.
 /// - **Total — holds for the CronJob.** It is rendered or pruned, never
 ///   neither. Neither is the #3054 bug itself: SSA reconciles fields, not
 ///   object lifetimes, so an object that stops being rendered and is never
-///   pruned simply stays. A future conditional branch added to `render().unwrap()` and
+///   pruned simply stays. A future conditional branch added to `render()` and
 ///   not mirrored into `prunes()` fails here rather than in a cluster months
 ///   later — so a new entry belongs in `total` unless it has an explicit
 ///   exemption below.

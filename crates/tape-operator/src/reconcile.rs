@@ -22,8 +22,14 @@ impl ManagedService for Tape {
 
     fn render(&self) -> Vec<serde_json::Value> {
         // The trait returns no error. `reconcile_plan` propagates the render
-        // error itself; this path renders no children on error.
-        render::render(self).unwrap_or_default()
+        // error itself; this path logs it and renders no children.
+        match render::render(self) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!(error = %e, "tape render failed");
+                Vec::new()
+            }
+        }
     }
 
     /// #3071: render as usual, then read the backup CronJob's status
