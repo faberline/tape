@@ -44,6 +44,7 @@ pub struct BenchReport {
     pub payload_bytes: usize,
     pub append_p50_us: u128,
     pub append_p95_us: u128,
+    pub append_p99_us: u128,
     pub replay_full_us: u128,
     pub checkpoint_p50_us: u128,
     pub checkpoint_p95_us: u128,
@@ -137,6 +138,7 @@ pub fn run_benchmark(events: usize, payload_bytes: usize) -> BenchReport {
     checkpoint_samples.sort_unstable();
     let append_p50_us = percentile(&append_samples, 0.50);
     let append_p95_us = percentile(&append_samples, 0.95);
+    let append_p99_us = percentile(&append_samples, 0.99);
     let checkpoint_p50_us = percentile(&checkpoint_samples, 0.50);
     let checkpoint_p95_us = percentile(&checkpoint_samples, 0.95);
     let local_regression_passed = append_p95_us <= baseline.budget.append_p95_us
@@ -153,6 +155,7 @@ pub fn run_benchmark(events: usize, payload_bytes: usize) -> BenchReport {
         payload_bytes,
         append_p50_us,
         append_p95_us,
+        append_p99_us,
         replay_full_us,
         checkpoint_p50_us,
         checkpoint_p95_us,
