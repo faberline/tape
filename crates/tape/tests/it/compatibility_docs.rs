@@ -202,3 +202,43 @@ fn compatibility_page_links_resolve() {
         "docs/operations/compatibility.md has no relative links to check"
     );
 }
+
+#[test]
+fn stability_promise_page_names_the_five_surfaces() {
+    let page = manifest_doc("docs/operations/stability-promise.md");
+    for needle in [
+        "## API",
+        "## Wire format",
+        "## On-disk format",
+        "## CRD",
+        "## CLI flags",
+        "2.0.0",
+        "v1alpha1",
+        "openapi.baseline.json",
+        "## What is not promised",
+    ] {
+        assert!(
+            page.contains(needle),
+            "docs/operations/stability-promise.md is missing `{needle}`"
+        );
+    }
+}
+
+#[test]
+fn stability_promise_is_linked_from_the_index_and_compatibility_page() {
+    let index = manifest_doc("docs/operations/README.md");
+    assert!(
+        index.contains("stability-promise.md"),
+        "docs/operations/README.md does not link stability-promise.md"
+    );
+
+    let page = manifest_doc("docs/operations/compatibility.md");
+    assert!(
+        page.contains("](stability-promise.md)"),
+        "docs/operations/compatibility.md does not link stability-promise.md"
+    );
+    assert!(
+        !page.contains("Tape is pre-1.0: a minor release may change behaviour, but each rule"),
+        "docs/operations/compatibility.md still says Tape is pre-1.0 without pointing to the stability promise"
+    );
+}

@@ -1,6 +1,6 @@
 # Version compatibility
 
-This page says what a client, a data directory, a raft peer or a CRD of version N may meet in N+1. N and N+1 mean two adjacent tape releases (`tape@X.Y.Z`). Tape is pre-1.0: a minor release may change behaviour, but each rule below holds between adjacent releases.
+This page says what a client, a data directory, a raft peer or a CRD of version N may meet in N+1. N and N+1 mean two adjacent tape releases (`tape@X.Y.Z`). Until `1.0.0`, a minor release may change behaviour, but each rule below holds between adjacent releases. From `1.0.0` the [stability promise](stability-promise.md) also holds: no breaking change before `2.0.0`.
 
 ## API
 
