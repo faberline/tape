@@ -65,6 +65,7 @@ futures = "0.3"
 http-body-util = "0.1"
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 kube = { version = "0.98", features = ["runtime", "derive", "client"] }
+proptest = { version = "1.12", default-features = false, features = ["std"] }
 rcgen = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "system-proxy", "rustls-tls-native-roots", "json", "cookies", "gzip", "brotli", "multipart", "stream"] }
 schemars = "0.8"
