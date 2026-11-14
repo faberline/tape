@@ -78,11 +78,12 @@ fn run(args: RunArgs) -> Result<()> {
     match args.format {
         OutputFormat::Text => {
             println!(
-                "events={} payload_bytes={} append_p50_us={} append_p95_us={} replay_full_us={} checkpoint_p50_us={} checkpoint_p95_us={} verdict={}",
+                "events={} payload_bytes={} append_p50_us={} append_p95_us={} append_p99_us={} replay_full_us={} checkpoint_p50_us={} checkpoint_p95_us={} verdict={}",
                 report.events,
                 report.payload_bytes,
                 report.append_p50_us,
                 report.append_p95_us,
+                report.append_p99_us,
                 report.replay_full_us,
                 report.checkpoint_p50_us,
                 report.checkpoint_p95_us,
