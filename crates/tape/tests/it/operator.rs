@@ -1137,24 +1137,22 @@ fn status_patch_reports_pending_reconciling_ready() {
 
     let targets = tape.readiness_targets();
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].kind, "StatefulSet");
-    assert_eq!(targets[0].name, "tape");
+    assert_eq!(targets[0].kind(), "StatefulSet");
+    assert_eq!(targets[0].name(), "tape");
 
     let mut all_ready = HashMap::new();
     all_ready.insert("tape".to_string(), 3i64);
-    let status = tape.status_patch(&ReadyFacts { ready: all_ready });
+    let status = tape.status_patch(&ReadyFacts::new(all_ready));
     assert_eq!(status["status"]["phase"], "Ready");
     assert_eq!(status["status"]["desiredReplicas"], 3);
     assert_eq!(status["status"]["readyReplicas"], 3);
 
     let mut partial = HashMap::new();
     partial.insert("tape".to_string(), 1i64);
-    let status = tape.status_patch(&ReadyFacts { ready: partial });
+    let status = tape.status_patch(&ReadyFacts::new(partial));
     assert_eq!(status["status"]["phase"], "Reconciling");
 
-    let status = tape.status_patch(&ReadyFacts {
-        ready: HashMap::new(),
-    });
+    let status = tape.status_patch(&ReadyFacts::new(HashMap::new()));
     assert_eq!(status["status"]["phase"], "Pending");
 }
 
@@ -1188,7 +1186,7 @@ fn prune_names(
 ) -> Vec<(&'static str, &'static str, String)> {
     targets
         .iter()
-        .map(|t| (t.api_version, t.kind, t.name.clone()))
+        .map(|t| (t.api_version(), t.kind(), t.name().to_string()))
         .collect()
 }
 
@@ -1276,14 +1274,14 @@ fn prunes_never_names_a_kind_a_vanilla_cluster_does_not_serve() {
     for (observability, backup, tape) in permutations() {
         for target in prunes(&tape) {
             assert!(
-                BUILT_IN.contains(&target.api_version),
+                BUILT_IN.contains(&target.api_version()),
                 "prunes() names {}/{} in group `{}`, which a cluster without add-on \
                  CRDs does not serve; the GET returns an unparseable plain-text 404 \
                  and fails the whole reconcile loop (observability={observability} \
                  backup={backup})",
-                target.kind,
-                target.name,
-                target.api_version,
+                target.kind(),
+                target.name(),
+                target.api_version(),
             );
         }
     }
@@ -1300,7 +1298,7 @@ fn prunes_never_names_the_backup_service_account() {
         assert!(
             prunes(&tape)
                 .iter()
-                .all(|t| !(t.kind == "ServiceAccount" && t.name == "tape-backup")),
+                .all(|t| !(t.kind() == "ServiceAccount" && t.name() == "tape-backup")),
             "the backup ServiceAccount is a stable identity rendered unconditionally; \
              prunes() must never name it (observability={observability} backup={backup})"
         );
@@ -1404,7 +1402,7 @@ fn condition<'a>(
 fn ready_facts(name: &str, count: i64) -> ReadyFacts {
     let mut ready = HashMap::new();
     ready.insert(name.to_string(), count);
-    ReadyFacts { ready }
+    ReadyFacts::new(ready)
 }
 
 /// R2/AC3 — all five conditions are present, each with a non-empty `reason`
