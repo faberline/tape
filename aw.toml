@@ -19,3 +19,7 @@ codegen.profile = "rust/score-crate"
 build = "cargo test --locked --workspace --lib --no-run"
 test = "cargo test --locked --workspace --lib"
 harness = "cargo"
+
+[[standards.ci.exception]]
+check = "CI7"
+reason = "test-deps joins gate.needs in tape#144 after cargo audit passes; remove this exception there"
