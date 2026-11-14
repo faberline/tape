@@ -21,7 +21,9 @@ impl ManagedService for Tape {
     const MANAGER: &'static str = "tape-operator";
 
     fn render(&self) -> Vec<serde_json::Value> {
-        render::render(self)
+        // The trait returns no error. `reconcile_plan` propagates the render
+        // error itself; this path renders no children on error.
+        render::render(self).unwrap_or_default()
     }
 
     /// #3071: render as usual, then read the backup CronJob's status
@@ -36,12 +38,13 @@ impl ManagedService for Tape {
         &self,
         client: Client,
     ) -> impl std::future::Future<Output = anyhow::Result<ReconcilePlan>> + Send {
-        let children = self.render();
+        let children = render::render(self).map_err(anyhow::Error::new);
         let name = self.name_any();
         let namespace = self.namespace().unwrap_or_else(|| "default".to_string());
         let backup_configured = self.spec.backup.is_some();
 
         async move {
+            let children = children?;
             let backup_cron_job = if backup_configured {
                 let cron_jobs: Api<k8s_openapi::api::batch::v1::CronJob> =
                     Api::namespaced(client, &namespace);

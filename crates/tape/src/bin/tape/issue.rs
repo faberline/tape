@@ -108,17 +108,12 @@ pub(crate) async fn issue(args: IssueArgs) -> Result<()> {
         }
         IssueCommand::Comment(args) => {
             let message = (!args.message.is_empty()).then(|| args.message.join(" "));
-            cli_std::issue::comment(
-                &crate::cli::TOOL,
-                cli_std::issue::CommentOptions {
-                    number: args.number,
-                    message,
-                    repo: args.repo,
-                    dry_run: args.dry_run,
-                    yes: args.yes,
-                },
-            )
-            .await
+            let options = cli_std::issue::CommentOptions::try_new(args.number)?
+                .with_message(message)
+                .with_repo(args.repo)
+                .with_dry_run(args.dry_run)
+                .with_yes(args.yes);
+            cli_std::issue::comment(&crate::cli::TOOL, options).await
         }
     }
 }

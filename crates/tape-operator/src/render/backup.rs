@@ -59,7 +59,8 @@ pub(super) fn backup_cron_job(tape: &Tape, cx: &RenderCtx) -> Option<Value> {
         "--url".to_string(),
         format!(
             "http://{}.{}.svc.cluster.local:{CLIENT_PORT}",
-            cx.name(), cx.ns()
+            cx.name(),
+            cx.ns()
         ),
         "--dest".to_string(),
         backup.destination.clone(),

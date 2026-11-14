@@ -1,6 +1,7 @@
 //! The durable serving StatefulSet and its container resources.
 
 use serde_json::{json, Value};
+use service_k8s::render::stateful_instance::StatefulInstanceError;
 use service_k8s::render::{self, RenderCtx, ServiceStatefulSet, WorkloadVolumeClaim};
 use service_k8s::stateful::{
     resource_request_or_default, DEFAULT_CPU_REQUEST, DEFAULT_MEMORY_REQUEST,
@@ -47,7 +48,11 @@ fn container_resources(cpu: &str, memory: &str) -> Value {
 /// single raft group; the raft-runtime env quartet + `TAPE_PEER_SERVICE`; the
 /// `/data` PVC) hardened with tape's probes, security contexts, and writable
 /// `/tmp`.
-pub(super) fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value {
+pub(super) fn statefulset(
+    tape: &Tape,
+    cx: &RenderCtx,
+    headless: &str,
+) -> Result<Value, StatefulInstanceError> {
     let s = &tape.spec;
     // Empty values are resolved by core/crates/service-k8s to the shared request-only
     // data-plane baseline (1 CPU / 4Gi); tape owns no resource fallback.
@@ -180,7 +185,7 @@ pub(super) fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value 
             mount_path: "/data",
             read_only: false,
         }),
-    });
+    })?;
     set_image_pull_secrets(&mut sts["spec"]["template"]["spec"], tape);
-    sts
+    Ok(sts)
 }

@@ -23,7 +23,9 @@ use super::COMPONENT;
 fn series_selector(cx: &RenderCtx<'_>) -> String {
     format!(
         "namespace=\"{}\",app_kubernetes_io_instance=\"{}\",app_kubernetes_io_component=\"{}\"",
-        cx.ns(), cx.name(), COMPONENT
+        cx.ns(),
+        cx.name(),
+        COMPONENT
     )
 }
 
