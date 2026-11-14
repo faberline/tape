@@ -21,5 +21,5 @@ test = "cargo test --locked --workspace --lib"
 harness = "cargo"
 
 [standards.coverage]
-line = 0.0   # set to the measured value, see Steps
+line = 67.35
 target = 100
