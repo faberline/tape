@@ -112,30 +112,52 @@ pub(crate) async fn wait_healthy(client: &reqwest::Client, base: &str, phase: &s
     }
 }
 
-async fn is_leader(client: &reqwest::Client, base: &str) -> bool {
-    let Ok(resp) = client.get(format!("{base}/raftz")).send().await else {
-        return false;
-    };
-    let Ok(body) = resp.json::<serde_json::Value>().await else {
-        return false;
-    };
-    body["is_leader"].as_bool().unwrap_or(false)
+struct ReplicaStatus {
+    id: u64,
+    is_leader: bool,
+    leader: Option<u64>,
+    term: u64,
+    commit_index: u64,
+    applied_index: u64,
 }
 
-/// One observation rejects a split-brain sample (more than one leader). The
-/// caller requires three identical whole-cluster observations before it uses
-/// a leader as a routing target.
+async fn replica_status(client: &reqwest::Client, base: &str) -> Option<ReplicaStatus> {
+    let resp = client.get(format!("{base}/raftz")).send().await.ok()?;
+    let body = resp.json::<serde_json::Value>().await.ok()?;
+    Some(ReplicaStatus {
+        id: body["id"].as_u64()?,
+        is_leader: body["is_leader"].as_bool().unwrap_or(false),
+        leader: body["leader"].as_u64(),
+        term: body["term"].as_u64()?,
+        commit_index: body["commit_index"].as_u64().unwrap_or(0),
+        applied_index: body["applied_index"].as_u64().unwrap_or(0),
+    })
+}
+
+/// One observation rejects a split-brain sample (more than one leader) and
+/// requires all replicas in `bases` to have converged on the same leader and term.
 async fn observed_leader<'a>(client: &reqwest::Client, bases: &[&'a str]) -> Option<&'a str> {
-    let mut leader = None;
+    let mut statuses = Vec::with_capacity(bases.len());
     for base in bases {
-        if is_leader(client, base).await {
-            if leader.is_some() {
-                return None;
-            }
-            leader = Some(*base);
+        statuses.push((*base, replica_status(client, base).await?));
+    }
+    let leaders: Vec<(&'a str, &ReplicaStatus)> = statuses
+        .iter()
+        .filter(|(_, s)| s.is_leader)
+        .map(|(b, s)| (*b, s))
+        .collect();
+    if leaders.len() != 1 {
+        return None;
+    }
+    let (leader_base, leader_status) = leaders[0];
+    let leader_id = leader_status.id;
+    let term = leader_status.term;
+    for (_, s) in &statuses {
+        if s.leader != Some(leader_id) || s.term != term {
+            return None;
         }
     }
-    leader
+    Some(leader_base)
 }
 
 pub(crate) async fn wait_leader<'a>(
@@ -503,7 +525,45 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
     }
     let base_urls: Vec<String> = nodes.iter().map(Node::base_url).collect();
     let base_refs: Vec<&str> = base_urls.iter().map(String::as_str).collect();
-    wait_leader(&client, &base_refs, "concurrent-ingress election").await;
+    let leader_url = wait_leader(&client, &base_refs, "concurrent-ingress election").await;
+
+    // Observe commit readiness across the cluster before blasting concurrent writes
+    // across all replicas. The leader commits a probe append, and every replica must
+    // observe commit_index >= 1 and applied_index >= 1 to ensure quorum replication,
+    // followers' catch-up, and heartbeat timers are synchronized and active.
+    let probe_resp = client
+        .post(format!("{leader_url}/topics/_probe/append"))
+        .json(&serde_json::json!({ "payload": { "ready": true } }))
+        .send()
+        .await
+        .expect("probe append to establish commit index");
+    assert!(
+        probe_resp.status().is_success(),
+        "probe append must succeed, got {}",
+        probe_resp.status()
+    );
+
+    let deadline = phase_deadline();
+    loop {
+        let mut converged = true;
+        for base in &base_urls {
+            match replica_status(&client, base).await {
+                Some(s) if s.commit_index >= 1 && s.applied_index >= 1 => {}
+                _ => {
+                    converged = false;
+                    break;
+                }
+            }
+        }
+        if converged {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "concurrent-ingress readiness: replicas did not converge on commit_index >= 1 within budget",
+        );
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
 
     let writes = futures::stream::iter(0..EVENTS)
         .map(|n| {
@@ -544,6 +604,8 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
                 ),
             };
         }
+        let diag = capture_raft_diagnostic(&client, &base_urls[0], &base_refs).await;
+        eprintln!("DIAGNOSTIC: {diag}");
         panic!("phase=concurrent-ingress append failure: {error:#}");
     }
 
