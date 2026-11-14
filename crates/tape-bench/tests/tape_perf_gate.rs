@@ -34,6 +34,7 @@ fn local_replay_perf_gate_passes_without_external_win_claims() {
     let report = tape_bench::run_benchmark(EVENTS, PAYLOAD_BYTES);
     assert_eq!(report.events, EVENTS);
     assert_eq!(report.payload_bytes, PAYLOAD_BYTES);
+    assert!(report.append_p99_us >= report.append_p95_us);
     assert!(
         report.append_p95_us <= MAX_APPEND_P95_US,
         "append p95 {}us exceeds EC limit {MAX_APPEND_P95_US}us",
@@ -79,6 +80,7 @@ fn tape_bench_cli_reports_calibration_status() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"append_p99_us\""));
     assert!(stdout.contains("local_regression_passed_external_wins_require_separate_gates"));
     assert!(stdout.contains("Kafka topic log"));
     assert!(stdout.contains("calibrated_separate_gate"));
