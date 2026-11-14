@@ -25,6 +25,8 @@ There is no format-version constant on the durable path.
 
 Rule: do not run an older binary on a newer data directory. Copy the directory first.
 
+Three baselines in `compat/` guard the other public surfaces the way `clients/openapi.baseline.json` guards the API: `compat/wal-variants.baseline.json` (the `TapeCommand` variants and their fields), `compat/crd-fields.baseline.json` (the CRD `spec` and `status` fields) and `compat/cli-flags.baseline.json` (the `tape` commands and long flags). A change that removes or renames an entry fails `compatibility_docs::`. To drop something on purpose, replace the baseline in the same change and say so in the pull request. To add an entry to a baseline after a release, run `COMPAT_BLESS=1 cargo test -p tape --test it -- compatibility_docs::` and review the diff of `compat/`.
+
 ## Raft peer protocol
 
 No version number is exchanged between raft peers, and no compatibility across versions is tested.
