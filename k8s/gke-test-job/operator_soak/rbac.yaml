@@ -1,0 +1,33 @@
+# What the suite reads and does in the run's namespace, and nothing
+# cluster-wide: it reads the server pod tape-0 and runs `cat /proc/1/status`
+# in its server container (pods/exec) to sample RSS. It changes nothing.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tape-e2e
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tape-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tape-e2e
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape

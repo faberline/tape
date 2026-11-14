@@ -15,6 +15,7 @@
 #   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
 #   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
 #   operator_rollback  k8s/gke-test-job/operator_rollback (dispatch only, paid: never in all and never in ci.yml)
+#   operator_soak      k8s/gke-test-job/operator_soak (dispatch only, paid, soak_hours default 4: never in all and never in ci.yml)
 # ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a
@@ -36,7 +37,7 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback, operator_soak]
         default: all
       backup_bucket:
         description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
@@ -48,6 +49,11 @@ on:
         type: string
         required: false
         default: ""
+      soak_hours:
+        description: "Length of the operator_soak window in hours, from 0.05 to 5. The paid default of 4 hours needs the approval of the owner; use 0.05 to check the suite."
+        type: string
+        required: false
+        default: "4"
 
 permissions:
   contents: read
@@ -168,6 +174,7 @@ jobs:
           INPUT_SUITE: ${{ inputs.suite || 'all' }}
           INPUT_BACKUP_BUCKET: ${{ inputs.backup_bucket }}
           INPUT_PREVIOUS_IMAGE: ${{ inputs.previous_image }}
+          INPUT_SOAK_HOURS: ${{ inputs.soak_hours }}
         run: |
           set -euo pipefail
           die() { echo "::error::$*" >&2; exit 1; }
@@ -212,7 +219,13 @@ jobs:
               [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
               suites='["operator_rollback"]'
               ;;
-            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade or operator_rollback, got: $INPUT_SUITE" ;;
+            operator_soak)
+              [[ "$INPUT_SOAK_HOURS" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+                && awk -v h="$INPUT_SOAK_HOURS" 'BEGIN { exit !(h >= 0.05 && h <= 5) }' \
+                || die "operator_soak needs soak_hours from 0.05 to 5, got: $INPUT_SOAK_HOURS"
+              suites='["operator_soak"]'
+              ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback or operator_soak, got: $INPUT_SUITE" ;;
           esac
 
           {
@@ -231,6 +244,9 @@ jobs:
             fi
             if [[ "$INPUT_SUITE" == operator_upgrade || "$INPUT_SUITE" == operator_rollback ]]; then
               echo "E2E_PREVIOUS_IMAGE=${INPUT_PREVIOUS_IMAGE}"
+            fi
+            if [[ "$INPUT_SUITE" == operator_soak ]]; then
+              echo "E2E_SOAK_HOURS=${INPUT_SOAK_HOURS}"
             fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -271,6 +287,9 @@ jobs:
       test-image: ${{ needs.test-client.outputs.image }}
       test-image-name: tape-test-client
       test-env: ${{ needs.resolve.outputs.test-env }}
+      # The soak is the one long suite: 330 is the longest allowed by the pinned run.sh
+      # (it keeps TEST_JOB_TIMEOUT at ttl minus 15 minutes). Other suites keep the 90 default.
+      ttl-minutes: ${{ matrix.suite == 'operator_soak' && 330 || 90 }}
       evidence-suffix: ${{ matrix.suite }}
 
   image-arm64:
