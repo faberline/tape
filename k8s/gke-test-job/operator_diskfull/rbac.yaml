@@ -1,0 +1,41 @@
+# What the suite reads and does in the run's namespace, and nothing
+# cluster-wide: it reads the pod tape-0, its PVC and the Tape CR, runs `dd`,
+# `rm` and `df` in tape-0 (container `server`) to fill and free the data
+# volume, and reads /metrics through the Service. It patches nothing and
+# deletes no pod.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tape-e2e
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list"]
+  - apiGroups: ["tape.dev"]
+    resources: ["tapes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tape-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tape-e2e
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape
