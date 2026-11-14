@@ -1,0 +1,34 @@
+{
+  "Append": [
+    "applied_at_ms",
+    "key",
+    "payload",
+    "timestamp_ms",
+    "topic"
+  ],
+  "CheckpointPut": [
+    "consumer",
+    "offset",
+    "topic",
+    "updated_at_ms"
+  ],
+  "RetentionPut": [
+    "now_ms",
+    "policy",
+    "topic"
+  ],
+  "SubscriptionAck": [
+    "name",
+    "offset",
+    "topic",
+    "updated_at_ms"
+  ],
+  "SubscriptionCreate": [
+    "name",
+    "topic"
+  ],
+  "SubscriptionDelete": [
+    "name",
+    "topic"
+  ]
+}
