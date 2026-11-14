@@ -11,6 +11,10 @@ on:
         description: Exact landed main commit to build and test.
         required: true
         type: string
+      previous_image:
+        description: Previous release image, ghcr.io/faberline/tape@sha256:<64 hex>.
+        required: true
+        type: string
 
 concurrency:
   group: tape-release-candidate-${{ inputs.version }}
@@ -27,6 +31,7 @@ jobs:
     outputs:
       commit: ${{ steps.identity.outputs.commit }}
       version: ${{ steps.identity.outputs.version }}
+      previous_image: ${{ steps.identity.outputs.previous_image }}
       tag: ${{ steps.identity.outputs.tag }}
       pr_number: ${{ steps.identity.outputs.pr_number }}
       pr_url: ${{ steps.identity.outputs.pr_url }}
@@ -44,6 +49,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_COMMIT: ${{ inputs.commit }}
+          REQUESTED_PREVIOUS_IMAGE: ${{ inputs.previous_image }}
           REQUESTED_VERSION: ${{ inputs.version }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         shell: bash
@@ -52,6 +58,7 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "candidate must dispatch main" >&2; exit 1; }
           [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "invalid commit input" >&2; exit 1; }
           [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid version input" >&2; exit 1; }
+          [[ "$REQUESTED_PREVIOUS_IMAGE" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] || { echo "invalid previous_image input" >&2; exit 1; }
           [[ "$REQUESTED_COMMIT" == "$GITHUB_SHA" ]] || { echo "input commit is not dispatch SHA" >&2; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "checkout SHA mismatch" >&2; exit 1; }
           [[ "$WORKFLOW_REF" == "${GITHUB_REPOSITORY}/.github/workflows/tape-release-candidate.yml@refs/heads/main" ]] || { echo "candidate workflow ref mismatch" >&2; exit 1; }
@@ -84,6 +91,7 @@ jobs:
           {
             echo "commit=$GITHUB_SHA"
             echo "version=$cargo_version"
+            echo "previous_image=$REQUESTED_PREVIOUS_IMAGE"
             echo "tag=tape@$cargo_version"
             echo "pr_number=$(jq -r '.[0].number' <<<"$prs")"
             echo "pr_url=$(jq -r '.[0].html_url' <<<"$prs")"
@@ -585,7 +593,7 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
-        suite: [operator_recovery, operator_ha]
+        suite: [operator_recovery, operator_ha, operator_upgrade]
     permissions:
       id-token: write
       contents: read
@@ -603,6 +611,7 @@ jobs:
         E2E_EXPECTED_GIT_SHA=${{ needs.identity.outputs.commit }}
         E2E_EXPECTED_IMAGE=${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
         E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}
+        E2E_PREVIOUS_IMAGE=${{ needs.identity.outputs.previous_image }}
       evidence-suffix: ${{ matrix.suite }}
       aw-ref: edb3802d18d39d205bd0ada8431ecc97c6938c14
 
