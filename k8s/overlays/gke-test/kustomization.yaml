@@ -13,6 +13,8 @@
 # base (../../base) is not deployed here; the kind gate never covered it either.
 # It also grants the test Job's ServiceAccount the node drain of the
 # operator_ha suite (e2e-node-drain.yaml).
+# It also grants the node deletion of the operator_nodeloss suite
+# (e2e-node-loss.yaml).
 #
 # Every pod runs on pool-tape-server, one pod per node: the 2 operator replicas
 # here and tape-0 through the CR's spec.placement. aw's
@@ -28,6 +30,8 @@ resources:
   - tape-cr.yaml
   # The operator_ha suite drains a node of pool-tape-server.
   - e2e-node-drain.yaml
+  # The operator_nodeloss suite deletes the Node of the raft leader.
+  - e2e-node-loss.yaml
 
 # `kustomize edit set image` also rewrites the CR's spec.image, so the
 # operator and the server it renders run the same image.
