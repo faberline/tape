@@ -6,6 +6,7 @@ How to deploy, run, benchmark and check tape. The runbook pages keep their paths
 |----------|-----------------|
 | [Images and CLI](images-and-cli.md) | Image lines and first-level CLI commands |
 | [Environment and HTTP surface](environment-and-http.md) | Environment variables, HTTP surface and probes |
+| [Limits](limits.md) | Every size and rate limit, its value and source, and what happens above it |
 | [CRD upgrade order, capacity and quotas](crd-capacity-and-quotas.md) | CRD versioning and upgrade order, PVC sizing, per-topic quotas |
 | [Version compatibility](compatibility.md) | What a client, data directory, raft peer or CRD may meet across adjacent releases |
 | [Stability promise](stability-promise.md) | What `1.0.0` promises not to break before `2.0.0`: API, wire format, on-disk format, CRD, CLI flags |
