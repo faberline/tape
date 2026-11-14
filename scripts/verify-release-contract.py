@@ -38,7 +38,7 @@ SUITE_SERVER_STATEFULSET_CONTAINER = (
 SUITE_SERVER_POD_INVENTORY = (
     '    let server_ids = assert_pods_run(expected, SERVER_LABEL, "server", 1);'
 )
-GKE_SUITES = "[operator_recovery, operator_ha]"
+GKE_SUITES = "[operator_recovery, operator_ha, operator_upgrade]"
 
 TAPE_GATES = (
     "python3 scripts/verify-release-contract.py --self-test",
@@ -375,6 +375,8 @@ def assert_gke_e2e(job: str) -> None:
         fail("gke-e2e aw-ref does not match the pinned aw commit")
     if f"        suite: {GKE_SUITES}\n" not in job:
         fail(f"gke-e2e does not run exactly the suites {GKE_SUITES}")
+    if "operator_upgrade" not in job:
+        fail("gke-e2e does not run operator_upgrade")
     for required in (
         "      image: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}\n",
         "      test-image: ${{ needs.test-client.outputs.image }}\n",
@@ -382,6 +384,7 @@ def assert_gke_e2e(job: str) -> None:
         "        E2E_EXPECTED_GIT_SHA=${{ needs.identity.outputs.commit }}\n",
         "        E2E_EXPECTED_IMAGE=${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}\n",
         "        E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}\n",
+        "        E2E_PREVIOUS_IMAGE=${{ needs.identity.outputs.previous_image }}\n",
     ):
         if required not in job:
             fail(f"gke-e2e does not bind the prebuilt candidate: {required.strip()}")
@@ -408,8 +411,8 @@ def check_contract(candidate: str, promotion: str) -> None:
         "Tape StatefulSet": STATEFULSET.read_text(),
         "Tape operator Deployment": OPERATOR_DEPLOYMENT.read_text(),
     }
-    if workflow_inputs(candidate) != {"version", "commit"}:
-        fail("candidate inputs must be exactly version and commit")
+    if workflow_inputs(candidate) != {"version", "commit", "previous_image"}:
+        fail("candidate inputs must be exactly version, commit and previous_image")
     if workflow_inputs(promotion) != {
         "version",
         "candidate_run_id",
@@ -433,6 +436,7 @@ def check_contract(candidate: str, promotion: str) -> None:
         '[[ "$REQUESTED_COMMIT" == "$GITHUB_SHA" ]]',
         'git merge-base --is-ancestor "$GITHUB_SHA" origin/main',
         'refs/tags/tape@${cargo_version}',
+        'invalid previous_image input',
     ):
         if required not in identity:
             fail(f"candidate identity proof lacks {required}")
@@ -875,6 +879,19 @@ def self_test() -> None:
         ),
         "gke-e2e-drops-a-suite": (
             replace_once(candidate, f"        suite: {GKE_SUITES}\n", "        suite: [operator_recovery]\n", "gke-e2e-drops-a-suite"),
+            promotion,
+        ),
+        "gke-e2e-drops-operator-upgrade": (
+            replace_once(candidate, f"        suite: {GKE_SUITES}\n", "        suite: [operator_recovery, operator_ha]\n", "gke-e2e-drops-operator-upgrade"),
+            promotion,
+        ),
+        "gke-e2e-drops-previous-image": (
+            replace_once(
+                candidate,
+                "        E2E_PREVIOUS_IMAGE=${{ needs.identity.outputs.previous_image }}\n",
+                "",
+                "gke-e2e-drops-previous-image",
+            ),
             promotion,
         ),
         "image-arm64-amd64-child": (
