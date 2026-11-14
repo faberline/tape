@@ -10,14 +10,14 @@ fn routes_map_to_op_families() {
     m.observe_method("GET", "/topics/{topic}/replay/stream", 4);
     m.observe_method("GET", "/topics/{topic}/consumers/{consumer}/checkpoint", 1);
     m.observe_method("PUT", "/topics/{topic}/consumers/{consumer}/checkpoint", 4);
-    assert_eq!(m.append.count.get(), 1);
-    assert_eq!(m.append.sum.get(), 3);
-    assert_eq!(m.replay.count.get(), 2);
-    assert_eq!(m.replay.sum.get(), 6);
-    assert_eq!(m.checkpoint_get.count.get(), 1);
-    assert_eq!(m.checkpoint_put.count.get(), 1);
-    assert_eq!(m.checkpoint_put.sum.get(), 4);
-    assert_eq!(m.other.count.get(), 0);
+    assert_eq!(m.append.count().get(), 1);
+    assert_eq!(m.append.sum().get(), 3);
+    assert_eq!(m.replay.count().get(), 2);
+    assert_eq!(m.replay.sum().get(), 6);
+    assert_eq!(m.checkpoint_get.count().get(), 1);
+    assert_eq!(m.checkpoint_put.count().get(), 1);
+    assert_eq!(m.checkpoint_put.sum().get(), 4);
+    assert_eq!(m.other.count().get(), 0);
 }
 
 #[test]

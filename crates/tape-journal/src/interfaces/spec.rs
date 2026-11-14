@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn llm_backup_sectioned_topic_matches_id() {
-        assert_eq!(llm_backup_sectioned_topic().id, "backup");
+        assert_eq!(llm_backup_sectioned_topic().id(), "backup");
         assert_eq!(LLM_BACKUP_TOPICS.len(), 1);
     }
 }

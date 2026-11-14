@@ -82,14 +82,14 @@ pub(crate) struct UpgradeArgs {
     yes: bool,
 }
 
-pub(crate) const TOOL: cli_std::ToolInfo = cli_std::ToolInfo {
-    project: "tape",
-    repo: "faberline/tape",
-    target: env!("TAPE_TARGET"),
-    version: env!("CARGO_PKG_VERSION"),
-    git_sha: env!("TAPE_GIT_SHA"),
-    built_at: env!("TAPE_BUILT_AT"),
-};
+pub(crate) const TOOL: cli_std::ToolInfo = cli_std::ToolInfo::new(
+    "tape",
+    "faberline/tape",
+    env!("TAPE_TARGET"),
+    env!("CARGO_PKG_VERSION"),
+    env!("TAPE_GIT_SHA"),
+    env!("TAPE_BUILT_AT"),
+);
 
 /// Run the parsed command.
 pub(crate) async fn dispatch(cli: Cli) -> Result<()> {
@@ -104,12 +104,11 @@ pub(crate) async fn dispatch(cli: Cli) -> Result<()> {
         Command::Upgrade(args) => {
             cli_std::upgrade::run(
                 &TOOL,
-                cli_std::upgrade::Options {
-                    check: args.check,
-                    tag: args.tag,
-                    force: args.force,
-                    yes: args.yes,
-                },
+                cli_std::upgrade::Options::default()
+                    .with_check(args.check)
+                    .with_tag(args.tag)
+                    .with_force(args.force)
+                    .with_yes(args.yes),
             )
             .await
         }

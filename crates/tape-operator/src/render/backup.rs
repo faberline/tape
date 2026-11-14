@@ -27,7 +27,7 @@ pub(super) fn backup_service_account(cx: &RenderCtx) -> Value {
     json!({
         "apiVersion": "v1",
         "kind": "ServiceAccount",
-        "metadata": cx.meta(&backup_child(cx.name), BACKUP_COMPONENT),
+        "metadata": cx.meta(&backup_child(cx.name()), BACKUP_COMPONENT),
     })
 }
 
@@ -52,14 +52,14 @@ pub(super) fn backup_service_account(cx: &RenderCtx) -> Value {
 /// instances legitimately need no token.
 pub(super) fn backup_cron_job(tape: &Tape, cx: &RenderCtx) -> Option<Value> {
     let backup = tape.spec.backup.as_ref()?;
-    let cron_name = backup_child(cx.name);
+    let cron_name = backup_child(cx.name());
 
     let mut args = vec![
         "backup".to_string(),
         "--url".to_string(),
         format!(
             "http://{}.{}.svc.cluster.local:{CLIENT_PORT}",
-            cx.name, cx.ns
+            cx.name(), cx.ns()
         ),
         "--dest".to_string(),
         backup.destination.clone(),

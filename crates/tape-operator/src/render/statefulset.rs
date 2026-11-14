@@ -119,7 +119,7 @@ pub(super) fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value 
 
     let mut sts = render::service_statefulset(ServiceStatefulSet {
         cx,
-        name: cx.name,
+        name: cx.name(),
         component: COMPONENT,
         image: s.cluster.image.as_str(),
         image_pull_policy: s
@@ -141,7 +141,7 @@ pub(super) fn statefulset(tape: &Tape, cx: &RenderCtx, headless: &str) -> Value 
         replicas_per_shard: s.cluster.replicas_per_shard,
         voter_count: s.cluster.voter_count,
         headless_env_key: "TAPE_PEER_SERVICE",
-        service_account_name: Some(s.service_account_name.as_deref().unwrap_or(cx.name)),
+        service_account_name: Some(s.service_account_name.as_deref().unwrap_or(cx.name())),
         env: extra_env,
         env_from: vec![],
         resources: container_resources(cpu, memory),

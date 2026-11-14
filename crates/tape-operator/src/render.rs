@@ -91,15 +91,7 @@ fn owner_ref(tape: &Tape) -> Option<Value> {
 
 /// tape's render identity for the shared [`service_k8s::render`] helpers.
 fn ctx<'a>(tape: &Tape, name: &'a str, ns: &'a str) -> RenderCtx<'a> {
-    RenderCtx {
-        app: APP,
-        manager: MANAGER,
-        api_version: API_VERSION,
-        kind: KIND,
-        name,
-        ns,
-        owner: owner_ref(tape),
-    }
+    RenderCtx::new(APP, MANAGER, API_VERSION, KIND, name, ns).with_owner(owner_ref(tape))
 }
 
 /// Which shared projection source (if any) supplies the token registry file.
@@ -221,11 +213,7 @@ pub fn render(tape: &Tape) -> Vec<Value> {
 pub fn prunes(tape: &Tape) -> Vec<PruneTarget> {
     let mut targets = Vec::new();
     if tape.spec.backup.is_none() {
-        targets.push(PruneTarget {
-            api_version: "batch/v1",
-            kind: "CronJob",
-            name: backup_child(&instance(tape)),
-        });
+        targets.push(PruneTarget::new("batch/v1", "CronJob", backup_child(&instance(tape))));
     }
     targets
 }

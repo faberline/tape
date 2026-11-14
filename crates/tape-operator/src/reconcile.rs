@@ -61,7 +61,7 @@ impl ManagedService for Tape {
             let context = serde_json::to_value(TapeContext { backup_cron_job })
                 .unwrap_or(serde_json::Value::Null);
 
-            Ok(ReconcilePlan { children, context })
+            Ok(ReconcilePlan::new(children, context))
         }
     }
 
@@ -75,10 +75,7 @@ impl ManagedService for Tape {
     fn readiness_targets(&self) -> Vec<ReadinessTarget> {
         // tape is always a StatefulSet (durable journal + raft state on a
         // PVC); poll it for `.status.readyReplicas`.
-        vec![ReadinessTarget {
-            kind: "StatefulSet",
-            name: self.name_any(),
-        }]
+        vec![ReadinessTarget::new("StatefulSet", self.name_any())]
     }
 
     fn status_patch(&self, ready: &ReadyFacts) -> serde_json::Value {
