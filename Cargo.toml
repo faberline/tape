@@ -24,33 +24,33 @@ tape-shared-kernel = { path = "crates/tape-shared-kernel" }
 tape-storage = { path = "crates/tape-storage" }
 
 # faberline/core building blocks.
-build-stamp = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
-cli-std = { git = "https://github.com/faberline/core", tag = "v0.4.14", default-features = false }
+build-stamp = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
+cli-std = { git = "https://github.com/faberline/core", tag = "v0.5.0", default-features = false }
 # Prometheus metric primitives (Counter/Latency + text-format render).
-metrics-prometheus = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+metrics-prometheus = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared polyglot OpenAPI client codegen (#1329): `tape spec gen`.
-openapi-codegen = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+openapi-codegen = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared peer mTLS material/configuration for the Raft transport.
-peer-tls = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+peer-tls = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared raft driver (#1327): RaftHost/RaftStore/RaftStateMachine,
 # ClusterTopology::from_env, OutcomeWindow, SnapshotPolicy/HostConfig.
-raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared shutdown deadline: one absolute budget for the HTTP drain and the
 # raft host's leadership handoff (`RaftHost::shutdown_within`).
-server-lifecycle = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+server-lifecycle = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared bearer-token auth contract (#1326).
-service-auth = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+service-auth = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared backup contract (#1329): destination/policy schema, BackupSink,
 # local + s3 sinks, run_backup_once.
-service-backup = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+service-backup = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared service shell (#1325): probe routes, the h2c + HTTP/1.1 serve loop,
 # graceful drain, and the {error, message} ApiErr envelope.
-service-http = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+service-http = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared operator scaffold + render toolkit (#1328).
-service-k8s = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+service-k8s = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 # Shared durable file replacement for the WAL, snapshots and raft markers.
-storage-durable = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
-transport-h2c = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+storage-durable = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
+transport-h2c = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 rig = { git = "https://github.com/faberline/rig", rev = "1fbe487eb4a94d745447227dbc974c3eb3e9fbd5" }
 
 # Third-party. kube-rs versions mirror the other faberline users so the

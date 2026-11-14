@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use raft_runtime::{FsyncPolicy, NodeId, RaftStore};
+use raft_runtime::{FsyncPolicy, Index, NodeId, RaftStore, Term};
 
 use tape_shared_kernel::JournalSnapshot;
 
@@ -98,6 +98,6 @@ pub fn prepare_bootstrap_seed(data_dir: &Path, node_id: NodeId, bytes: &[u8]) ->
         node_id,
         FsyncPolicy::Always,
     )?;
-    store.seed_snapshot(seed_index, 0, seed_bytes)?;
+    store.seed_snapshot(Index::new(seed_index), Term::new(0), seed_bytes)?;
     Ok(())
 }
