@@ -26,6 +26,7 @@ mod operator;
 #[cfg(feature = "operator")]
 mod operator_render_provision_topics;
 mod producer_at_least_once;
+mod properties;
 mod provision_topics_via_spec;
 mod public_tls_assets;
 mod quickstart_docs;
