@@ -349,3 +349,56 @@ fn eio_is_recognized_through_the_durability_error_the_wal_path_actually_produces
         std::io::ErrorKind::PermissionDenied
     )));
 }
+
+#[test]
+fn format_version_is_written_to_a_fresh_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_store, _journal) = WalStore::open(dir.path()).unwrap();
+    let text = std::fs::read_to_string(dir.path().join("format-version")).unwrap();
+    assert_eq!(text.trim(), FORMAT_VERSION.to_string());
+}
+
+#[test]
+fn format_version_absent_directory_loads_as_version_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut store, journal) = WalStore::open(dir.path()).unwrap();
+    let journal = Mutex::new(journal);
+    store
+        .commit(vec![append_cmd("orders", 1, 100)], &journal)
+        .unwrap();
+    drop(store);
+    // Build the old layout: a data directory with no format-version file.
+    std::fs::remove_file(dir.path().join("format-version")).unwrap();
+
+    let (_store2, recovered) = WalStore::open(dir.path()).unwrap();
+    assert_eq!(recovered.end_offset("orders"), 1);
+    assert!(dir.path().join("format-version").exists());
+}
+
+#[test]
+fn format_version_higher_than_supported_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("format-version"),
+        format!("{}\n", FORMAT_VERSION + 1),
+    )
+    .unwrap();
+    let Err(err) = WalStore::open(dir.path()) else {
+        panic!("a directory with a newer format version must be refused");
+    };
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err
+        .to_string()
+        .contains("is newer than this binary supports"));
+}
+
+#[test]
+fn format_version_file_that_is_not_a_number_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("format-version"), "banana\n").unwrap();
+    let Err(err) = WalStore::open(dir.path()) else {
+        panic!("a format-version file that is not a number must be refused");
+    };
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("is not a format version number"));
+}

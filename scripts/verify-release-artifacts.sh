@@ -169,8 +169,8 @@ flatten_paginated_jobs() { jq -cs '[.[] | .jobs[]]'; }
 flatten_paginated_artifacts() { jq -cs '[.[] | .artifacts[]]'; }
 validate_candidate_job_inventory() {
   jq -e '
-    length == 16 and all(.[]; .status == "completed" and .conclusion == "success") and
-    ([.[].name] | sort == ["GKE e2e (operator_ha) / deploy + test on shared GKE","GKE e2e (operator_recovery) / deploy + test on shared GKE","bind candidate inputs","build (aarch64-apple-darwin)","build (aarch64-unknown-linux-gnu)","build (aarch64-unknown-linux-musl)","build (x86_64-unknown-linux-gnu)","build (x86_64-unknown-linux-musl)","build candidate image and attest","build candidate test-client image","candidate identity","final candidate receipt","image e2e (arm64)","verify exact Tape release gates","verify exact candidate gates","verify service and Raft library gates"])
+    length == 17 and all(.[]; .status == "completed" and .conclusion == "success") and
+    ([.[].name] | sort == ["GKE e2e (operator_ha) / deploy + test on shared GKE","GKE e2e (operator_recovery) / deploy + test on shared GKE","GKE e2e (operator_upgrade) / deploy + test on shared GKE","bind candidate inputs","build (aarch64-apple-darwin)","build (aarch64-unknown-linux-gnu)","build (aarch64-unknown-linux-musl)","build (x86_64-unknown-linux-gnu)","build (x86_64-unknown-linux-musl)","build candidate image and attest","build candidate test-client image","candidate identity","final candidate receipt","image e2e (arm64)","verify exact Tape release gates","verify exact candidate gates","verify service and Raft library gates"])
   ' >/dev/null || fail "candidate attempt does not contain the exact successful execution set"
 }
 
