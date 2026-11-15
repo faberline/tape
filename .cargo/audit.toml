@@ -8,4 +8,24 @@ ignore = [
     # The MySQL driver is not used in our codebase, so this vulnerability doesn't affect us.
     # TODO: Remove this once sqlx provides feature flags to exclude mysql support
     "RUSTSEC-2023-0071",
+    # rustls-webpki 0.102.8, pinned by async-nats 0.38.0 (its patches are only in the 0.103 line)
+    "RUSTSEC-2026-0049",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0382",
+    # backoff 0.4.0, pinned by kube-runtime 0.98.0 (no patched release)
+    "RUSTSEC-2025-0012",
+    # instant 0.1.13, pinned by backoff 0.4.0 (no patched release)
+    "RUSTSEC-2024-0384",
+    # pin-utils 0.1.0, pinned by aws-smithy-http and aws-smithy-runtime (no patched release)
+    "RUSTSEC-2026-0441",
+    # proc-macro-error 1.0.4, pinned by utoipa-gen 4.3.1 (no patched release)
+    "RUSTSEC-2024-0370",
+    # rustls-pemfile 2.2.0, pinned by kube-client 0.98.0 and peer-tls 0.1.0 (no patched release)
+    "RUSTSEC-2025-0134",
+    # unsafe-libyaml 0.2.11, pinned by serde_yaml 0.9.34 (no patched release)
+    "RUSTSEC-2024-0449",
+    # lru 0.16.4, pinned by aws-sdk-s3 1.137.0 (the fix is lru 0.18.2, outside its range)
+    "RUSTSEC-2026-0253",
 ]
