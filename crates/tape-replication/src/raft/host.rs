@@ -168,10 +168,7 @@ impl TapeRaft {
     /// `snapshot_every` applied entries (tests pass a small threshold to arm
     /// InstallSnapshot quickly).
     pub fn host_config(snapshot_every: u64) -> HostConfig {
-        HostConfig {
-            snapshot: SnapshotPolicy::EveryEntries(snapshot_every),
-            ..HostConfig::default()
-        }
+        HostConfig::default().with_snapshot(SnapshotPolicy::EveryEntries(snapshot_every))
     }
 
     /// Drain the shared Raft host's in-flight peer RPCs before its h2 client
@@ -324,7 +321,7 @@ impl TapeRaft {
     async fn propose(&self, command: TapeCommand) -> Result<(Index, ProposalId)> {
         let envelope = TapeEnvelope {
             proposal_id: ProposalId {
-                node: self.node_id,
+                node: self.node_id.get(),
                 session: self.session,
                 sequence: self.proposal_sequence.fetch_add(1, Ordering::Relaxed),
             },
@@ -376,7 +373,7 @@ impl Replicator for TapeRaft {
     }
 
     fn applied_index(&self) -> u64 {
-        TapeRaft::applied_index(self)
+        TapeRaft::applied_index(self).get()
     }
 
     fn snapshot_bytes(&self) -> Result<Vec<u8>, ReplicationError> {

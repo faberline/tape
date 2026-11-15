@@ -62,12 +62,7 @@ fn material(signer: &Authority, trust: &Authority, identity: &str) -> Material {
     std::fs::write(&ca_path, trust.cert.pem()).expect("write CA");
     Material {
         _dir: dir,
-        config: PeerTlsConfig {
-            cert: cert_path,
-            key: key_path,
-            ca: ca_path,
-            required: true,
-        },
+        config: PeerTlsConfig::new(cert_path, key_path, ca_path, true),
     }
 }
 
@@ -99,17 +94,17 @@ impl SecureCluster {
             );
             listeners.push(listener);
         }
-        let membership = Membership {
-            voters: (0..replicas).collect(),
-            learners: vec![],
-        };
+        let membership = Membership::new(
+            (0..replicas).map(raft_runtime::NodeId::new).collect(),
+            vec![],
+        );
         let mut nodes = Vec::new();
         for (id, listener) in listeners.into_iter().enumerate() {
-            let node_id = id as u64;
+            let node_id = raft_runtime::NodeId::new(id as u64);
             let peers = urls
                 .iter()
-                .filter(|(peer_id, _)| **peer_id != node_id)
-                .map(|(peer_id, url)| (*peer_id, url.clone()))
+                .filter(|(peer_id, _)| **peer_id != id as u64)
+                .map(|(peer_id, url)| (raft_runtime::NodeId::new(*peer_id), url.clone()))
                 .collect();
             let journal = Arc::new(Mutex::new(TapeJournal::default()));
             let dir = tempfile::tempdir().expect("raft directory");
@@ -225,11 +220,8 @@ async fn untrusted_peer_is_rejected_before_tape_raft_router() {
         TapeRaft::spawn_with_peer_transport(
             Arc::new(Mutex::new(TapeJournal::default())),
             dir.path(),
-            0,
-            Membership {
-                voters: vec![0],
-                learners: vec![],
-            },
+            raft_runtime::NodeId::new(0),
+            Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
             HashMap::new(),
             TapeRaft::host_config(1024),
             server_transport.clone(),

@@ -6,6 +6,7 @@ How to deploy, run, benchmark and check tape. The runbook pages keep their paths
 |----------|-----------------|
 | [Images and CLI](images-and-cli.md) | Image lines and first-level CLI commands |
 | [Environment and HTTP surface](environment-and-http.md) | Environment variables, HTTP surface and probes |
+| [Limits](limits.md) | Every size and rate limit, its value and source, and what happens above it |
 | [CRD upgrade order, capacity and quotas](crd-capacity-and-quotas.md) | CRD versioning and upgrade order, PVC sizing, per-topic quotas |
 | [Version compatibility](compatibility.md) | What a client, data directory, raft peer or CRD may meet across adjacent releases |
 | [Stability promise](stability-promise.md) | What `1.0.0` promises not to break before `2.0.0`: API, wire format, on-disk format, CRD, CLI flags |
@@ -26,9 +27,7 @@ cargo test --release --test tape_perf_gate  # the local performance gate
 ```
 
 `crates/tape/tests/it` starts real `tape serve` processes, including three-process raft
-groups. `raft_failover::concurrent_ingress_across_all_replicas_commits_without_raft_timeouts`
-is timing-sensitive on a loaded machine; run it alone with
-`cargo test --test it raft_failover -- --test-threads=1` when it fails.
+groups.
 
 ## Using core
 
@@ -36,7 +35,7 @@ tape depends on faberline/core crates by git tag, one entry per crate, all at
 the same tag:
 
 ```toml
-raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 ```
 
 To move to a new core release, change every tag together, refresh
