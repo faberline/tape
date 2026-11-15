@@ -57,9 +57,9 @@ pub fn spawn_reload(
 /// Read the three peer TLS files, in the order cert, key, CA.
 async fn read_material(config: &PeerTlsConfig) -> std::io::Result<[Vec<u8>; 3]> {
     Ok([
-        tokio::fs::read(&config.cert).await?,
-        tokio::fs::read(&config.key).await?,
-        tokio::fs::read(&config.ca).await?,
+        tokio::fs::read(config.cert()).await?,
+        tokio::fs::read(config.key()).await?,
+        tokio::fs::read(config.ca()).await?,
     ])
 }
 
@@ -80,12 +80,12 @@ mod tests {
     #[test]
     fn read_material_fails_when_a_file_is_missing() {
         let missing = std::env::temp_dir().join("tape-peer-tls-missing");
-        let config = PeerTlsConfig {
-            cert: missing.join("cert.pem"),
-            key: missing.join("key.pem"),
-            ca: missing.join("ca.pem"),
-            required: true,
-        };
+        let config = PeerTlsConfig::new(
+            missing.join("cert.pem"),
+            missing.join("key.pem"),
+            missing.join("ca.pem"),
+            true,
+        );
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .expect("runtime");

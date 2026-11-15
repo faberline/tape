@@ -271,11 +271,8 @@ async fn rotated_peer_certificate_is_used_by_new_connections() {
         TapeRaft::spawn_with_peer_transport(
             Arc::new(Mutex::new(TapeJournal::default())),
             dir.path(),
-            0,
-            Membership {
-                voters: vec![0],
-                learners: vec![],
-            },
+            raft_runtime::NodeId::new(0),
+            Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
             HashMap::new(),
             TapeRaft::host_config(1024),
             server_transport.clone(),
@@ -314,9 +311,9 @@ async fn rotated_peer_certificate_is_used_by_new_connections() {
     assert_eq!(server_transport.generation(), 1);
 
     for (from, to) in [
-        (&new_material.config.cert, &server_material.config.cert),
-        (&new_material.config.key, &server_material.config.key),
-        (&new_material.config.ca, &server_material.config.ca),
+        (new_material.config.cert(), server_material.config.cert()),
+        (new_material.config.key(), server_material.config.key()),
+        (new_material.config.ca(), server_material.config.ca()),
     ] {
         std::fs::copy(from, to).expect("rotate peer TLS file");
     }
