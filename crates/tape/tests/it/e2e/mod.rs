@@ -14,6 +14,7 @@
 //! `E2E_STANDALONE_IMAGE`, for the architecture GKE does not run.
 
 mod image;
+mod operator_diskfull;
 mod operator_ha;
 mod operator_nodeloss;
 mod operator_partition;
