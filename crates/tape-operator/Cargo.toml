@@ -19,6 +19,7 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 service-backup.workspace = true
 service-k8s.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true

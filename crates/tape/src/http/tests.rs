@@ -184,11 +184,8 @@ async fn secure_peer_mode_does_not_expose_raft_routes_on_public_router() {
         TapeRaft::spawn(
             Arc::clone(&journal),
             dir.path(),
-            0,
-            raft_runtime::Membership {
-                voters: vec![0],
-                learners: vec![],
-            },
+            raft_runtime::NodeId::new(0),
+            raft_runtime::Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
             std::collections::HashMap::new(),
             TapeRaft::host_config(1024),
         )
