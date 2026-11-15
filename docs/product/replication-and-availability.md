@@ -9,8 +9,7 @@ change.
 
 - Problem: a publisher that reaches a follower needs an answer it can act
   on, and an operator needs a replication proof that reruns the same way on
-  a loaded host. The concurrent-ingress failover case still flakes under
-  load.
+  a loaded host.
 - Who: operators; every publisher, through the durability of the answer.
 - Promise: three members elect a leader, replicate every append, forward
   writes from followers, and catch a fresh member up by install-snapshot. A
