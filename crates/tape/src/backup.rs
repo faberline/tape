@@ -11,9 +11,7 @@
 //! (loaded offline/out of band); no restore CLI verb is added here, matching
 //! relay's scope.
 
-pub use service_backup::{
-    fetch_admin_snapshot as fetch_snapshot_bytes, run_admin_snapshot_backup as run_backup,
-};
+pub use service_backup::run_admin_snapshot_backup as run_backup;
 
 #[cfg(test)]
 mod tests {

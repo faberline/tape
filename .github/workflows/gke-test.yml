@@ -14,6 +14,7 @@
 #   operator_ha        k8s/gke-test-job/operator_ha
 #   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
 #   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
+#   operator_partition k8s/gke-test-job/operator_partition (dispatch only, paid: never in all and never in ci.yml)
 #   operator_rollback  k8s/gke-test-job/operator_rollback (dispatch only, paid: never in all and never in ci.yml)
 #   operator_soak      k8s/gke-test-job/operator_soak (dispatch only, paid, soak_hours default 4: never in all and never in ci.yml)
 # ci.yml runs all of them on a pull request; a dispatch here can pick one.
@@ -37,7 +38,7 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback, operator_soak]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback, operator_soak]
         default: all
       backup_bucket:
         description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
@@ -201,7 +202,7 @@ jobs:
 
           case "$INPUT_SUITE" in
             all) suites='["operator_recovery","operator_ha"]' ;;
-            operator_recovery | operator_ha) suites="[\"${INPUT_SUITE}\"]" ;;
+            operator_recovery | operator_ha | operator_partition) suites="[\"${INPUT_SUITE}\"]" ;;
             operator_restore)
               [[ "$INPUT_BACKUP_BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]] \
                 || die "operator_restore needs backup_bucket, got: $INPUT_BACKUP_BUCKET"
@@ -225,7 +226,7 @@ jobs:
                 || die "operator_soak needs soak_hours from 0.05 to 5, got: $INPUT_SOAK_HOURS"
               suites='["operator_soak"]'
               ;;
-            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback or operator_soak, got: $INPUT_SUITE" ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback or operator_soak, got: $INPUT_SUITE" ;;
           esac
 
           {
@@ -277,9 +278,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+    uses: faberline/aw/.github/workflows/gke-test.yml@8e6189b1a244da71a0c09f71ce869e8715d04f0c
     with:
-      aw-ref: f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c
       image: ${{ needs.resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
@@ -287,9 +288,10 @@ jobs:
       test-image: ${{ needs.test-client.outputs.image }}
       test-image-name: tape-test-client
       test-env: ${{ needs.resolve.outputs.test-env }}
-      # The soak is the one long suite: 330 is the longest allowed by the pinned run.sh
-      # (it keeps TEST_JOB_TIMEOUT at ttl minus 15 minutes). Other suites keep the 90 default.
+      # The soak is the one long suite. The aw workflow needs queue-minutes + ttl-minutes < 360,
+      # so the soak has 330 + 29 = 359; the other suites keep the aw defaults (90 and 120).
       ttl-minutes: ${{ matrix.suite == 'operator_soak' && 330 || 90 }}
+      queue-minutes: ${{ matrix.suite == 'operator_soak' && 29 || 120 }}
       evidence-suffix: ${{ matrix.suite }}
 
   image-arm64:
