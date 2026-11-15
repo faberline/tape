@@ -18,6 +18,7 @@ mod e2e;
 mod graceful_shutdown;
 mod http_transport;
 mod jetstream_benchmark_contract;
+mod limits_docs;
 mod long_running_stability;
 mod network_policy_assets;
 mod observability_assets;

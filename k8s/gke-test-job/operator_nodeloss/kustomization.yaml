@@ -1,0 +1,16 @@
+# GKE e2e suite `operator_nodeloss` (crates/tape/tests/it/e2e/operator_nodeloss.rs):
+# a 3-replica Tape group loses the node of its raft leader; a survivor leads,
+# the lost pod is Ready again and every acked append is read back.
+#
+# faberline/aw's run.sh deploys k8s/overlays/gke-test, waits for the operator
+# rollout, sets this folder's namespace and test image, adds the ConfigMap
+# gke-test-env (E2E_EXPECTED_*), applies it, and passes only when Job/tape-e2e
+# completes and its log does not say `running 0 tests`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tape
+
+resources:
+  - rbac.yaml
+  - job.yaml
