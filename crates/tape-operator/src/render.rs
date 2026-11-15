@@ -25,6 +25,7 @@ use super::crd::{AuthMode, Tape};
 use backup::{backup_cron_job, backup_service_account};
 use observability::{prometheus_rule, service_monitor};
 use placement::apply_pod_placement;
+use service_k8s::render::stateful_instance::StatefulInstanceError;
 use service_k8s::render::{self, RenderCtx};
 use service_k8s::service::PruneTarget;
 use statefulset::statefulset;
@@ -91,15 +92,7 @@ fn owner_ref(tape: &Tape) -> Option<Value> {
 
 /// tape's render identity for the shared [`service_k8s::render`] helpers.
 fn ctx<'a>(tape: &Tape, name: &'a str, ns: &'a str) -> RenderCtx<'a> {
-    RenderCtx {
-        app: APP,
-        manager: MANAGER,
-        api_version: API_VERSION,
-        kind: KIND,
-        name,
-        ns,
-        owner: owner_ref(tape),
-    }
+    RenderCtx::new(APP, MANAGER, API_VERSION, KIND, name, ns).with_owner(owner_ref(tape))
 }
 
 /// Which shared projection source (if any) supplies the token registry file.
@@ -135,7 +128,7 @@ fn token_registry_source(tape: &Tape) -> Option<render::TokenRegistrySource<'_>>
 /// Render every child object for `tape`, in dependency order (identity first,
 /// then the workload + its Services + PDB, then the opt-in observability pair
 /// and the optional backup CronJob).
-pub fn render(tape: &Tape) -> Vec<Value> {
+pub fn render(tape: &Tape) -> Result<Vec<Value>, StatefulInstanceError> {
     let name = instance(tape);
     let ns = namespace(tape);
     let cx = ctx(tape, &name, &ns);
@@ -145,7 +138,7 @@ pub fn render(tape: &Tape) -> Vec<Value> {
     if tape.spec.service_account_name.is_none() {
         objects.push(render::service_account(&cx, COMPONENT));
     }
-    objects.push(statefulset(tape, &cx, &headless));
+    objects.push(statefulset(tape, &cx, &headless)?);
     objects.push(render::headless_service_with_ports(
         &cx,
         &headless,
@@ -167,7 +160,7 @@ pub fn render(tape: &Tape) -> Vec<Value> {
     if let Some(cron) = backup_cron_job(tape, &cx) {
         objects.push(cron);
     }
-    objects
+    Ok(objects)
 }
 
 /// Children a previous spec rendered that this one no longer wants (#3054).
@@ -221,11 +214,11 @@ pub fn render(tape: &Tape) -> Vec<Value> {
 pub fn prunes(tape: &Tape) -> Vec<PruneTarget> {
     let mut targets = Vec::new();
     if tape.spec.backup.is_none() {
-        targets.push(PruneTarget {
-            api_version: "batch/v1",
-            kind: "CronJob",
-            name: backup_child(&instance(tape)),
-        });
+        targets.push(PruneTarget::new(
+            "batch/v1",
+            "CronJob",
+            backup_child(&instance(tape)),
+        ));
     }
     targets
 }

@@ -22,22 +22,19 @@ async fn file_snapshot_seeds_fresh_pvc_before_raft_catch_up() {
     let bytes = encode_snapshot(source.lock().unwrap().clone(), 42).unwrap();
 
     let dir = tempfile::tempdir().unwrap();
-    prepare_bootstrap_seed(dir.path(), 3, &bytes).unwrap();
+    prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(3), &bytes).unwrap();
 
     let restored = Arc::new(Mutex::new(TapeJournal::default()));
     let raft = TapeRaft::spawn(
         Arc::clone(&restored),
         &dir.path().join("raft"),
-        3,
-        Membership {
-            voters: vec![3],
-            learners: Vec::new(),
-        },
+        raft_runtime::NodeId::new(3),
+        Membership::new(vec![raft_runtime::NodeId::new(3)], Vec::new()),
         HashMap::new(),
         TapeRaft::host_config(8),
     )
     .unwrap();
-    assert_eq!(raft.applied_index(), 42);
+    assert_eq!(raft.applied_index(), raft_runtime::Index::new(42));
     let events = restored.lock().unwrap().replay("orders", None, None, None);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].payload["n"], 7);
@@ -57,7 +54,7 @@ fn ext4_lost_and_found_alone_is_not_raft_state() {
 
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("lost+found")).unwrap();
-    prepare_bootstrap_seed(dir.path(), 2, &bytes).unwrap();
+    prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(2), &bytes).unwrap();
     assert!(dir.path().join("raft").exists());
 }
 
@@ -72,7 +69,7 @@ fn lost_and_found_plus_any_other_entry_is_still_rejected() {
     let sentinel = dir.path().join("existing-state");
     std::fs::write(&sentinel, b"keep").unwrap();
 
-    let err = prepare_bootstrap_seed(dir.path(), 0, &bytes).unwrap_err();
+    let err = prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(0), &bytes).unwrap_err();
     assert!(err.to_string().contains("empty data directory"), "{err:#}");
     assert_eq!(std::fs::read(&sentinel).unwrap(), b"keep");
     assert!(!dir.path().join("raft").exists());
@@ -86,7 +83,7 @@ fn dirty_pvc_is_rejected_without_overwriting_local_state() {
     let sentinel = dir.path().join("existing-state");
     std::fs::write(&sentinel, b"keep").unwrap();
 
-    let err = prepare_bootstrap_seed(dir.path(), 0, &bytes).unwrap_err();
+    let err = prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(0), &bytes).unwrap_err();
     assert!(err.to_string().contains("empty data directory"), "{err:#}");
     assert_eq!(std::fs::read(&sentinel).unwrap(), b"keep");
     assert!(!dir.path().join("raft").exists());
@@ -136,7 +133,7 @@ async fn restart_onto_already_seeded_dir_is_detected_so_the_caller_can_skip_rese
     // First boot: fresh PVC, bootstrapSeedUri set -> the caller's probe sees
     // no existing state and proceeds to seed exactly as today.
     assert!(!data_dir_has_existing_state(dir.path()).unwrap());
-    prepare_bootstrap_seed(dir.path(), 5, &bytes).unwrap();
+    prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(5), &bytes).unwrap();
 
     // Second boot (pod replacement onto the SAME PVC, CR still carries the
     // field): the probe must now report existing state so the caller skips
@@ -149,16 +146,13 @@ async fn restart_onto_already_seeded_dir_is_detected_so_the_caller_can_skip_rese
     let raft = TapeRaft::spawn(
         Arc::clone(&restored),
         &dir.path().join("raft"),
-        5,
-        Membership {
-            voters: vec![5],
-            learners: Vec::new(),
-        },
+        raft_runtime::NodeId::new(5),
+        Membership::new(vec![raft_runtime::NodeId::new(5)], Vec::new()),
         HashMap::new(),
         TapeRaft::host_config(8),
     )
     .unwrap();
-    assert_eq!(raft.applied_index(), 11);
+    assert_eq!(raft.applied_index(), raft_runtime::Index::new(11));
     let events = restored.lock().unwrap().replay("orders", None, None, None);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].payload["n"], 5);
@@ -166,14 +160,15 @@ async fn restart_onto_already_seeded_dir_is_detected_so_the_caller_can_skip_rese
     // prepare_bootstrap_seed itself still refuses on this now-populated dir
     // -- the last line of defense stays intact even though the restart path
     // no longer calls it.
-    let err = prepare_bootstrap_seed(dir.path(), 5, &bytes).unwrap_err();
+    let err = prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(5), &bytes).unwrap_err();
     assert!(err.to_string().contains("empty data directory"), "{err:#}");
 }
 
 #[test]
 fn malformed_seed_is_rejected_before_creating_raft_files() {
     let dir = tempfile::tempdir().unwrap();
-    let err = prepare_bootstrap_seed(dir.path(), 1, b"not-json").unwrap_err();
+    let err =
+        prepare_bootstrap_seed(dir.path(), raft_runtime::NodeId::new(1), b"not-json").unwrap_err();
     assert!(
         err.to_string().contains("decode bootstrap JournalSnapshot"),
         "{err:#}"
