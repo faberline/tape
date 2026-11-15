@@ -1,0 +1,41 @@
+# What the suite reads and does in the run's namespace: it reads the Tape
+# pods and their node, proxies /raftz to them, deletes the leader pod, patches
+# the operator Deployment's replicas to 1 and the Tape CR. Deleting the leader's
+# Node is cluster-wide, so that grant is ClusterRole/tape-e2e-node-loss in
+# k8s/overlays/gke-test.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tape-e2e
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/proxy", "pods/log"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["patch"]
+  - apiGroups: ["tape.dev"]
+    resources: ["tapes"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tape-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tape-e2e
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape
