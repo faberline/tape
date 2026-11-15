@@ -161,9 +161,10 @@ keep tape's own proof.
   twenty consecutive times with a single test thread on a loaded host, and no
   case carries a shared deadline constant.
 - Tracking: Not assigned. [Milestone #18](https://github.com/faberline/tape/milestone/18)
-  (`tape@0.5.0`, closed) shipped the phase-local waits; the concurrent-ingress
-  case still flakes ([#18](https://github.com/faberline/tape/issues/18)), so
-  the twenty-run evidence is not met.
+  (`tape@0.5.0`, closed) shipped the phase-local waits; the concurrent-ingress flake
+  was a core `raft-runtime` fault fixed in core v0.5.0
+  ([#30](https://github.com/faberline/tape/issues/30)); the twenty-run evidence
+  for the other cases is still open.
 
 ### Pub/Sub rebaseline
 
