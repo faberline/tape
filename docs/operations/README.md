@@ -26,9 +26,7 @@ cargo test --release --test tape_perf_gate  # the local performance gate
 ```
 
 `crates/tape/tests/it` starts real `tape serve` processes, including three-process raft
-groups. `raft_failover::concurrent_ingress_across_all_replicas_commits_without_raft_timeouts`
-is timing-sensitive on a loaded machine; run it alone with
-`cargo test --test it raft_failover -- --test-threads=1` when it fails.
+groups.
 
 ## Using core
 
@@ -36,7 +34,7 @@ tape depends on faberline/core crates by git tag, one entry per crate, all at
 the same tag:
 
 ```toml
-raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.4.14" }
+raft-runtime = { git = "https://github.com/faberline/core", tag = "v0.5.0" }
 ```
 
 To move to a new core release, change every tag together, refresh

@@ -14,7 +14,9 @@
 #   operator_ha        k8s/gke-test-job/operator_ha
 #   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
 #   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
+#   operator_partition k8s/gke-test-job/operator_partition (dispatch only, paid: never in all and never in ci.yml)
 #   operator_rollback  k8s/gke-test-job/operator_rollback (dispatch only, paid: never in all and never in ci.yml)
+#   operator_diskfull  k8s/gke-test-job/operator_diskfull (dispatch only, paid: never in all and never in ci.yml)
 # ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a
@@ -36,7 +38,7 @@ on:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_rollback]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback, operator_diskfull]
         default: all
       backup_bucket:
         description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
@@ -194,7 +196,7 @@ jobs:
 
           case "$INPUT_SUITE" in
             all) suites='["operator_recovery","operator_ha"]' ;;
-            operator_recovery | operator_ha) suites="[\"${INPUT_SUITE}\"]" ;;
+            operator_recovery | operator_ha | operator_partition | operator_diskfull) suites="[\"${INPUT_SUITE}\"]" ;;
             operator_restore)
               [[ "$INPUT_BACKUP_BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]] \
                 || die "operator_restore needs backup_bucket, got: $INPUT_BACKUP_BUCKET"
@@ -212,7 +214,7 @@ jobs:
               [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
               suites='["operator_rollback"]'
               ;;
-            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade or operator_rollback, got: $INPUT_SUITE" ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback or operator_diskfull, got: $INPUT_SUITE" ;;
           esac
 
           {

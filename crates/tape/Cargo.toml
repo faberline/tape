@@ -51,6 +51,7 @@ service-k8s = { workspace = true, optional = true }
 [dev-dependencies]
 futures.workspace = true
 http-body-util.workspace = true
+proptest.workspace = true
 rcgen.workspace = true
 reqwest.workspace = true
 rig.workspace = true
