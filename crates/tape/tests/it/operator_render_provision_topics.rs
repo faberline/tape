@@ -29,7 +29,7 @@ spec:
 "#;
 
         let tape: tape_operator::Tape = serde_yaml::from_str(tape_yaml).expect("parse tape CR");
-        let rendered = render::render(&tape);
+        let rendered = render::render(&tape).unwrap();
 
         // Find the StatefulSet in the rendered objects
         let statefulset = rendered
@@ -110,7 +110,7 @@ spec:
 "#;
 
         let tape: tape_operator::Tape = serde_yaml::from_str(tape_yaml).expect("parse tape CR");
-        let rendered = render::render(&tape);
+        let rendered = render::render(&tape).unwrap();
 
         // Find the StatefulSet in the rendered objects
         let statefulset = rendered

@@ -155,7 +155,7 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
     // so use that PVC for the ordinary journal store. An explicit --store
     // still wins, and replica mode continues to keep journal durability in
     // the Raft state machine instead of a second local store.
-    let replica_mode = raft_runtime::cluster::replica_mode();
+    let replica_mode = raft_runtime::replica_mode();
     let store_kind =
         resolve_journal_store(args.store.clone(), args.data_dir.as_deref(), replica_mode);
     // #3052: the WAL arm additionally needs a `probe_dir` for the periodic
@@ -295,9 +295,9 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
             )?,
         });
         tracing::info!(
-            node_id = topo.node_id,
+            node_id = topo.node_id.get(),
             replicas = topo.replicas_per_shard,
-            voters = topo.membership.voters.len(),
+            voters = topo.membership.voters().len(),
             peer_scheme,
             peer_port,
             "raft: replica/HA mode — append/checkpoint-put replicate"
