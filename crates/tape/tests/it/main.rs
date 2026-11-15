@@ -48,3 +48,4 @@ mod spec_generated_clients;
 mod spec_route_parity;
 mod subscription_config;
 mod tape_lumen_profile_contract;
+mod threat_model_docs;
