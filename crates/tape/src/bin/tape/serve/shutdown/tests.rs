@@ -82,9 +82,9 @@ async fn drain_delay_is_capped_by_the_deadline() {
 
     assert_eq!(
         drain_until(deadline, Duration::from_secs(60)),
-        deadline.expires_at
+        deadline.expires_at()
     );
-    assert!(drain_until(deadline, Duration::ZERO) < deadline.expires_at);
+    assert!(drain_until(deadline, Duration::ZERO) < deadline.expires_at());
 }
 
 /// An idle HTTP/1.1 keep-alive connection must not hold the public server
