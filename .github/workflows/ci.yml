@@ -325,8 +325,9 @@ jobs:
   e2e-gke:
     name: "e2e: GKE (${{ matrix.suite }})"
     needs: [e2e-resolve, e2e-test-client]
-    # One call at a time: the repository's concurrency group in aw keeps only
-    # one waiting run. fail-fast off runs the other suites when one fails.
+    # One call at a time: max-parallel 1 runs one suite at a time on a fresh deploy.
+    # aw queues the calls with a Kubernetes Lease and cancels none (aw#293, aw#297).
+    # fail-fast off runs the other suites when one fails.
     strategy:
       max-parallel: 1
       fail-fast: false
@@ -336,9 +337,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@bfa0a46a6a822293e88882793c57b28413b2d390
+    uses: faberline/aw/.github/workflows/gke-test.yml@8e6189b1a244da71a0c09f71ce869e8715d04f0c
     with:
-      aw-ref: bfa0a46a6a822293e88882793c57b28413b2d390
+      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c
       image: ${{ needs.e2e-resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
