@@ -32,7 +32,9 @@ not require cutting a release first — that is how tape went 0.4.5 → 0.4.11
 during the acceptance campaign, seven version bumps carrying no user-facing
 change. Dispatch `tape-test-image` (optionally naming a `ref`); its run
 summary prints the pushed tag already pinned by digest, ready to paste into
-the acceptance harness's `TAPE_IMAGE`. Both lines land on the same GHCR
+the acceptance harness's `TAPE_IMAGE`. The input `target` (default `server`)
+names the `Dockerfile.test` stage to build; an empty `target` builds the last
+stage. Both lines land on the same GHCR
 package, so `sha-*` tags inherit its public visibility and GKE pulls them
 without a pull secret. `tape-test-image.yml` must never add `latest` or a
 semver tag.
