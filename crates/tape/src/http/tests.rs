@@ -273,3 +273,4 @@ pub(crate) async fn put_json(
 }
 
 mod degraded;
+mod recovery;

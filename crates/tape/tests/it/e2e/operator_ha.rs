@@ -166,6 +166,8 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
     kubectl(&["patch", "tape", TAPE, "--type=merge", "-p", &patch]);
 
     // Wait for tape-0..2 Ready
+    // The StatefulSet rolls tape-0 after tape-1 and tape-2 are Ready; wait for it, or the leader delete leaves no quorum (#163).
+    wait_for_statefulset_rollout(3);
     let pods = wait_for_ready_tape_replicas(3);
     evidence(
         SUITE,
@@ -902,6 +904,57 @@ fn wait_for_ready_tape_replicas(want: usize) -> Vec<String> {
     )
 }
 
+/// Ok only when the StatefulSet has finished its rollout to `want` replicas:
+/// the controller saw the newest generation, the update revision is the
+/// current one, and every replica is updated and Ready.
+fn statefulset_rollout_complete(statefulset: &Value, want: u64) -> Result<(), String> {
+    let count = |field: &str| -> Result<u64, String> {
+        statefulset["status"][field]
+            .as_u64()
+            .ok_or_else(|| format!("status.{field} missing"))
+    };
+    let generation = statefulset["metadata"]["generation"]
+        .as_u64()
+        .ok_or_else(|| "metadata.generation missing".to_owned())?;
+    let observed = count("observedGeneration")?;
+    if observed != generation {
+        return Err(format!(
+            "observedGeneration {observed} != generation {generation}"
+        ));
+    }
+    let current = statefulset["status"]["currentRevision"]
+        .as_str()
+        .unwrap_or_default();
+    let update = statefulset["status"]["updateRevision"]
+        .as_str()
+        .unwrap_or_default();
+    if current.is_empty() || update.is_empty() || current != update {
+        return Err(format!(
+            "updateRevision {update} != currentRevision {current}"
+        ));
+    }
+    for field in ["replicas", "updatedReplicas", "readyReplicas"] {
+        let got = count(field)?;
+        if got != want {
+            return Err(format!("{field} {got} != {want}"));
+        }
+    }
+    Ok(())
+}
+
+fn wait_for_statefulset_rollout(want: u64) {
+    wait_for(
+        &format!("statefulset {TAPE} rolled out to {want} replicas"),
+        SERVER_TIMEOUT,
+        || {
+            let out = try_kubectl(&["get", "statefulset", TAPE, "-o", "json"])?;
+            let parsed: Value =
+                serde_json::from_str(&out).map_err(|err| format!("not JSON: {err}"))?;
+            statefulset_rollout_complete(&parsed, want)
+        },
+    )
+}
+
 fn raftz_of(pod: &str) -> Result<Value, String> {
     let ns = required_env("NAMESPACE");
     let raw = format!("/api/v1/namespaces/{ns}/pods/{pod}:7137/proxy/raftz");
@@ -1214,5 +1267,84 @@ fn sigterm_test_appends_only_through_append_when_settled() {
         body.matches("append_when_settled(").count(),
         2,
         "the loop and sigterm-3 must both use append_when_settled"
+    );
+}
+
+fn rolled_out_statefulset() -> Value {
+    json!({
+        "metadata": {"generation": 4},
+        "status": {
+            "observedGeneration": 4,
+            "currentRevision": "tape-b",
+            "updateRevision": "tape-b",
+            "replicas": 3,
+            "updatedReplicas": 3,
+            "readyReplicas": 3
+        }
+    })
+}
+
+#[test]
+fn rollout_is_complete_when_revisions_match_and_all_replicas_are_ready() {
+    assert_eq!(
+        statefulset_rollout_complete(&rolled_out_statefulset(), 3),
+        Ok(())
+    );
+}
+
+#[test]
+fn rollout_is_incomplete_while_the_update_revision_differs() {
+    let mut value = rolled_out_statefulset();
+    value["status"]["currentRevision"] = json!("tape-a");
+    value["status"]["updatedReplicas"] = json!(2);
+    let err = statefulset_rollout_complete(&value, 3).unwrap_err();
+    assert!(err.contains("updateRevision"), "{err}");
+}
+
+#[test]
+fn rollout_is_incomplete_when_the_controller_has_not_seen_the_latest_generation() {
+    let mut value = rolled_out_statefulset();
+    value["status"]["observedGeneration"] = json!(3);
+    let err = statefulset_rollout_complete(&value, 3).unwrap_err();
+    assert!(err.contains("observedGeneration"), "{err}");
+}
+
+#[test]
+fn rollout_is_incomplete_when_a_replica_is_not_ready() {
+    let mut value = rolled_out_statefulset();
+    value["status"]["readyReplicas"] = json!(2);
+    let err = statefulset_rollout_complete(&value, 3).unwrap_err();
+    assert!(err.contains("readyReplicas"), "{err}");
+}
+
+#[test]
+fn rollout_is_incomplete_when_a_count_is_missing() {
+    let mut value = rolled_out_statefulset();
+    value["status"]
+        .as_object_mut()
+        .unwrap()
+        .remove("readyReplicas");
+    let err = statefulset_rollout_complete(&value, 3).unwrap_err();
+    assert!(err.contains("readyReplicas"), "{err}");
+}
+
+#[test]
+fn sigterm_test_waits_for_the_statefulset_rollout_before_it_picks_the_leader() {
+    let src = include_str!("operator_ha.rs");
+    let start = src
+        .find(&["async fn leader_sigterm", "_hands_off"].concat())
+        .expect("test fn present");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("end of fn");
+    let body = &body[..end];
+    let rollout = body
+        .find(&["wait_for_statefulset_", "rollout(3)"].concat())
+        .expect("rollout wait in the sigterm test");
+    let pick = body
+        .find(&["wait_for_ready_tape_", "replicas(3)"].concat())
+        .expect("replica wait in the sigterm test");
+    assert!(
+        rollout < pick,
+        "the rollout wait must come before the replica wait"
     );
 }
