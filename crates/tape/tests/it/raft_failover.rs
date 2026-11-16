@@ -489,7 +489,20 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
     let peers_csv = binds.join(",");
     let dirs: Vec<tempfile::TempDir> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
     let nodes: Vec<Node> = (0..3u32)
-        .map(|i| spawn_node(i, &binds[i as usize], dirs[i as usize].path(), &peers_csv))
+        .map(|i| {
+            let log_path = dirs[i as usize].path().join("node.log");
+            spawn_node_with(
+                i,
+                &binds[i as usize],
+                dirs[i as usize].path(),
+                &peers_csv,
+                move |command| {
+                    let file = std::fs::File::create(&log_path).unwrap();
+                    command.env("RUST_LOG", "warn,raft_runtime=info,tape_replication=info");
+                    command.stderr(Stdio::from(file));
+                },
+            )
+        })
         .collect();
     let client = reqwest::Client::builder()
         .http2_prior_knowledge()
@@ -543,6 +556,12 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
                     event_diagnostic(&[]),
                 ),
             };
+        }
+        for (i, dir) in dirs.iter().enumerate() {
+            eprintln!(
+                "phase=concurrent-ingress node {i} log tail:\n{}",
+                log_tail(&dir.path().join("node.log"), 120),
+            );
         }
         panic!("phase=concurrent-ingress append failure: {error:#}");
     }
@@ -605,4 +624,36 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
             "replica {base} must match exact expected event set",
         );
     }
+}
+
+/// Last `lines` lines of a node log, or a note that the file cannot be read.
+fn log_tail(path: &std::path::Path, lines: usize) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(text) => {
+            let all: Vec<&str> = text.lines().collect();
+            let start = all.len().saturating_sub(lines);
+            all[start..].join("\n")
+        }
+        Err(error) => format!("log unreadable: {error}"),
+    }
+}
+
+#[test]
+fn log_tail_returns_last_lines_and_reports_missing_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("node.log");
+    let content: String = (0..300).map(|n| format!("line {n}\n")).collect();
+    std::fs::write(&path, content).unwrap();
+
+    let tail = log_tail(&path, 120);
+    let lines: Vec<&str> = tail.lines().collect();
+    assert_eq!(lines.len(), 120, "tail must have exactly 120 lines");
+    assert_eq!(lines[0], "line 180");
+    assert_eq!(lines[119], "line 299");
+
+    let missing = log_tail(&dir.path().join("missing.log"), 120);
+    assert!(
+        missing.contains("unreadable"),
+        "missing file must be reported: {missing}"
+    );
 }
