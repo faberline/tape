@@ -143,5 +143,5 @@ an error (`[policy] size_warn` / `size_error`). No file is allowlisted.
 
 ## Core reuse check (S4)
 
-- 2026-11-15 (UTC): `aw standards check --repo . --core <core checkout>` on `main`, core tag `v0.5.0` (31 crates). Result: pass (CR0 to CR8), no findings, no exceptions.
+- 2026-11-16 (UTC): `aw standards check --repo . --core <core checkout>` on `main`, core tag `v0.5.0` (32 crates). Result: pass (CR0 to CR8), no findings, no exceptions.
 - CI runs the same check in the job `test-core-reuse`, and the `gate` job waits for it.
