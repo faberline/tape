@@ -25,5 +25,5 @@ check = "CI7"
 reason = "test-deps joins gate.needs in tape#144 after cargo audit passes; remove this exception there"
 
 [standards.coverage]
-line = 67.35
+line = 67.89
 target = 100
