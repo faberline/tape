@@ -19,3 +19,7 @@ Each alert that the tape rule files define has one row here: what it means, the 
 | `TapeOperatorReconcileErrorRate` | The tape operator fails more than 10% of its reconciles. | Run `kubectl get events -A --field-selector reason=ReconcileFailed`. | see the runbook annotation in `k8s/components/operator-monitoring/prometheusrule.yaml` |
 
 The rule files are the source, and the test `runbook_index::every_alert_has_a_row_in_the_index` keeps this table complete.
+
+## Procedures without an alert
+
+- [certificate-rotation.md](certificate-rotation.md): rotate the raft peer mTLS certificate or CA without a restart.
