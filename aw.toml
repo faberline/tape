@@ -23,3 +23,7 @@ harness = "cargo"
 [[standards.ci.exception]]
 check = "CI7"
 reason = "test-deps joins gate.needs in tape#144 after cargo audit passes; remove this exception there"
+
+[standards.coverage]
+line = 0.0   # set to the measured value, see Steps
+target = 100
