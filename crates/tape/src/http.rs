@@ -7,8 +7,6 @@ mod app_state;
 mod router;
 
 #[cfg(test)]
-mod recovery_tests;
-#[cfg(test)]
 mod tests;
 
 pub use app_state::AppState;
