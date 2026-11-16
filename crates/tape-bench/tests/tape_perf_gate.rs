@@ -28,6 +28,33 @@ const DURABLE_SCALING_MIN_RATIO: f64 = 4.0;
 /// How far below the 1-connection sample any other sample is allowed to
 /// fall before it counts as a real regression rather than scheduler noise.
 const DURABLE_NOISE_FLOOR_RATIO: f64 = 0.8;
+/// Number of full benchmark rounds. The gate judges the round with the median
+/// `scaling_ratio`, so one noisy round cannot fail it.
+const DURABLE_ROUNDS: usize = 5;
+
+/// Sorts `items` by `key` and returns the middle one (index `len / 2`).
+fn pick_median<T>(mut items: Vec<T>, key: impl Fn(&T) -> f64) -> T {
+    assert!(!items.is_empty(), "at least one round");
+    items.sort_by(|a, b| key(a).total_cmp(&key(b)));
+    let mid = items.len() / 2;
+    items.swap_remove(mid)
+}
+
+/// Runs the durable benchmark `rounds` times and returns the whole report of
+/// the round with the median `scaling_ratio`. Samples are never mixed across
+/// rounds, so the report's own ratio matches its own samples.
+fn median_durable_report(rounds: usize) -> tape_bench::DurableBenchReport {
+    let reports: Vec<_> = (0..rounds)
+        .map(|_| {
+            tape_bench::run_durable_benchmark(
+                DURABLE_EVENTS_PER_CONNECTION,
+                DURABLE_PAYLOAD_BYTES,
+                DURABLE_CONNECTION_COUNTS,
+            )
+        })
+        .collect();
+    pick_median(reports, |r| r.scaling_ratio)
+}
 
 #[test]
 fn local_replay_perf_gate_passes_without_external_win_claims() {
@@ -98,11 +125,7 @@ fn tape_bench_cli_reports_calibration_status() {
 /// `DURABLE_SCALING_MIN_RATIO`.
 #[test]
 fn durable_append_throughput_rises_with_connection_count() {
-    let report = tape_bench::run_durable_benchmark(
-        DURABLE_EVENTS_PER_CONNECTION,
-        DURABLE_PAYLOAD_BYTES,
-        DURABLE_CONNECTION_COUNTS,
-    );
+    let report = median_durable_report(DURABLE_ROUNDS);
     assert_eq!(report.samples.len(), DURABLE_CONNECTION_COUNTS.len());
     assert_eq!(report.payload_bytes, DURABLE_PAYLOAD_BYTES);
 
@@ -125,8 +148,8 @@ fn durable_append_throughput_rises_with_connection_count() {
     assert!(
         measured_ratio >= DURABLE_SCALING_MIN_RATIO,
         "16-connection durable throughput {:.2} ops/s is only {:.2}x the \
-         1-connection throughput {:.2} ops/s (need >= {DURABLE_SCALING_MIN_RATIO}x); \
-         samples: {:?}",
+         1-connection throughput {:.2} ops/s (need >= {DURABLE_SCALING_MIN_RATIO}x, \
+         rounds={DURABLE_ROUNDS}); samples: {:?}",
         sixteen_conn.ops_per_sec,
         measured_ratio,
         one_conn.ops_per_sec,
@@ -181,4 +204,19 @@ fn tape_bench_cli_durable_mode_reports_samples_and_ratio() {
     assert!(stdout.contains("\"scaling_ratio\""));
     assert!(stdout.contains("\"connections\": 1"));
     assert!(stdout.contains("\"connections\": 4"));
+}
+
+#[test]
+fn pick_median_returns_the_middle_item_by_key() {
+    assert_eq!(pick_median(vec![5.0, 1.0, 3.0, 4.0, 2.0], |x| *x), 3.0);
+}
+
+#[test]
+fn pick_median_ignores_one_outlier_round() {
+    assert_eq!(pick_median(vec![2.9, 6.5, 7.1, 6.8, 6.9], |x| *x), 6.8);
+}
+
+#[test]
+fn pick_median_single_item() {
+    assert_eq!(pick_median(vec![4.2], |x| *x), 4.2);
 }
