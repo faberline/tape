@@ -61,6 +61,8 @@ async fn repeated_restarts_preserve_append_history_and_checkpoint_progress() {
             .await
             .unwrap();
         assert!(matches!(checkpoint, Some(TapeOutcome::Checkpoint(Ok(_)))));
+        // Stop the host before reopening the same directory (#164).
+        raft.shutdown().await.unwrap();
         drop(raft);
 
         let recovered = Arc::new(Mutex::new(TapeJournal::default()));
@@ -81,14 +83,17 @@ async fn repeated_restarts_preserve_append_history_and_checkpoint_progress() {
             );
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        let journal = raft.journal();
-        let journal = journal.lock().unwrap();
-        assert_eq!(
-            journal.checkpoint("orders", "worker").unwrap().offset,
-            total
-        );
-        let events = journal.replay("orders", None, None, None);
-        assert_eq!(events.len() as u64, total);
-        assert_eq!(events.last().unwrap().payload["n"], total - 1);
+        {
+            let journal = raft.journal();
+            let journal = journal.lock().unwrap();
+            assert_eq!(
+                journal.checkpoint("orders", "worker").unwrap().offset,
+                total
+            );
+            let events = journal.replay("orders", None, None, None);
+            assert_eq!(events.len() as u64, total);
+            assert_eq!(events.last().unwrap().payload["n"], total - 1);
+        }
+        raft.shutdown().await.unwrap();
     }
 }
