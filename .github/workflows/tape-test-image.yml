@@ -36,17 +36,30 @@ on:
       ref:
         description: >-
           Git ref (branch, tag, or commit SHA) to build. Leave empty to
-          default to the ref that triggered this dispatch.
+          default to the commit of the triggering run (`github.sha`), so a queued run never builds a newer commit.
         required: false
         default: ""
+      target:
+        description: >-
+          Dockerfile.test stage to build. Default `server`. Empty builds the
+          last stage (for commits whose Dockerfile.test has no `server` stage).
+        required: false
+        default: server
   workflow_call:
     inputs:
       ref:
         description: >-
           Git ref (branch, tag, or commit SHA) to build. Leave empty to
-          default to the ref that triggered this call.
+          default to the commit of the triggering run (`github.sha`), so a queued run never builds a newer commit.
         required: false
         default: ""
+        type: string
+      target:
+        description: >-
+          Dockerfile.test stage to build. Default `server`. Empty builds the
+          last stage (for commits whose Dockerfile.test has no `server` stage).
+        required: false
+        default: server
         type: string
     outputs:
       image:
@@ -87,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
@@ -131,7 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Resolve commit SHA and image tag
         id: ver
@@ -176,7 +189,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.test
-          target: server
+          target: ${{ inputs.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           # NEVER add `latest` or a semver tag here — this is the dev/test
