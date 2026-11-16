@@ -463,7 +463,7 @@ until replay_events > "$EVIDENCE_DIR/kubernetes/tape-replay-after-seed-clear.jso
 done
 stop_forward
 
-# Failover proof, adapted from apps/relay/scripts/kind-failover-smoke.sh:
+# Failover proof, adapted from an earlier kind failover smoke script:
 # per-pod /raftz polling to find the leader, kill it, confirm re-election to
 # a distinct node, then confirm a post-failover write commits and replays.
 start_pod_forwards
