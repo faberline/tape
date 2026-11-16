@@ -15,7 +15,7 @@ const MAX_CHECKPOINT_P95_US: u128 = 5_000;
 /// scaling gate. 1 is the pre-#3052 flat-line baseline; 16 is the point the
 /// group-commit design must have visibly amortized the fsync barrier by.
 const DURABLE_CONNECTION_COUNTS: &[usize] = &[1, 4, 16];
-const DURABLE_EVENTS_PER_CONNECTION: usize = 200;
+const DURABLE_EVENTS_PER_CONNECTION: usize = 500;
 const DURABLE_PAYLOAD_BYTES: usize = 128;
 
 /// AC1's ratio gate: 16-connection durable append throughput must be at
@@ -31,6 +31,8 @@ const DURABLE_NOISE_FLOOR_RATIO: f64 = 0.8;
 /// Number of full benchmark rounds. The gate judges the round with the median
 /// `scaling_ratio`, so one noisy round cannot fail it.
 const DURABLE_ROUNDS: usize = 5;
+/// Full benchmark rounds that run first and are thrown away (cold page cache, cold fsync path).
+const DURABLE_WARMUP_ROUNDS: usize = 1;
 
 /// Sorts `items` by `key` and returns the middle one (index `len / 2`).
 fn pick_median<T>(mut items: Vec<T>, key: impl Fn(&T) -> f64) -> T {
@@ -40,19 +42,25 @@ fn pick_median<T>(mut items: Vec<T>, key: impl Fn(&T) -> f64) -> T {
     items.swap_remove(mid)
 }
 
+/// Calls `run` `warmup + rounds` times, drops the results of the first
+/// `warmup` calls and returns the other `rounds` results in call order.
+fn collect_rounds<T>(warmup: usize, rounds: usize, mut run: impl FnMut() -> T) -> Vec<T> {
+    let total = warmup + rounds;
+    (0..total).map(|_| run()).skip(warmup).collect()
+}
+
 /// Runs the durable benchmark `rounds` times and returns the whole report of
 /// the round with the median `scaling_ratio`. Samples are never mixed across
-/// rounds, so the report's own ratio matches its own samples.
+/// rounds, so the report's own ratio matches its own samples. The warm-up
+/// rounds are not counted.
 fn median_durable_report(rounds: usize) -> tape_bench::DurableBenchReport {
-    let reports: Vec<_> = (0..rounds)
-        .map(|_| {
-            tape_bench::run_durable_benchmark(
-                DURABLE_EVENTS_PER_CONNECTION,
-                DURABLE_PAYLOAD_BYTES,
-                DURABLE_CONNECTION_COUNTS,
-            )
-        })
-        .collect();
+    let reports = collect_rounds(DURABLE_WARMUP_ROUNDS, rounds, || {
+        tape_bench::run_durable_benchmark(
+            DURABLE_EVENTS_PER_CONNECTION,
+            DURABLE_PAYLOAD_BYTES,
+            DURABLE_CONNECTION_COUNTS,
+        )
+    });
     pick_median(reports, |r| r.scaling_ratio)
 }
 
@@ -219,4 +227,32 @@ fn pick_median_ignores_one_outlier_round() {
 #[test]
 fn pick_median_single_item() {
     assert_eq!(pick_median(vec![4.2], |x| *x), 4.2);
+}
+
+#[test]
+fn collect_rounds_drops_the_warmup_results() {
+    let mut n = 0;
+    let got = collect_rounds(1, 3, || {
+        n += 1;
+        n
+    });
+    assert_eq!(got, vec![2, 3, 4]);
+    assert_eq!(n, 4);
+}
+
+#[test]
+fn collect_rounds_with_no_warmup_keeps_every_result() {
+    assert_eq!(collect_rounds(0, 2, || 7), vec![7, 7]);
+}
+
+#[test]
+fn collect_rounds_runs_exactly_warmup_plus_rounds_times() {
+    use std::cell::Cell;
+    let calls = Cell::new(0usize);
+    let got = collect_rounds(2, 5, || {
+        calls.set(calls.get() + 1);
+        calls.get()
+    });
+    assert_eq!(got.len(), 5);
+    assert_eq!(calls.get(), 7);
 }
