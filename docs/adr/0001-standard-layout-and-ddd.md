@@ -40,6 +40,10 @@ domain-driven design rules, checked by the workspace's rust-arch contract.
 - **One integration-test binary.** Every integration test is a module of
   `tests/it/main.rs`. `tape_perf_gate` stays standalone because it measures a
   quiet release build, and says so in its `//! isolation:` line.
+  `rust-layout.md` asks for one integration binary in `tests/it/`;
+  `crates/tape-bench/tests/tape_perf_gate.rs` is the deliberate exception.
+  It needs a quiet release build for its wall-clock budgets, so it stays a
+  separate target and is not moved. CONTRIBUTING, CI and the release gate name it.
 - **Long-term exceptions for the wire types.** Six journal domain types are
   tape's JSON format and OpenAPI schemas. They derive `utoipa::ToSchema` in the
   domain (B2) and the HTTP interface names them directly (B3). A duplicate set
