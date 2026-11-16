@@ -41,8 +41,9 @@ on:
         default: ""
       target:
         description: >-
-          Dockerfile.test stage to build. Default `server`. Empty builds the
-          last stage (for commits whose Dockerfile.test has no `server` stage).
+          Dockerfile.test stage to build. Default `server`. The value `none`
+          builds the last stage (for commits whose Dockerfile.test has no
+          `server` stage).
         required: false
         default: server
   workflow_call:
@@ -56,8 +57,9 @@ on:
         type: string
       target:
         description: >-
-          Dockerfile.test stage to build. Default `server`. Empty builds the
-          last stage (for commits whose Dockerfile.test has no `server` stage).
+          Dockerfile.test stage to build. Default `server`. The value `none`
+          builds the last stage (for commits whose Dockerfile.test has no
+          `server` stage).
         required: false
         default: server
         type: string
@@ -183,13 +185,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve Dockerfile target
+        id: target
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          if [ "${TARGET}" = "none" ]; then
+            echo "stage=" >> "$GITHUB_OUTPUT"
+          else
+            echo "stage=${TARGET}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push multi-arch test image
         id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.test
-          target: ${{ inputs.target }}
+          target: ${{ steps.target.outputs.stage }}
           platforms: linux/amd64,linux/arm64
           push: true
           # NEVER add `latest` or a semver tag here — this is the dev/test
