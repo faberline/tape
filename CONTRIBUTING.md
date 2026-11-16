@@ -7,18 +7,24 @@ How to change `tape`. What it promises and the work roots it owns live in
 [STATUS.md](STATUS.md); repository-wide authoring and verification rules live
 in [AW standards](https://github.com/faberline/aw/tree/main/docs/standards).
 
-Use the shared Faberline `issue-plan`, `issue-work`, and `issue-review`
-skills from [AW](https://github.com/faberline/aw/tree/main/plugins/faberline/skills).
-Each skill runs one pass; its `-loop` companion adds an explicit interval.
-Installing or updating a skill does not start a loop.
+Issues move through `aw`, the Faberline issue worker. The worker skill is
+`aw-worker` ([SKILL.md](https://github.com/faberline/aw/blob/main/plugins/faberline/skills/aw-worker/SKILL.md)).
+A person does not move an issue by hand; a worker runs `aw claim`, does one
+stage, then runs `aw report`, and `aw` moves the label.
 
-Planning writes the bounded issue contract. Work submits one issue's PR and
-runs affected unit/static checks. CI runs the required functional, integration
-and performance checks. It alone sets `done` after all required current-input
-gates pass, leaving the issue open for independent local review. A required
-CI failure reports its evidence and returns the issue to `todo`. Review reads
-the issue, diff and current CI; it runs no tests and never merges, closes or
-changes lifecycle labels. The controller owns Git and final acceptance.
+Every issue in the flow has the label `agent:claude` and one `stage:` label:
+
+| Label | Work |
+|---|---|
+| `stage:spec` | write the spec as a comment |
+| `stage:tdd` | write the tests first, then the code; `aw report ready` opens the pull request |
+| `stage:review` | review a green pull request; `aw` merges it or sends it back to tdd |
+| `stage:done` | merged and closed |
+
+The label `p0` to `p3` sets the priority (`p0` first). The label `blocked`
+means that a person must decide something; the issue comment says what.
+CI runs the required checks. Review reads the issue, the diff and CI; it
+runs no tests.
 
 Use the repository's existing complete gates for product claims. Keep local
 work limited to affected unit/static checks; functional, integration and
