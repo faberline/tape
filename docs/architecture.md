@@ -140,3 +140,8 @@ an error (`[policy] size_warn` / `size_error`). No file is allowlisted.
 - A standalone `tests/<name>.rs` binary needs a reason in its leading `//!`
   block (`//! isolation: ...`). The only one is `tape-bench`'s
   `tape_perf_gate`, which times a release build and is `test = false`.
+
+## Core reuse check (S4)
+
+- 2026-11-16 (UTC): `aw standards check --repo . --core <core checkout>` on `main`, core tag `v0.5.0` (32 crates). Result: pass (CR0 to CR8), no findings, no exceptions.
+- CI runs the same check in the job `test-core-reuse`, and the `gate` job waits for it.
