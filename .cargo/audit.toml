@@ -28,4 +28,6 @@ ignore = [
     "RUSTSEC-2024-0449",
     # lru 0.16.4, pinned by aws-sdk-s3 1.137.0 (the fix is lru 0.18.2, outside its range)
     "RUSTSEC-2026-0253",
+    # chrono 0.4.44, pinned by k8s-openapi 0.24.0 and kube 0.98.0 (no patched release)
+    "RUSTSEC-2026-0543",
 ]
