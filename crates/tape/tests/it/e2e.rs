@@ -21,6 +21,7 @@ mod operator_partition;
 mod operator_recovery;
 mod operator_restore;
 mod operator_rollback;
+mod operator_soak;
 mod operator_upgrade;
 
 use std::process::Command;
