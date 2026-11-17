@@ -13,7 +13,7 @@ use super::dto::{
 use super::errors::parse_body;
 use crate::application::JournalService;
 use tape_access::authorize;
-use tape_shared_kernel::PullSubscriptionBatch;
+use tape_shared_kernel::{ConsumerCheckpoint, PullSubscriptionBatch, Subscription};
 
 #[utoipa::path(
     post,
