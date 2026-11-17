@@ -159,8 +159,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: tape-ci-deps
-      - run: cargo install --locked cargo-deny
+      - run: cargo install --locked cargo-deny cargo-audit
       - run: cargo deny check licenses sources bans
+      - run: cargo deny check advisories
+      - run: cargo audit --db "$RUNNER_TEMP/advisory-db"
 
   # Reusable workflow: the server image, as in gke-test.yml (job image).
   e2e-image:
@@ -422,6 +424,7 @@ jobs:
       - test-features
       - test-docs-tests
       - test-perf
+      - test-deps
       - test-core-reuse
       - e2e-image
       - e2e-test-client
