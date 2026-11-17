@@ -21,6 +21,8 @@ ignore = [
     "RUSTSEC-2025-0134",
     # unsafe-libyaml 0.2.11, pinned by serde_yaml 0.9.34 (no patched release)
     "RUSTSEC-2024-0449",
+    # chrono 0.4.44, pinned by k8s-openapi 0.24.0 and kube 0.98.0 (no patched release)
+    "RUSTSEC-2026-0543",
 ]
 
 [licenses]
