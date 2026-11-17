@@ -5,7 +5,9 @@ use std::time::Duration;
 use anyhow::Result;
 use server_lifecycle::ShutdownDeadline;
 
-use super::{drain_until, finish_http, finish_peer_listener, PublicHttp, ServerTask};
+use super::{
+    drain_until, finish_http, finish_peer_listener, leadership_snapshot, PublicHttp, ServerTask,
+};
 
 /// A peer listener stand-in that records whether it saw the graceful-close
 /// request, and then either returns or keeps running.
@@ -122,4 +124,36 @@ async fn public_http_closes_idle_keep_alive_connections_before_the_deadline() {
         .expect("the server closed the keep-alive connection")
         .unwrap();
     assert_eq!(eof, 0, "the keep-alive connection is closed by the server");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn leadership_snapshot_reports_a_single_node_as_its_own_leader() {
+    use tape_replication::raft::TapeRaft;
+
+    let journal = Arc::new(std::sync::Mutex::new(
+        tape_shared_kernel::TapeJournal::default(),
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let raft = TapeRaft::spawn(
+        Arc::clone(&journal),
+        dir.path(),
+        raft_runtime::NodeId::new(0),
+        raft_runtime::Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
+        std::collections::HashMap::new(),
+        TapeRaft::host_config(1024),
+    )
+    .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(8);
+    while !leadership_snapshot(&raft).await.0 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "single node never elected a leader"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        leadership_snapshot(&raft).await,
+        (true, Some(raft_runtime::NodeId::new(0)))
+    );
 }
