@@ -183,20 +183,44 @@ pub(super) fn wait_for_raft_leader(pods: &[String]) -> String {
     })
 }
 
+/// One entry per pod with its last `/raftz` result, for a timeout message.
+fn raftz_report(last: &[(String, Result<Value, String>)]) -> String {
+    if last.is_empty() {
+        return "no survivors".to_owned();
+    }
+    last.iter()
+        .map(|(pod, result)| match result {
+            Ok(v) => format!("{pod}: {v}"),
+            Err(e) => format!("{pod}: error: {e}"),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn survivor_timeout_message(timeout: Duration, last: &[(String, Result<Value, String>)]) -> String {
+    format!(
+        "no survivor reported is_leader within {timeout:?}; last /raftz: {}",
+        raftz_report(last)
+    )
+}
+
 pub(super) fn wait_for_survivor_leader(survivors: &[String], timeout: Duration) -> String {
     let deadline = Instant::now() + timeout;
     loop {
+        let mut last: Vec<(String, Result<Value, String>)> = Vec::new();
         for pod in survivors {
-            if let Ok(raftz) = raftz_of(pod) {
-                if raftz["is_leader"].as_bool().unwrap_or(false) {
+            let raftz = raftz_of(pod);
+            if let Ok(body) = &raftz {
+                if body["is_leader"].as_bool().unwrap_or(false) {
                     return pod.clone();
                 }
             }
+            last.push((pod.clone(), raftz));
         }
-        assert!(
-            Instant::now() < deadline,
-            "no survivor reported is_leader within {timeout:?}"
-        );
+        if Instant::now() >= deadline {
+            dump_server_logs(survivors);
+            panic!("{}", survivor_timeout_message(timeout, &last));
+        }
         std::thread::sleep(Duration::from_millis(200));
     }
 }
@@ -251,6 +275,54 @@ fn non_503_is_not_transient() {
         500,
         &json!({ "error": "raft_unavailable" })
     ));
+}
+
+#[test]
+fn raftz_report_lists_each_survivor() {
+    let last = vec![
+        (
+            "tape-0".to_owned(),
+            Ok(json!({ "is_leader": false, "term": 3 })),
+        ),
+        ("tape-2".to_owned(), Err("not JSON: x".to_owned())),
+    ];
+    assert_eq!(
+        raftz_report(&last),
+        r#"tape-0: {"is_leader":false,"term":3}; tape-2: error: not JSON: x"#
+    );
+}
+
+#[test]
+fn raftz_report_of_no_survivors_says_so() {
+    assert_eq!(raftz_report(&[]), "no survivors");
+}
+
+#[test]
+fn survivor_timeout_message_names_the_bound_and_the_last_raftz() {
+    let last = vec![("tape-0".to_owned(), Err("timeout".to_owned()))];
+    assert_eq!(
+        survivor_timeout_message(Duration::from_secs(10), &last),
+        "no survivor reported is_leader within 10s; last /raftz: tape-0: error: timeout"
+    );
+}
+
+#[test]
+fn wait_for_survivor_leader_dumps_server_logs_when_it_times_out() {
+    let src = include_str!("raft.rs");
+    let start = src
+        .find(concat!("pub(super) fn ", "wait_for_survivor_leader"))
+        .expect("wait_for_survivor_leader is defined");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("wait_for_survivor_leader ends") + 3;
+    let func = &body[..end];
+    assert!(
+        func.contains(concat!("dump_server_logs", "(survivors)")),
+        "{func}"
+    );
+    assert!(
+        func.contains(concat!("survivor_timeout_message", "(")),
+        "{func}"
+    );
 }
 
 fn rolled_out_statefulset() -> Value {
