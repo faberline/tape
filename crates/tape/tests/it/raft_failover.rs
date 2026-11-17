@@ -497,9 +497,8 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
                 dirs[i as usize].path(),
                 &peers_csv,
                 move |command| {
-                    let file = std::fs::File::create(&log_path).unwrap();
                     command.env("RUST_LOG", "warn,raft_runtime=info,tape_replication=info");
-                    command.stderr(Stdio::from(file));
+                    capture_node_log(command, &log_path);
                 },
             )
         })
@@ -624,6 +623,35 @@ async fn concurrent_ingress_across_all_replicas_commits_without_raft_timeouts() 
             "replica {base} must match exact expected event set",
         );
     }
+}
+
+/// Sends both stdout and stderr of a child to `path`, in the order written,
+/// so a failed run can print the node's log.
+fn capture_node_log(command: &mut Command, path: &std::path::Path) {
+    let file = std::fs::File::create(path).unwrap();
+    command.stdout(Stdio::from(file.try_clone().unwrap()));
+    command.stderr(Stdio::from(file));
+}
+
+#[test]
+fn capture_node_log_keeps_stdout_and_stderr() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("node.log");
+    let mut command = Command::new("sh");
+    command
+        .arg("-c")
+        .arg("echo from-stdout; echo from-stderr >&2");
+    capture_node_log(&mut command, &path);
+    command.status().unwrap();
+    let log = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        log.lines().any(|line| line == "from-stdout"),
+        "stdout line missing from node log: {log}"
+    );
+    assert!(
+        log.lines().any(|line| line == "from-stderr"),
+        "stderr line missing from node log: {log}"
+    );
 }
 
 /// Last `lines` lines of a node log, or a note that the file cannot be read.
