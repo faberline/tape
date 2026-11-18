@@ -80,6 +80,17 @@ Topic `orders` has events at offsets 0, 1 and 2.
   stored one is refused, and a write to an offset above the topic end is
   refused.
 
+### Example
+
+Example for the recommended option (Option A below): the cursor is 2.
+`POST .../ack` with body `{"offset":3,"expected_offset":1}` answers 409. The
+same request with `"expected_offset":2` answers 200 and a checkpoint at 3.
+
+### Proving test
+
+To write later: `ack_with_stale_expected_offset_is_409` in
+`crates/tape/tests/it/http_transport.rs`.
+
 ### Decision needed
 
 A competing writer can move the cursor forward past events that a pull has
@@ -96,22 +107,33 @@ not yet returned. This is a real product choice.
   (`error.rs` says the outcomes are part of the snapshot format).
 - Recommendation: Option A. It is smaller and keeps the snapshot format.
 
-Example for the recommended option: the cursor is 2. `POST .../ack` with
-body `{"offset":3,"expected_offset":1}` answers 409. The same request with
-`"expected_offset":2` answers 200 and a checkpoint at 3.
-
-### Proving test
-
-To write later: `ack_with_stale_expected_offset_is_409` in
-`crates/tape/tests/it/http_transport.rs`.
-
 ## 3. Seek epochs
 
-### Present behaviour
+### No present behaviour
 
 - No seek exists. `ROADMAP.md#seek-snapshot-and-retention` owns it. The
   cursor is cumulative and monotonic. The comment on `put_checkpoint_at`
   (`tape_journal.rs`, line 118) says there is "no admin rewind verb".
+
+### Rule
+
+- Today there is no seek, and a cursor only moves forward. When the seek
+  lands, the rule is the option the desk chooses below. Under the recommended
+  Option A, an ack must carry the epoch of its pull, and an ack with an older
+  epoch is refused with 409 `stale_epoch`.
+
+### Example
+
+Example for Option A: the epoch is 0 and the cursor is 5. A puller pulls the
+window 5 to 7 under epoch 0. `POST .../seek` with `{"offset":0}` answers
+`{"epoch":1,"cursor":0}`. The puller's `POST .../ack` with
+`{"offset":7,"epoch":0}` answers 409 `stale_epoch`. A new pull returns
+`cursor` 0 and `epoch` 1.
+
+### Proving test
+
+To write later: `ack_after_seek_with_old_epoch_is_409` in a new file under
+`crates/tape/tests/it/`, named by the seek issue.
 
 ### Decision needed
 
@@ -125,17 +147,6 @@ To write later: `ack_with_stale_expected_offset_is_409` in
   unacked. This needs an ack deadline that does not exist yet, so it depends
   on `ROADMAP.md#subscription-ack-and-competing-subscribers`.
 - Recommendation: Option A.
-
-Example for Option A: the epoch is 0 and the cursor is 5. A puller pulls the
-window 5 to 7 under epoch 0. `POST .../seek` with `{"offset":0}` answers
-`{"epoch":1,"cursor":0}`. The puller's `POST .../ack` with
-`{"offset":7,"epoch":0}` answers 409 `stale_epoch`. A new pull returns
-`cursor` 0 and `epoch` 1.
-
-### Proving test
-
-To write later: `ack_after_seek_with_old_epoch_is_409` in a new file under
-`crates/tape/tests/it/`, named by the seek issue.
 
 ## 4. Commit with an unknown result
 
@@ -165,18 +176,22 @@ To write later: `ack_after_seek_with_old_epoch_is_409` in a new file under
   append>` and looks for its own `key`. Only if the key is absent does it
   append again. This relies on a unique `key` that the client chooses.
 
+### Example
+
+An ack with `{"offset":3}` times out. The client retries the same request.
+The response is 200 whether or not the first attempt committed, because an
+equal offset is accepted. A 409 `checkpoint offset 3 is behind existing
+offset 5` means the cursor is already past 3; the client treats it as success
+too.
+
+### Proving test
+
+To write later: `ack_retry_after_commit_is_success_or_stale_at_same_offset`
+in `crates/tape/tests/it/http_transport.rs`.
+
 ### Decision needed
 
 - Option A: keep this client-side rule. No server change.
 - Option B: add a server-side idempotency key to append.
 - Recommendation: Option A. Option B is a new product promise, and it
   conflicts with `docs/delivery-semantics.md`.
-
-Example: an ack with `{"offset":3}` times out. The client retries. The
-response is 200 (the first attempt was unknown), or 409 with a message that
-names the existing offset 3. The client treats both as success.
-
-### Proving test
-
-To write later: `ack_retry_after_commit_is_success_or_stale_at_same_offset`
-in `crates/tape/tests/it/http_transport.rs`.
