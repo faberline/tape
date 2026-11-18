@@ -598,7 +598,7 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@edb3802d18d39d205bd0ada8431ecc97c6938c14
+    uses: faberline/aw/.github/workflows/gke-test.yml@8e6189b1a244da71a0c09f71ce869e8715d04f0c
     with:
       image: ${{ needs.ghcr-image-and-attest.outputs.image_repo }}@${{ needs.ghcr-image-and-attest.outputs.root_digest }}
       image-name: ghcr.io/faberline/tape
@@ -613,7 +613,7 @@ jobs:
         E2E_EXPECTED_RUNTIME_DIGEST=${{ needs.ghcr-image-and-attest.outputs.amd64_digest }}
         E2E_PREVIOUS_IMAGE=${{ needs.identity.outputs.previous_image }}
       evidence-suffix: ${{ matrix.suite }}
-      aw-ref: edb3802d18d39d205bd0ada8431ecc97c6938c14
+      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c
 
   # GKE runs linux/amd64 only. The Rust suite e2e::image starts the
   # candidate's arm64 child with docker on GitHub's arm64 runner.
