@@ -43,6 +43,8 @@ pub enum TapeCommand {
         topic: String,
         name: String,
         offset: u64,
+        #[serde(default)]
+        expected_offset: Option<u64>,
         updated_at_ms: u64,
     },
     RetentionPut {
@@ -103,11 +105,13 @@ pub fn apply_command(journal: &mut TapeJournal, command: TapeCommand) -> TapeOut
             topic,
             name,
             offset,
+            expected_offset,
             updated_at_ms,
-        } => TapeOutcome::SubscriptionAcked(journal.ack_subscription_at(
+        } => TapeOutcome::SubscriptionAcked(journal.ack_subscription_expected_at(
             &topic,
             &name,
             offset,
+            expected_offset,
             updated_at_ms,
         )),
         TapeCommand::RetentionPut {
@@ -115,5 +119,24 @@ pub fn apply_command(journal: &mut TapeJournal, command: TapeCommand) -> TapeOut
             policy,
             now_ms,
         } => TapeOutcome::RetentionUpdated(journal.put_retention(topic, policy, now_ms)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ack_command_without_expected_offset_decodes() {
+        // An old raft log entry has no `expected_offset` field.
+        let old = r#"{"SubscriptionAck":{"topic":"t","name":"n","offset":1,"updated_at_ms":0}}"#;
+        let command: TapeCommand = serde_json::from_str(old).unwrap();
+        assert!(matches!(
+            command,
+            TapeCommand::SubscriptionAck {
+                expected_offset: None,
+                ..
+            }
+        ));
     }
 }

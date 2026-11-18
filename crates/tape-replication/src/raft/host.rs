@@ -258,12 +258,14 @@ impl TapeRaft {
         topic: String,
         name: String,
         offset: u64,
+        expected_offset: Option<u64>,
         updated_at_ms: u64,
     ) -> Result<(Index, Option<TapeOutcome>)> {
         self.propose_and_claim(TapeCommand::SubscriptionAck {
             topic,
             name,
             offset,
+            expected_offset,
             updated_at_ms,
         })
         .await

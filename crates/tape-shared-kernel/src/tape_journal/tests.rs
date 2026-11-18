@@ -177,3 +177,59 @@ fn retention_prunes_history_without_rewinding_offsets_and_protects_consumers() {
     );
     assert_eq!(appended.offset, 5, "retention must not reuse offsets");
 }
+
+#[test]
+fn ack_with_expected_offset_is_a_compare_and_set() {
+    let mut journal = TapeJournal::default();
+    for n in 0..3 {
+        journal.append_at("orders", None, serde_json::json!({"n": n}), 100, 100);
+    }
+    journal.create_subscription("orders", "worker-a").unwrap();
+
+    // a. no checkpoint counts as 0, so expected 0 matches and the ack advances.
+    let ack = journal
+        .ack_subscription_expected_at("orders", "worker-a", 1, Some(0), 0)
+        .unwrap();
+    assert_eq!(ack.offset, 1);
+
+    // b. expected 0 is stale (current is 1): 409-class error, cursor unchanged.
+    assert_eq!(
+        journal.ack_subscription_expected_at("orders", "worker-a", 3, Some(0), 0),
+        Err(SubscriptionAckError::Checkpoint(
+            TapeError::ExpectedOffsetMismatch {
+                expected_offset: 0,
+                current_offset: 1,
+            }
+        ))
+    );
+    assert_eq!(journal.checkpoint("orders", "worker-a").unwrap().offset, 1);
+
+    // c. expected equals the current cursor: the ack advances.
+    let ack = journal
+        .ack_subscription_expected_at("orders", "worker-a", 3, Some(1), 0)
+        .unwrap();
+    assert_eq!(ack.offset, 3);
+
+    // d. no expected offset keeps the old behaviour (same offset is idempotent).
+    let ack = journal
+        .ack_subscription_expected_at("orders", "worker-a", 3, None, 0)
+        .unwrap();
+    assert_eq!(ack.offset, 3);
+}
+
+#[test]
+fn two_subscriptions_keep_independent_cursors() {
+    let mut journal = TapeJournal::default();
+    journal.append_at("orders", None, serde_json::json!({"n": 1}), 100, 100);
+    journal.append_at("orders", None, serde_json::json!({"n": 2}), 200, 200);
+    journal.create_subscription("orders", "a").unwrap();
+    journal.create_subscription("orders", "b").unwrap();
+
+    journal.ack_subscription_at("orders", "a", 2, 0).unwrap();
+
+    let b = journal.pull_subscription("orders", "b", None).unwrap();
+    assert_eq!(b.cursor, 0);
+    assert_eq!(b.events.len(), 2);
+    let a = journal.pull_subscription("orders", "a", None).unwrap();
+    assert_eq!(a.cursor, 2);
+}
