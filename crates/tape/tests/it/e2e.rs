@@ -267,6 +267,46 @@ pub(crate) async fn assert_replay(http: &reqwest::Client, base: &str, topic: &st
     assert_eq!(ids, want, "replay of {topic}: {body}");
 }
 
+/// The server bounds one replay to this many events (`docs/glossary.md`).
+pub(crate) const REPLAY_PAGE: usize = 1_000;
+
+/// Replays every event of `topic` in order and returns its payload ids.
+/// The server bounds each replay to `REPLAY_PAGE` events, so this reads the
+/// topic page by page, each page starting after the last offset of the one before.
+pub(crate) async fn replay_all_ids(http: &reqwest::Client, base: &str, topic: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut from: u64 = 0;
+    loop {
+        let response = http
+            .get(format!(
+                "{base}/topics/{topic}/replay?from_offset={from}&limit={REPLAY_PAGE}"
+            ))
+            .send()
+            .await
+            .unwrap_or_else(|err| panic!("replay {topic}: {err}"));
+        let status = response.status();
+        let body: Value = response
+            .json()
+            .await
+            .unwrap_or_else(|err| panic!("replay {topic}: {err}"));
+        assert!(status.is_success(), "replay {topic}: {status} {body}");
+        let events = body["events"].as_array().cloned().unwrap_or_default();
+        if events.is_empty() {
+            return ids;
+        }
+        for event in &events {
+            if let Some(id) = event["payload"]["id"].as_str() {
+                ids.push(id.to_owned());
+            }
+        }
+        let last = events.last().expect("page is not empty");
+        let offset = last["offset"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("replay {topic}: event without offset"));
+        from = offset + 1;
+    }
+}
+
 /// Checks that exactly `want` live pods match `label`, that each runs the
 /// expected image in `name`, and that each runtime `imageID` binds it.
 /// Returns the image IDs.
@@ -370,4 +410,75 @@ fn stamps_accepts_the_short_and_the_full_sha() {
     assert!(!stamps("89abcdef", "01234567"));
     assert!(!stamps("0123456789ABCDEF", "01234567"));
     assert!(!stamps("89abcdef", full));
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+
+    use tape::http::{router, AppState};
+    use tape_shared_kernel::TapeJournal;
+
+    use super::{append, replay_all_ids, REPLAY_PAGE};
+
+    /// Starts the HTTP app on a loopback port and returns its base URL.
+    async fn start_server() -> String {
+        let state = AppState::new(TapeJournal::default(), None, 8 * 1024 * 1024);
+        let app = router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+        tokio::spawn(service_http::serve(
+            listener,
+            app,
+            std::future::pending::<()>(),
+        ));
+        format!("http://{addr}")
+    }
+
+    fn test_id(n: usize) -> String {
+        format!("t-{n:04}")
+    }
+
+    /// Appends `count` ids `t-0001`, `t-0002`, ... to `topic` and returns them.
+    async fn append_ids(
+        http: &reqwest::Client,
+        base: &str,
+        topic: &str,
+        count: usize,
+    ) -> Vec<String> {
+        let mut ids = Vec::with_capacity(count);
+        for n in 1..=count {
+            let id = test_id(n);
+            append(http, base, topic, &id).await;
+            ids.push(id);
+        }
+        ids
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn replay_all_ids_reads_every_page() {
+        let base = start_server().await;
+        let http = reqwest::Client::new();
+        let want = append_ids(&http, &base, "paging", 2_500).await;
+        let got = replay_all_ids(&http, &base, "paging").await;
+        assert_eq!(got.len(), 2_500);
+        assert_eq!(got, want);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn replay_all_ids_handles_an_exact_page() {
+        let base = start_server().await;
+        let http = reqwest::Client::new();
+        let want = append_ids(&http, &base, "exact", REPLAY_PAGE).await;
+        let got = replay_all_ids(&http, &base, "exact").await;
+        assert_eq!(got, want);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn replay_all_ids_returns_nothing_for_an_empty_topic() {
+        let base = start_server().await;
+        let http = reqwest::Client::new();
+        let got = replay_all_ids(&http, &base, "empty").await;
+        assert_eq!(got, Vec::<String>::new());
+    }
 }
