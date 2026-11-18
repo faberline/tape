@@ -43,7 +43,7 @@ pub(super) fn openapi() -> Value {
             "/topics/{topic}/replay": {
                 "get": {
                     "summary": "Replay topic history by offset or timestamp",
-                    "description": "Replay topic history by offset or timestamp without mutating checkpoints. No admin rewind verb exists: checkpoints are strictly monotonic. To reprocess history, callers must replay with an explicit from_offset (caller tracks progress) or use a new subscription name (a different name starts with a fresh checkpoint at 0).",
+                    "description": "Replay topic history by offset or timestamp without mutating checkpoints. `POST .../seek` rewinds a subscription cursor; checkpoints otherwise stay monotone. To reprocess history, callers must replay with an explicit from_offset (caller tracks progress) or use a new subscription name (a different name starts with a fresh checkpoint at 0).",
                     "parameters": [
                         topic_param(),
                         query_param("from_offset", "integer"),
@@ -114,6 +114,15 @@ pub(super) fn openapi() -> Value {
                     "parameters": [topic_param(), subscription_param()],
                     "requestBody": json_body("PullSubscriptionAckRequest"),
                     "responses": mutating_schema("ConsumerCheckpoint")
+                }
+            },
+            "/topics/{topic}/subscriptions/{subscription}/seek": {
+                "post": {
+                    "summary": "Rewind a pull subscription cursor and bump its epoch",
+                    "description": "Set the subscription cursor to an in-range offset and bump its epoch. An ack that carries an older epoch gets 409 stale_epoch. An offset outside the retained range gets 409 out_of_range with the usable bounds; an unknown subscription gets 404.",
+                    "parameters": [topic_param(), subscription_param()],
+                    "requestBody": json_body("SeekRequest"),
+                    "responses": mutating_schema("SeekOutcome")
                 }
             },
             "/topics/{topic}/consumers/{consumer}/checkpoint": {
@@ -235,7 +244,35 @@ pub(super) fn schemas() -> Value {
                     "type": "integer",
                     "minimum": 0,
                     "description": "Optional compare-and-set. When present and different from the current cursor (0 when there is no checkpoint), the ack answers 409 and changes nothing."
+                },
+                "epoch": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional epoch fence. When present and older than the subscription epoch, the ack answers 409 stale_epoch and changes nothing."
                 }
+            }
+        },
+        "SeekRequest": {
+            "type": "object",
+            "required": ["offset"],
+            "properties": {
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The offset the subscription cursor moves to. It must lie in the retained range."
+                }
+            }
+        },
+        "SeekOutcome": {
+            "type": "object",
+            "required": ["topic", "subscription", "epoch", "cursor", "earliest_offset", "end_offset"],
+            "properties": {
+                "topic": {"type": "string"},
+                "subscription": {"type": "string"},
+                "epoch": {"type": "integer", "minimum": 0},
+                "cursor": {"type": "integer", "minimum": 0},
+                "earliest_offset": {"type": "integer", "minimum": 0},
+                "end_offset": {"type": "integer", "minimum": 0}
             }
         },
         "CheckpointRequest": {

@@ -45,6 +45,7 @@ pub fn routes_json() -> String {
             {"method": "DELETE", "path": "/topics/{topic}/subscriptions/{subscription}", "purpose": "delete named pull cursor metadata"},
             {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/pull", "purpose": "read a bounded pull subscription window"},
             {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/ack", "purpose": "advance a pull subscription cursor"},
+            {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/seek", "purpose": "rewind a pull subscription cursor and bump its epoch"},
             {"method": "PUT", "path": "/topics/{topic}/consumers/{consumer}/checkpoint", "purpose": "advance a durable consumer cursor"},
             {"method": "GET", "path": "/topics/{topic}/consumers/{consumer}/checkpoint", "purpose": "read a durable consumer cursor"},
             {"method": "PUT", "path": "/topics/{topic}/retention", "purpose": "configure retention windows"},
@@ -100,6 +101,7 @@ The initial service contract is intentionally compact:
 - `GET`/`DELETE /topics/{topic}/subscriptions/{subscription}` declare one resource.
 - `POST /topics/{topic}/subscriptions/{subscription}/pull` declares bounded pull reads.
 - `POST /topics/{topic}/subscriptions/{subscription}/ack` declares explicit cursor advance; callers must self-enforce pull-before-ack by acking next_offset.
+- `POST /topics/{topic}/subscriptions/{subscription}/seek` rewinds a pull subscription cursor and bumps its epoch; an ack with an old `epoch` gets 409 `stale_epoch`.
 - `PUT /topics/{topic}/consumers/{consumer}/checkpoint` advances a replay cursor.
 - `GET /topics/{topic}/consumers/{consumer}/checkpoint` reads the replay cursor.
 - `GET /admin/backup` returns an admin-gated whole-journal snapshot.

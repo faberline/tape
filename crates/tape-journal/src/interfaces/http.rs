@@ -65,6 +65,10 @@ pub fn data_plane_routes() -> Router<JournalService> {
             post(subscriptions::subscription_ack),
         )
         .route(
+            "/topics/{topic}/subscriptions/{subscription}/seek",
+            post(subscriptions::subscription_seek),
+        )
+        .route(
             "/topics/{topic}/retention",
             get(retention::retention_get).put(retention::retention_put),
         )

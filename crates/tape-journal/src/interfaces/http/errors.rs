@@ -31,6 +31,8 @@ impl IntoResponse for JournalError {
             JournalError::SubscriptionNotFound(_) => (StatusCode::NOT_FOUND, "subscription_error"),
             JournalError::SubscriptionExists(_) => (StatusCode::CONFLICT, "subscription_error"),
             JournalError::PullBatchTooLarge(_) => (StatusCode::BAD_REQUEST, "subscription_error"),
+            JournalError::StaleEpoch(_) => (StatusCode::CONFLICT, "stale_epoch"),
+            JournalError::OutOfRange(_) => (StatusCode::CONFLICT, "out_of_range"),
         };
         ApiErr::new(status, code, self.to_string()).into_response()
     }
