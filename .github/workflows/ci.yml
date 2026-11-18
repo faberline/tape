@@ -40,6 +40,11 @@ jobs:
           enable-cache: false
       # The same document check as the candidate step "Run declared Tape gates", so a STATUS or ROADMAP defect fails the pull request.
       - run: uv run --python 3.13 --no-project scripts/meta/project_docs_contract.py check . --format json
+      # One aw commit for every gke-test.yml call, so a pin move cannot leave a workflow behind (issue 201).
+      - name: Check the aw gke-test pins
+        run: |
+          python3 scripts/ci/check_aw_gke_pin.py
+          cd scripts/ci && python3 -m unittest test_check_aw_gke_pin
       # Chooses the e2e jobs. A pull request runs them only when a path they test changed.
       - name: Select the e2e jobs
         id: select
