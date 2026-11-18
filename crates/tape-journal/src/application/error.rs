@@ -50,6 +50,7 @@ impl From<SubscriptionError> for JournalError {
             SubscriptionError::NotFound { .. } => Self::SubscriptionNotFound(message),
             SubscriptionError::AlreadyExists { .. } => Self::SubscriptionExists(message),
             SubscriptionError::PullBatchTooLarge { .. } => Self::PullBatchTooLarge(message),
+            SubscriptionError::CursorOutOfRetention { .. } => Self::Conflict(message),
         }
     }
 }

@@ -7,6 +7,7 @@ fn subscription_created_ends_attempt_as_success() {
     let sub = Subscription {
         topic: "orders".into(),
         name: "worker-1".into(),
+        epoch: 0,
     };
     assert_eq!(
         classify_ha_create_result(&Ok(sub)),

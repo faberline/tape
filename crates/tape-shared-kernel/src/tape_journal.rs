@@ -11,7 +11,7 @@ use super::error::{SubscriptionAckError, SubscriptionError, TapeError};
 use super::event::{ConsumerCheckpoint, TapeEvent};
 use super::retention::{RetentionOutcome, RetentionPolicy};
 use super::subscription::{
-    PullSubscriptionBatch, Subscription, DEFAULT_PULL_BATCH, MAX_PULL_BATCH,
+    PullSubscriptionBatch, SeekOutcome, Subscription, DEFAULT_PULL_BATCH, MAX_PULL_BATCH,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -167,7 +167,11 @@ impl TapeJournal {
         if self.subscriptions.contains_key(&key) {
             return Err(SubscriptionError::AlreadyExists { topic, name });
         }
-        let subscription = Subscription { topic, name };
+        let subscription = Subscription {
+            topic,
+            name,
+            epoch: 0,
+        };
         self.subscriptions.insert(key, subscription.clone());
         Ok(subscription)
     }
@@ -211,7 +215,7 @@ impl TapeJournal {
         name: &str,
         limit: Option<usize>,
     ) -> Result<PullSubscriptionBatch, SubscriptionError> {
-        self.require_pull_subscription(topic, name)?;
+        let epoch = self.require_pull_subscription(topic, name)?.epoch;
         let limit = limit.unwrap_or(DEFAULT_PULL_BATCH);
         if limit > MAX_PULL_BATCH {
             return Err(SubscriptionError::PullBatchTooLarge {
@@ -223,6 +227,14 @@ impl TapeJournal {
             .checkpoint(topic, name)
             .map(|checkpoint| checkpoint.offset)
             .unwrap_or(0);
+        let earliest_offset = self.earliest_offset(topic);
+        if cursor < earliest_offset {
+            return Err(SubscriptionError::CursorOutOfRetention {
+                cursor,
+                earliest_offset,
+                end_offset: self.end_offset(topic),
+            });
+        }
         let events = self.replay(topic, Some(cursor), None, Some(limit));
         let next_offset = events
             .last()
@@ -231,6 +243,7 @@ impl TapeJournal {
         Ok(PullSubscriptionBatch {
             topic: topic.to_string(),
             subscription: name.to_string(),
+            epoch,
             cursor,
             limit,
             next_offset,
@@ -270,7 +283,31 @@ impl TapeJournal {
         expected_offset: Option<u64>,
         updated_at_ms: u64,
     ) -> Result<ConsumerCheckpoint, SubscriptionAckError> {
-        self.require_pull_subscription(topic, name)?;
+        self.ack_subscription_epoch_at(topic, name, offset, expected_offset, None, updated_at_ms)
+    }
+
+    /// Like [`Self::ack_subscription_expected_at`], with an optional epoch
+    /// check: when `epoch` is `Some` and differs from the subscription's
+    /// current epoch, the ack is refused with [`TapeError::StaleEpoch`] and
+    /// nothing changes. The epoch check runs before the expected-offset check.
+    pub fn ack_subscription_epoch_at(
+        &mut self,
+        topic: &str,
+        name: &str,
+        offset: u64,
+        expected_offset: Option<u64>,
+        epoch: Option<u64>,
+        updated_at_ms: u64,
+    ) -> Result<ConsumerCheckpoint, SubscriptionAckError> {
+        let current_epoch = self.require_pull_subscription(topic, name)?.epoch;
+        if let Some(epoch) = epoch {
+            if epoch != current_epoch {
+                return Err(SubscriptionAckError::Checkpoint(TapeError::StaleEpoch {
+                    epoch,
+                    current_epoch,
+                }));
+            }
+        }
         if let Some(expected) = expected_offset {
             let current = self
                 .checkpoint(topic, name)
@@ -286,6 +323,53 @@ impl TapeJournal {
             }
         }
         Ok(self.put_checkpoint_at(topic, name, offset, updated_at_ms)?)
+    }
+
+    /// Explicitly move a pull subscription's cursor to `offset` and bump its
+    /// epoch by one. Only this seek may rewind a cursor; `put_checkpoint_at`
+    /// stays monotone. The offset must lie in the retained range
+    /// `earliest_offset..=end_offset`, or nothing changes.
+    pub fn seek_subscription_at(
+        &mut self,
+        topic: &str,
+        name: &str,
+        offset: u64,
+        updated_at_ms: u64,
+    ) -> Result<SeekOutcome, SubscriptionAckError> {
+        self.require_pull_subscription(topic, name)?;
+        let earliest_offset = self.earliest_offset(topic);
+        let end_offset = self.end_offset(topic);
+        if offset < earliest_offset || offset > end_offset {
+            return Err(SubscriptionAckError::Checkpoint(
+                TapeError::OffsetOutOfRange {
+                    offset,
+                    earliest_offset,
+                    end_offset,
+                },
+            ));
+        }
+        self.checkpoints.insert(
+            checkpoint_key(topic, name),
+            ConsumerCheckpoint {
+                topic: topic.to_string(),
+                consumer: name.to_string(),
+                offset,
+                updated_at_ms,
+            },
+        );
+        let subscription = self
+            .subscriptions
+            .get_mut(&subscription_key(topic, name))
+            .expect("subscription checked above");
+        subscription.epoch = subscription.epoch.saturating_add(1);
+        Ok(SeekOutcome {
+            topic: topic.to_string(),
+            subscription: name.to_string(),
+            epoch: subscription.epoch,
+            cursor: offset,
+            earliest_offset,
+            end_offset,
+        })
     }
 
     fn require_pull_subscription(
@@ -306,6 +390,16 @@ impl TapeJournal {
     /// to compute subscription lag gauges (#2485).
     pub fn all_subscriptions(&self) -> Vec<&Subscription> {
         self.subscriptions.values().collect()
+    }
+
+    /// The offset of the first retained event of `topic`, or the end offset
+    /// when the topic holds no events.
+    pub fn earliest_offset(&self, topic: &str) -> u64 {
+        self.topics
+            .get(topic)
+            .and_then(|events| events.first())
+            .map(|event| event.offset)
+            .unwrap_or_else(|| self.end_offset(topic))
     }
 
     pub fn end_offset(&self, topic: &str) -> u64 {
