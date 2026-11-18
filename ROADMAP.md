@@ -330,3 +330,17 @@ keep tape's own proof.
 - Reason: Feature parity is offered through tape's own h2c and OpenAPI API.
   Speaking the Google API surface would tie the product to a protocol it does
   not control.
+
+### Native TLS on the public port
+
+- ID: `native-tls-on-the-public-port`
+- Reason: Tape ends TLS at the ingress or the mesh and has no TLS code on
+  the public port. Terminating TLS in the process would add certificate
+  handling that the platform already provides.
+
+### Cross-release mixed-version guarantees beyond adjacent releases
+
+- ID: `cross-release-mixed-version-guarantees-beyond-adjacent-releases`
+- Reason: Tape documents the compatibility rules between adjacent releases
+  and does not promise or run mixed-version clusters beyond them. The raft
+  mixed-version window stays stated, not tested across released versions.
