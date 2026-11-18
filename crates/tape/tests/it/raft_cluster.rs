@@ -488,6 +488,41 @@ async fn three_node_group_elects_replicates_forwards_and_fails_over() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn subscription_seek_proposal_bumps_the_epoch() {
+    let _guard = CLUSTER_TEST_LOCK.lock().await;
+    let mut c = Cluster::prepare(3).await;
+    c.start_all(1024);
+    let leader = c.wait_leader().await;
+
+    let (_, created) = c
+        .raft(leader)
+        .propose_subscription_create("orders".into(), "audit".into())
+        .await
+        .unwrap();
+    assert!(matches!(
+        created,
+        Some(tape_shared_kernel::TapeOutcome::SubscriptionCreated(Ok(_)))
+    ));
+    propose(c.raft(leader), 1).await;
+    propose(c.raft(leader), 2).await;
+    c.wait_converged(2).await;
+
+    let (_, sought) = c
+        .raft(leader)
+        .propose_subscription_seek("orders".into(), "audit".into(), 0, 300)
+        .await
+        .unwrap();
+    match sought {
+        Some(tape_shared_kernel::TapeOutcome::SubscriptionSought(Ok(outcome))) => {
+            assert_eq!(outcome.epoch, 1);
+            assert_eq!(outcome.cursor, 0);
+        }
+        other => panic!("unexpected seek outcome: {other:?}"),
+    }
+    c.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pull_subscription_metadata_and_explicit_ack_converge() {
     let _guard = CLUSTER_TEST_LOCK.lock().await;
     let mut c = Cluster::prepare(3).await;
