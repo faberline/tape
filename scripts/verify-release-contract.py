@@ -865,7 +865,7 @@ def self_test() -> None:
             promotion,
         ),
         "gke-e2e-aw-ref-drift": (
-            replace_once(candidate, "      aw-ref: edb3802d18d39d205bd0ada8431ecc97c6938c14\n", "      aw-ref: main\n", "gke-e2e-aw-ref-drift"),
+            replace_once(candidate, "      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c\n", "      aw-ref: main\n", "gke-e2e-aw-ref-drift"),
             promotion,
         ),
         "gke-e2e-root-digest-swap": (
