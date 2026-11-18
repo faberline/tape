@@ -13,6 +13,11 @@ pub enum TapeError {
     },
     #[error("checkpoint offset {offset} is beyond topic end offset {end_offset}")]
     CheckpointBeyondEnd { offset: u64, end_offset: u64 },
+    #[error("ack expected offset {expected_offset} but the current offset is {current_offset}")]
+    ExpectedOffsetMismatch {
+        expected_offset: u64,
+        current_offset: u64,
+    },
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Serialize, Deserialize)]

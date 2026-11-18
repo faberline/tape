@@ -256,7 +256,35 @@ impl TapeJournal {
         offset: u64,
         updated_at_ms: u64,
     ) -> Result<ConsumerCheckpoint, SubscriptionAckError> {
+        self.ack_subscription_expected_at(topic, name, offset, None, updated_at_ms)
+    }
+
+    /// Like [`Self::ack_subscription_at`], with an optional compare-and-set:
+    /// when `expected_offset` is `Some` and differs from the current cursor
+    /// (0 when there is no checkpoint), the ack is refused and nothing changes.
+    pub fn ack_subscription_expected_at(
+        &mut self,
+        topic: &str,
+        name: &str,
+        offset: u64,
+        expected_offset: Option<u64>,
+        updated_at_ms: u64,
+    ) -> Result<ConsumerCheckpoint, SubscriptionAckError> {
         self.require_pull_subscription(topic, name)?;
+        if let Some(expected) = expected_offset {
+            let current = self
+                .checkpoint(topic, name)
+                .map(|checkpoint| checkpoint.offset)
+                .unwrap_or(0);
+            if expected != current {
+                return Err(SubscriptionAckError::Checkpoint(
+                    TapeError::ExpectedOffsetMismatch {
+                        expected_offset: expected,
+                        current_offset: current,
+                    },
+                ));
+            }
+        }
         Ok(self.put_checkpoint_at(topic, name, offset, updated_at_ms)?)
     }
 

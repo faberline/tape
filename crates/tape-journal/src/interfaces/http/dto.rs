@@ -70,6 +70,8 @@ pub struct SubscriptionPullRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SubscriptionAckRequest {
     pub offset: u64,
+    #[serde(default)]
+    pub expected_offset: Option<u64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

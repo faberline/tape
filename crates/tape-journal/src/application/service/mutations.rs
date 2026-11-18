@@ -116,11 +116,13 @@ impl JournalService {
         topic: String,
         name: String,
         offset: u64,
+        expected_offset: Option<u64>,
     ) -> Result<ConsumerCheckpoint, JournalError> {
         let command = TapeCommand::SubscriptionAck {
             topic,
             name,
             offset,
+            expected_offset,
             updated_at_ms: now_ms(),
         };
         match self.mutate("subscription_ack", command).await? {
