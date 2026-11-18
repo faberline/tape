@@ -41,7 +41,7 @@ use serde_json::json;
 use std::io::Read;
 use std::time::Duration;
 use std::time::Instant;
-use watch::{parse_json_log_events, terminated_from_watch};
+use watch::{leadership_lines, parse_json_log_events, terminated_from_watch};
 
 const SUITE: &str = "operator_ha";
 const TAPE: &str = "tape";
@@ -210,6 +210,15 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         json!({ "topic": TOPIC, "ids": ["sigterm-1", "sigterm-2"] }),
     );
 
+    // Re-check the leader, so the pod we delete is the leader at delete time
+    let first_leader = leader_pod;
+    let leader_pod = wait_for_raft_leader(&pods);
+    evidence(
+        SUITE,
+        "raft leader re-checked before delete",
+        json!({ "first": first_leader, "now": leader_pod, "changed": first_leader != leader_pod }),
+    );
+
     // Record deletion time and delete the leader pod
     let leader_uid: String = kubectl_json(&["get", "pod", &leader_pod])["metadata"]["uid"]
         .as_str()
@@ -325,8 +334,9 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         .unwrap_or_else(|| panic!("no raft_shutdown event in leader's log:\n{logs}"));
     assert!(
         raft_shutdown.raw.contains("Transferred"),
-        "raft_shutdown must have handoff Transferred: {:?}",
-        raft_shutdown.raw
+        "raft_shutdown must have handoff Transferred: {:?}\nleadership lines of the leader pod:\n{}",
+        raft_shutdown.raw,
+        leadership_lines(&log_events)
     );
 
     assert!(
