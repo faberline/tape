@@ -11,6 +11,7 @@ Project-level documentation for tape. Usage starts at the root
 | [delivery-semantics.md](delivery-semantics.md) | What an append guarantees on retry, what the envelope `key` does and does not do, and where deduplication belongs. |
 | [glossary.md](glossary.md) | The terms tape's code, API and docs use, and what each one means here. |
 | [topic-lifecycle.md](topic-lifecycle.md) | How a topic comes into existence, what retention leaves behind, and why there is no per-topic delete. |
+| [design/pull-subscription-wire-format.md](design/pull-subscription-wire-format.md) | The wire format of pull-subscription offsets, checkpoint compare-and-set, seek epochs and commit retry, with the rule, an example and the proving test for each. |
 | [domain/](domain/) | One page per context: what it models, its ports, its invariants, and its recorded exceptions. |
 | [adr/](adr/) | Architecture decisions and the reasons behind them. |
 | [operations/](operations/README.md) | Deploying, running, benchmarking and checking tape, with links to the runbooks. |
