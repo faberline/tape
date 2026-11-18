@@ -168,6 +168,7 @@ pub async fn subscription_pull(
     request_body = SubscriptionAckRequest,
     responses(
         (status = 200, description = "Explicitly advanced checkpoint", body = ConsumerCheckpoint),
+        (status = 409, description = "Stale or beyond-end offset, or expected_offset differs from the current cursor"),
         (status = 507, description = "Node is in ENOSPC degraded read-only mode (storage_full)")
     )
 )]
@@ -187,7 +188,10 @@ pub async fn subscription_ack(
         Ok(req) => req,
         Err(bad) => return bad.into_response(),
     };
-    match service.ack_subscription(topic, name, req.offset).await {
+    match service
+        .ack_subscription(topic, name, req.offset, req.expected_offset)
+        .await
+    {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(error) => error.into_response(),
     }

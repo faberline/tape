@@ -230,6 +230,11 @@ pub(super) fn schemas() -> Value {
                     "type": "integer",
                     "minimum": 0,
                     "description": "The target checkpoint offset to set. Correct clients send the next_offset returned by the pull batch just processed to avoid skipping unpulled events."
+                },
+                "expected_offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Optional compare-and-set. When present and different from the current cursor (0 when there is no checkpoint), the ack answers 409 and changes nothing."
                 }
             }
         },

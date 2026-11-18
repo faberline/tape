@@ -468,3 +468,67 @@ async fn metrics_expose_topic_and_subscription_lag_gauges() {
         "metrics must expose lag of 0 after full ack"
     );
 }
+
+/// #12: an ack with `expected_offset` is a compare-and-set over HTTP. A stale
+/// expected offset answers 409 and leaves the cursor unchanged.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ack_with_stale_expected_offset_is_409() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    for n in 0..3 {
+        append(&client, addr, "test_topic", n).await;
+    }
+    client
+        .post(url(addr, "/topics/test_topic/subscriptions"))
+        .json(&json!({ "name": "test_sub" }))
+        .send()
+        .await
+        .unwrap();
+
+    let ack = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ack.status(), 200);
+
+    // Expected 0 is stale: the cursor is at 1.
+    let stale = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "expected_offset": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), 409);
+    let body: serde_json::Value = stale.json().await.unwrap();
+    assert_eq!(body["error"], "conflict");
+    assert!(body["message"]
+        .as_str()
+        .unwrap()
+        .contains("current offset is 1"));
+
+    // The cursor did not move.
+    let pull: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(pull["cursor"], 1);
+
+    // Expected equal to the cursor advances.
+    let ok = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "expected_offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200);
+    let ok_body: serde_json::Value = ok.json().await.unwrap();
+    assert_eq!(ok_body["offset"], 3);
+}

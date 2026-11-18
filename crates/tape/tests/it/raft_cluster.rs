@@ -521,7 +521,7 @@ async fn pull_subscription_metadata_and_explicit_ack_converge() {
 
     let (_, acked) = c
         .raft(follower)
-        .propose_subscription_ack("orders".into(), "audit".into(), 2, 200)
+        .propose_subscription_ack("orders".into(), "audit".into(), 2, None, 200)
         .await
         .unwrap();
     assert!(matches!(
