@@ -266,6 +266,23 @@ impl TapeRaft {
             name,
             offset,
             expected_offset,
+            epoch: None,
+            updated_at_ms,
+        })
+        .await
+    }
+
+    pub async fn propose_subscription_seek(
+        &self,
+        topic: String,
+        name: String,
+        offset: u64,
+        updated_at_ms: u64,
+    ) -> Result<(Index, Option<TapeOutcome>)> {
+        self.propose_and_claim(TapeCommand::SubscriptionSeek {
+            topic,
+            name,
+            offset,
             updated_at_ms,
         })
         .await

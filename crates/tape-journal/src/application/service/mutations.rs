@@ -8,7 +8,7 @@ use crate::application::clock::now_ms;
 use crate::application::error::JournalError;
 use tape_shared_kernel::{
     should_enter_storage_degraded_mode, ConsumerCheckpoint, RetentionOutcome, RetentionPolicy,
-    Subscription, SubscriptionError, TapeCommand, TapeEvent, TapeOutcome,
+    SeekOutcome, Subscription, SubscriptionError, TapeCommand, TapeEvent, TapeOutcome,
 };
 
 impl JournalService {
@@ -123,11 +123,30 @@ impl JournalService {
             name,
             offset,
             expected_offset,
+            epoch: None,
             updated_at_ms: now_ms(),
         };
         match self.mutate("subscription_ack", command).await? {
             TapeOutcome::SubscriptionAcked(result) => result.map_err(JournalError::from),
             _ => Err(outcome_mismatch("subscription_ack")),
+        }
+    }
+
+    pub async fn seek_subscription(
+        &self,
+        topic: String,
+        name: String,
+        offset: u64,
+    ) -> Result<SeekOutcome, JournalError> {
+        let command = TapeCommand::SubscriptionSeek {
+            topic,
+            name,
+            offset,
+            updated_at_ms: now_ms(),
+        };
+        match self.mutate("subscription_seek", command).await? {
+            TapeOutcome::SubscriptionSought(result) => result.map_err(JournalError::from),
+            _ => Err(outcome_mismatch("subscription_seek")),
         }
     }
 
