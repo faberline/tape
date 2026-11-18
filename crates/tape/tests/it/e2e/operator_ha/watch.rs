@@ -34,6 +34,21 @@ pub(super) fn parse_json_log_events(logs: &str) -> Vec<LogEvent> {
         .collect()
 }
 
+/// The `shutdown_started` and `raft_leadership` lines of a pod log, one per
+/// line, for a failure message. "none" when there are no such lines.
+pub(super) fn leadership_lines(events: &[LogEvent]) -> String {
+    let lines: Vec<&str> = events
+        .iter()
+        .filter(|e| e.event == "shutdown_started" || e.event == "raft_leadership")
+        .map(|e| e.raw.as_str())
+        .collect();
+    if lines.is_empty() {
+        "none".to_owned()
+    } else {
+        lines.join("\n")
+    }
+}
+
 /// Reads the server container's terminated state of the pod with `uid` from
 /// `kubectl get pod -w -o json --output-watch-events` output (concatenated
 /// watch events). Returns (exitCode, finishedAt as epoch seconds); the epoch
@@ -133,4 +148,25 @@ invalid json line\n";
     assert_eq!(events[0].event, "http_drained");
     assert_eq!(events[1].event, "raft_shutdown");
     assert_eq!(events[2].event, "other");
+}
+
+#[test]
+fn leadership_lines_keeps_only_the_shutdown_and_leadership_events() {
+    let sample = "{\"event\":\"shutdown_started\",\"message\":\"a\"}\n\
+{\"event\":\"http_drained\"}\n\
+{\"attributes\":{\"event\":\"raft_leadership\",\"phase\":\"sigterm\",\"is_leader\":false}}\n\
+{\"fields\":{\"event\":\"raft_leadership\",\"phase\":\"before_handoff\",\"is_leader\":false}}\n";
+    let events = parse_json_log_events(sample);
+    assert_eq!(
+        leadership_lines(&events),
+        "{\"event\":\"shutdown_started\",\"message\":\"a\"}\n\
+{\"attributes\":{\"event\":\"raft_leadership\",\"phase\":\"sigterm\",\"is_leader\":false}}\n\
+{\"fields\":{\"event\":\"raft_leadership\",\"phase\":\"before_handoff\",\"is_leader\":false}}"
+    );
+}
+
+#[test]
+fn leadership_lines_says_none_when_the_log_has_no_such_event() {
+    let events = parse_json_log_events("{\"event\":\"http_drained\"}\n");
+    assert_eq!(leadership_lines(&events), "none");
 }
