@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use super::{
-    append, container, endpoint, evidence, kubectl, kubectl_json, required_env, wait_for,
-    wait_healthy, Expected,
+    append, container, endpoint, evidence, kubectl, kubectl_json, replay_all_ids, required_env,
+    wait_for, wait_healthy, Expected,
 };
 
 const SUITE: &str = "operator_rollback";
@@ -157,7 +157,7 @@ async fn rolling_rollback_keeps_the_data() {
         .map(|i| format!("{ID_PREFIX}{i:04}"))
         .chain(acked.iter().map(|(id, _)| id.clone()))
         .collect();
-    let got = replay_ids(&http, &base, TOPIC).await;
+    let got = replay_all_ids(&http, &base, TOPIC).await;
     check_no_loss(&got, &want).unwrap_or_else(|err| panic!("{err}"));
     evidence(
         SUITE,
@@ -167,7 +167,7 @@ async fn rolling_rollback_keeps_the_data() {
 
     // The group still accepts writes after the rollback.
     append(&http, &base, TOPIC, "rb-after").await;
-    let got = replay_ids(&http, &base, TOPIC).await;
+    let got = replay_all_ids(&http, &base, TOPIC).await;
     assert_eq!(
         got.last().map(String::as_str),
         Some("rb-after"),
@@ -228,29 +228,6 @@ fn check_no_loss(replayed: &[String], acked: &[String]) -> Result<(), String> {
     Err(format!(
         "replay differs from the acknowledged ids at index {first}: missing {missing:?}, extra {extra:?}"
     ))
-}
-
-/// Replays `topic` from offset 0 and returns its payload ids, in order.
-async fn replay_ids(http: &reqwest::Client, base: &str, topic: &str) -> Vec<String> {
-    let response = http
-        .get(format!("{base}/topics/{topic}/replay?from_offset=0"))
-        .send()
-        .await
-        .unwrap_or_else(|err| panic!("replay {topic}: {err}"));
-    let status = response.status();
-    let body: Value = response
-        .json()
-        .await
-        .unwrap_or_else(|err| panic!("replay {topic}: {err}"));
-    assert!(status.is_success(), "replay {topic}: {status} {body}");
-    body["events"]
-        .as_array()
-        .map(|all| {
-            all.iter()
-                .filter_map(|e| e["payload"]["id"].as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// Appends `rb-0021`, `rb-0022`, ... until `stop` is set, and returns each
