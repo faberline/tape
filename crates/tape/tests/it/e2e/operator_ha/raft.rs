@@ -197,6 +197,64 @@ fn raftz_report(last: &[(String, Result<Value, String>)]) -> String {
         .join("; ")
 }
 
+/// Ok only when every replica reports the same `last_index` and `commit_index`.
+/// A replica that never got the log (run 44305850703) keeps a lower index, so
+/// the leader must not be deleted before it catches up.
+pub(super) fn replicas_caught_up(
+    reports: &[(String, Result<Value, String>)],
+) -> Result<(), String> {
+    if reports.is_empty() {
+        return Err("no replicas".to_owned());
+    }
+    let mut indexes: Vec<(&str, u64, u64)> = Vec::with_capacity(reports.len());
+    for (pod, result) in reports {
+        let body = result
+            .as_ref()
+            .map_err(|e| format!("{pod}: /raftz error: {e}"))?;
+        match (body["last_index"].as_u64(), body["commit_index"].as_u64()) {
+            (Some(last), Some(commit)) => indexes.push((pod.as_str(), last, commit)),
+            _ => return Err(format!("{pod}: /raftz has no last_index or commit_index")),
+        }
+    }
+    let (_, last0, commit0) = indexes[0];
+    if indexes
+        .iter()
+        .all(|&(_, last, commit)| last == last0 && commit == commit0)
+    {
+        return Ok(());
+    }
+    let summary = indexes
+        .iter()
+        .map(|(pod, last, commit)| format!("{pod} last_index {last} commit_index {commit}"))
+        .collect::<Vec<_>>()
+        .join("; ");
+    Err(format!("replicas not caught up: {summary}"))
+}
+
+/// Waits until all replicas hold the same raft log and returns each pod's
+/// `(pod, last_index, commit_index)`. A timeout names the state of every pod.
+pub(super) fn wait_for_replicas_caught_up(pods: &[String]) -> Vec<(String, u64, u64)> {
+    wait_for("all replicas hold the same raft log", LEASE_TIMEOUT, || {
+        let reports: Vec<(String, Result<Value, String>)> = pods
+            .iter()
+            .map(|pod| (pod.clone(), raftz_of(pod)))
+            .collect();
+        replicas_caught_up(&reports)
+            .map_err(|msg| format!("{msg}; last /raftz: {}", raftz_report(&reports)))?;
+        Ok(reports
+            .iter()
+            .map(|(pod, result)| {
+                let body = result.as_ref().expect("checked by replicas_caught_up");
+                (
+                    pod.clone(),
+                    body["last_index"].as_u64().unwrap_or_default(),
+                    body["commit_index"].as_u64().unwrap_or_default(),
+                )
+            })
+            .collect())
+    })
+}
+
 fn survivor_timeout_message(timeout: Duration, last: &[(String, Result<Value, String>)]) -> String {
     format!(
         "no survivor reported is_leader within {timeout:?}; last /raftz: {}",
@@ -295,6 +353,100 @@ fn raftz_report_lists_each_survivor() {
 #[test]
 fn raftz_report_of_no_survivors_says_so() {
     assert_eq!(raftz_report(&[]), "no survivors");
+}
+
+fn caught_up_report(pod: &str, last: u64, commit: u64) -> (String, Result<Value, String>) {
+    (
+        pod.to_owned(),
+        Ok(json!({ "last_index": last, "commit_index": commit })),
+    )
+}
+
+#[test]
+fn replicas_caught_up_accepts_equal_logs() {
+    let reports = vec![
+        caught_up_report("tape-0", 6, 6),
+        caught_up_report("tape-1", 6, 6),
+        caught_up_report("tape-2", 6, 6),
+    ];
+    assert_eq!(replicas_caught_up(&reports), Ok(()));
+}
+
+#[test]
+fn replicas_caught_up_rejects_an_empty_replica() {
+    // The state of run 44305850703: tape-0 never got the log.
+    let reports = vec![
+        caught_up_report("tape-0", 0, 0),
+        caught_up_report("tape-1", 6, 6),
+        caught_up_report("tape-2", 6, 6),
+    ];
+    let err = replicas_caught_up(&reports).expect_err("an empty replica is not caught up");
+    assert!(err.contains("replicas not caught up"), "{err}");
+    assert!(err.contains("tape-0 last_index 0 commit_index 0"), "{err}");
+    assert!(err.contains("tape-2 last_index 6 commit_index 6"), "{err}");
+}
+
+#[test]
+fn replicas_caught_up_rejects_a_commit_lag() {
+    let reports = vec![
+        caught_up_report("tape-0", 6, 6),
+        caught_up_report("tape-1", 6, 6),
+        caught_up_report("tape-2", 6, 5),
+    ];
+    let err = replicas_caught_up(&reports).expect_err("a commit lag is not caught up");
+    assert!(err.contains("commit_index 5"), "{err}");
+}
+
+#[test]
+fn replicas_caught_up_names_a_pod_with_a_raftz_error() {
+    let reports = vec![
+        ("tape-0".to_owned(), Err("timeout".to_owned())),
+        caught_up_report("tape-1", 6, 6),
+    ];
+    let err = replicas_caught_up(&reports).expect_err("a /raftz error is not caught up");
+    assert!(err.contains("tape-0: /raftz error: timeout"), "{err}");
+}
+
+#[test]
+fn replicas_caught_up_rejects_a_report_without_indexes() {
+    let reports = vec![
+        ("tape-0".to_owned(), Ok(json!({ "role": "Leader" }))),
+        caught_up_report("tape-1", 6, 6),
+    ];
+    let err = replicas_caught_up(&reports).expect_err("a report without indexes is not caught up");
+    assert!(err.contains("has no last_index or commit_index"), "{err}");
+}
+
+#[test]
+fn replicas_caught_up_rejects_no_replicas() {
+    assert_eq!(replicas_caught_up(&[]), Err("no replicas".to_owned()));
+}
+
+#[test]
+fn operator_ha_waits_for_catch_up_before_the_leader_delete() {
+    let src = include_str!("../operator_ha.rs");
+    let start = src
+        .find(concat!(
+            "async fn ",
+            "leader_sigterm_hands_off_and_exits_within_drain_delay"
+        ))
+        .expect("the leader_sigterm test is defined");
+    let body = &src[start..];
+    let end = body.find("\n}\n").expect("the test ends") + 3;
+    let func = &body[..end];
+    let appended = func
+        .find(concat!("appended events", " before deletion"))
+        .expect("the append evidence is recorded");
+    let catch_up = func
+        .find(concat!("wait_for_replicas_caught_up", "(&pods)"))
+        .expect("the test waits for the replicas to catch up");
+    let delete = func
+        .find("kubectl(&[\"delete\", \"pod\", &leader_pod")
+        .expect("the test deletes the leader");
+    assert!(
+        appended < catch_up && catch_up < delete,
+        "catch-up must sit between the appends and the leader delete: {func}"
+    );
 }
 
 #[test]

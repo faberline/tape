@@ -35,7 +35,7 @@ use leader::{
 };
 use raft::{
     append_when_settled, assert_replica_replay, wait_for_raft_leader, wait_for_ready_tape_replicas,
-    wait_for_statefulset_rollout, wait_for_survivor_leader,
+    wait_for_replicas_caught_up, wait_for_statefulset_rollout, wait_for_survivor_leader,
 };
 use serde_json::json;
 use std::io::Read;
@@ -208,6 +208,20 @@ async fn leader_sigterm_hands_off_and_exits_within_drain_delay() {
         SUITE,
         "appended events before deletion",
         json!({ "topic": TOPIC, "ids": ["sigterm-1", "sigterm-2"] }),
+    );
+
+    // Wait until all replicas hold the same log, so the delete does not leave
+    // a replica that never got the appends (run 44305850703)
+    let logs = wait_for_replicas_caught_up(&pods);
+    evidence(
+        SUITE,
+        "all replicas hold the same raft log",
+        json!({
+            "replicas": logs
+                .iter()
+                .map(|(pod, last, commit)| json!({ "pod": pod, "last_index": last, "commit_index": commit }))
+                .collect::<Vec<_>>()
+        }),
     );
 
     // Re-check the leader, so the pod we delete is the leader at delete time
