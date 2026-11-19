@@ -203,7 +203,8 @@ pub(super) fn schemas() -> Value {
             "required": ["topic", "name"],
             "properties": {
                 "topic": {"type": "string"},
-                "name": {"type": "string"}
+                "name": {"type": "string"},
+                "epoch": {"type": "integer", "minimum": 0, "description": "Bumped by every seek. Send it as `epoch` on ack to fence a late ack."}
             }
         },
         "SubscriptionListResponse": {
@@ -221,10 +222,11 @@ pub(super) fn schemas() -> Value {
         },
         "PullSubscriptionBatch": {
             "type": "object",
-            "required": ["topic", "subscription", "cursor", "limit", "next_offset", "events"],
+            "required": ["topic", "subscription", "epoch", "cursor", "limit", "next_offset", "events"],
             "properties": {
                 "topic": {"type": "string"},
                 "subscription": {"type": "string"},
+                "epoch": {"type": "integer", "minimum": 0, "description": "Bumped by every seek. Send it as `epoch` on ack to fence a late ack."},
                 "cursor": {"type": "integer", "minimum": 0},
                 "limit": {"type": "integer", "minimum": 0, "maximum": 1000},
                 "next_offset": {"type": "integer", "minimum": 0},

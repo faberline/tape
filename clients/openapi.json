@@ -801,6 +801,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bumped by every seek. Send it as `epoch` on ack to fence a late ack."
           }
         }
       },
@@ -834,6 +839,7 @@
         "required": [
           "topic",
           "subscription",
+          "epoch",
           "cursor",
           "limit",
           "next_offset",
@@ -845,6 +851,11 @@
           },
           "subscription": {
             "type": "string"
+          },
+          "epoch": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bumped by every seek. Send it as `epoch` on ack to fence a late ack."
           },
           "cursor": {
             "type": "integer",
