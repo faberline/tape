@@ -10,7 +10,7 @@ use super::dto::RetentionGetResponse;
 use super::errors::parse_body;
 use crate::application::JournalService;
 use tape_access::authorize;
-use tape_shared_kernel::RetentionPolicy;
+use tape_shared_kernel::{RetentionOutcome, RetentionPolicy};
 
 #[utoipa::path(
     get,

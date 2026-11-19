@@ -468,3 +468,284 @@ async fn metrics_expose_topic_and_subscription_lag_gauges() {
         "metrics must expose lag of 0 after full ack"
     );
 }
+
+/// #12: an ack with `expected_offset` is a compare-and-set over HTTP. A stale
+/// expected offset answers 409 and leaves the cursor unchanged.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ack_with_stale_expected_offset_is_409() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    for n in 0..3 {
+        append(&client, addr, "test_topic", n).await;
+    }
+    client
+        .post(url(addr, "/topics/test_topic/subscriptions"))
+        .json(&json!({ "name": "test_sub" }))
+        .send()
+        .await
+        .unwrap();
+
+    let ack = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ack.status(), 200);
+
+    // Expected 0 is stale: the cursor is at 1.
+    let stale = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "expected_offset": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), 409);
+    let body: serde_json::Value = stale.json().await.unwrap();
+    assert_eq!(body["error"], "conflict");
+    assert!(body["message"]
+        .as_str()
+        .unwrap()
+        .contains("current offset is 1"));
+
+    // The cursor did not move.
+    let pull: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(pull["cursor"], 1);
+
+    // Expected equal to the cursor advances.
+    let ok = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "expected_offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200);
+    let ok_body: serde_json::Value = ok.json().await.unwrap();
+    assert_eq!(ok_body["offset"], 3);
+}
+
+async fn create_subscription(client: &reqwest::Client, addr: SocketAddr, name: &str) {
+    client
+        .post(url(addr, "/topics/test_topic/subscriptions"))
+        .json(&json!({ "name": name }))
+        .send()
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seek_rewinds_the_cursor_and_bumps_the_epoch() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    for n in 0..3 {
+        append(&client, addr, "test_topic", n).await;
+    }
+    create_subscription(&client, addr, "test_sub").await;
+    create_subscription(&client, addr, "other").await;
+
+    let ack = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ack.status(), 200);
+
+    let seek = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/seek"))
+        .json(&json!({ "offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(seek.status(), 200);
+    let body: serde_json::Value = seek.json().await.unwrap();
+    assert_eq!(body["epoch"], 1);
+    assert_eq!(body["cursor"], 1);
+    assert_eq!(body["earliest_offset"], 0);
+    assert_eq!(body["end_offset"], 3);
+
+    let pull: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(pull["cursor"], 1);
+    assert_eq!(pull["epoch"], 1);
+    assert_eq!(pull["events"].as_array().unwrap().len(), 2);
+
+    let other: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/other/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(other["cursor"], 0);
+    assert_eq!(other["epoch"], 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ack_after_seek_with_old_epoch_is_409_stale_epoch() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    for n in 0..3 {
+        append(&client, addr, "test_topic", n).await;
+    }
+    create_subscription(&client, addr, "test_sub").await;
+
+    let pull: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(pull["epoch"], 0);
+
+    let seek = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/seek"))
+        .json(&json!({ "offset": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(seek.status(), 200);
+
+    let stale = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "epoch": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), 409);
+    let body: serde_json::Value = stale.json().await.unwrap();
+    assert_eq!(body["error"], "stale_epoch");
+    assert!(body["message"].as_str().unwrap().contains("epoch is 1"));
+
+    let pull: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(pull["cursor"], 0);
+
+    let current = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/ack"))
+        .json(&json!({ "offset": 3, "epoch": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(current.status(), 200);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seek_outside_the_retained_range_is_409_out_of_range() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    for n in 0..3 {
+        append(&client, addr, "test_topic", n).await;
+    }
+    create_subscription(&client, addr, "test_sub").await;
+
+    let retention = client
+        .put(url(addr, "/topics/test_topic/retention"))
+        .json(&json!({ "min_offset": 2 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(retention.status(), 200);
+
+    let below = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/seek"))
+        .json(&json!({ "offset": 1 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(below.status(), 409);
+    let body: serde_json::Value = below.json().await.unwrap();
+    assert_eq!(body["error"], "out_of_range");
+    assert!(body["message"].as_str().unwrap().contains("2..=3"));
+
+    let beyond = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/seek"))
+        .json(&json!({ "offset": 4 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(beyond.status(), 409);
+
+    let pull = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pull.status(), 409);
+    let body: serde_json::Value = pull.json().await.unwrap();
+    assert_eq!(body["error"], "out_of_range");
+
+    let ok = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/seek"))
+        .json(&json!({ "offset": 2 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200);
+
+    let pulled: serde_json::Value = client
+        .post(url(addr, "/topics/test_topic/subscriptions/test_sub/pull"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let events = pulled["events"].as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["offset"], 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seek_of_an_unknown_subscription_is_404() {
+    let (addr, _state) = start_server().await;
+    let client = reqwest::Client::new();
+
+    append(&client, addr, "test_topic", 0).await;
+
+    let seek = client
+        .post(url(
+            addr,
+            "/topics/test_topic/subscriptions/never_created/seek",
+        ))
+        .json(&json!({ "offset": 0 }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(seek.status(), 404);
+    let body: serde_json::Value = seek.json().await.unwrap();
+    assert_eq!(body["error"], "subscription_error");
+}

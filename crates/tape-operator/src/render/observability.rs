@@ -23,7 +23,9 @@ use super::COMPONENT;
 fn series_selector(cx: &RenderCtx<'_>) -> String {
     format!(
         "namespace=\"{}\",app_kubernetes_io_instance=\"{}\",app_kubernetes_io_component=\"{}\"",
-        cx.ns, cx.name, COMPONENT
+        cx.ns(),
+        cx.name(),
+        COMPONENT
     )
 }
 
@@ -38,8 +40,8 @@ fn series_selector(cx: &RenderCtx<'_>) -> String {
 fn alert_labels(cx: &RenderCtx<'_>, severity: &str) -> Value {
     json!({
         "severity": severity,
-        "namespace": cx.ns,
-        "app_kubernetes_io_instance": cx.name,
+        "namespace": cx.ns(),
+        "app_kubernetes_io_instance": cx.name(),
     })
 }
 
@@ -61,7 +63,7 @@ const PROMETHEUS_RELEASE_LABEL: &str = "prometheus";
 /// doubled aggregates and are immune, and changing it would diverge the
 /// operator path from the deployed static one for no alerting benefit.
 pub(super) fn service_monitor(cx: &RenderCtx<'_>) -> Value {
-    let mut meta = cx.meta(cx.name, COMPONENT);
+    let mut meta = cx.meta(cx.name(), COMPONENT);
     meta["labels"]["release"] = json!(PROMETHEUS_RELEASE_LABEL);
     json!({
         "apiVersion": "monitoring.coreos.com/v1",
@@ -109,7 +111,7 @@ pub(super) fn service_monitor(cx: &RenderCtx<'_>) -> Value {
 /// holds the two documents to that.
 pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
     let s = series_selector(cx);
-    let mut meta = cx.meta(cx.name, COMPONENT);
+    let mut meta = cx.meta(cx.name(), COMPONENT);
     meta["labels"]["release"] = json!(PROMETHEUS_RELEASE_LABEL);
     json!({
         "apiVersion": "monitoring.coreos.com/v1",
@@ -148,7 +150,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         "alert": "TapePodRestarting",
                         "expr": format!(
                             "increase(kube_pod_container_status_restarts_total{{namespace=\"{}\",pod=~\"^{}-[0-9]+$\",container=\"{}\"}}[15m]) > 2",
-                            cx.ns, cx.name, COMPONENT
+                            cx.ns(), cx.name(), COMPONENT
                         ),
                         "for": "5m",
                         "labels": alert_labels(cx, "warning"),
@@ -218,8 +220,8 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                              container_memory_working_set_bytes{{namespace=\"{}\",pod=~\"^{}-[0-9]+$\",container=\"{}\"}}\n\
                              / (container_spec_memory_limit_bytes{{namespace=\"{}\",pod=~\"^{}-[0-9]+$\",container=\"{}\"}} > 0)\n\
                              ) > 0.85",
-                            cx.ns, cx.name, COMPONENT,
-                            cx.ns, cx.name, COMPONENT
+                            cx.ns(), cx.name(), COMPONENT,
+                            cx.ns(), cx.name(), COMPONENT
                         ),
                         "for": "10m",
                         "labels": alert_labels(cx, "warning"),
@@ -232,7 +234,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         "alert": "TapeNoReadyServingPods",
                         "expr": format!(
                             "kube_statefulset_status_replicas_ready{{namespace=\"{}\",statefulset=\"{}\"}} == 0",
-                            cx.ns, cx.name
+                            cx.ns(), cx.name()
                         ),
                         "for": "2m",
                         "labels": alert_labels(cx, "critical"),
@@ -248,7 +250,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         "alert": "TapeBackupCronJobFailed",
                         "expr": format!(
                             "kube_job_status_failed{{namespace=\"{}\",job_name=~\"^{}-backup-.*\"}} >= 2",
-                            cx.ns, cx.name
+                            cx.ns(), cx.name()
                         ),
                         "for": "5m",
                         "labels": alert_labels(cx, "warning"),
@@ -264,7 +266,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
                         "expr": format!(
                             "kubelet_volume_stats_available_bytes{{namespace=\"{}\",persistentvolumeclaim=~\"^data-{}-[0-9]+$\"}}\n\
                              / kubelet_volume_stats_capacity_bytes{{namespace=\"{}\",persistentvolumeclaim=~\"^data-{}-[0-9]+$\"}} < 0.1",
-                            cx.ns, cx.name, cx.ns, cx.name
+                            cx.ns(), cx.name(), cx.ns(), cx.name()
                         ),
                         "for": "10m",
                         "labels": alert_labels(cx, "warning"),
@@ -283,7 +285,7 @@ pub(super) fn prometheus_rule(cx: &RenderCtx<'_>) -> Value {
 /// loop on a CR carrying `spec.bootstrapSeedUri` is ambiguous until the log
 /// decision field is read, so the runbook's job is to make the three outcomes
 /// distinguishable rather than to describe the symptom.
-const POD_RESTARTING_RUNBOOK: &str = "#2485: Differentiate seed-failure restarts by checking if `spec.bootstrapSeedUri` is set on the CR and examining the pod log for structured decision fields: (1) `decision=\"seeded\"` = seed succeeded, look for other causes (probe failures, image pull, resource limits); (2) `decision=\"skipped_existing_state\"` = seed was skipped (PVC already had data), pod is healthy; (3) NEITHER line present before a crash = seed fetch/decode failed (bad URI, IAM, corrupt object) — restore logs show which. #2468: the one-shot seed cleared bit is separate. See docs/deployment-handoff.md Cold restore runbook.";
+const POD_RESTARTING_RUNBOOK: &str = "#2485: Differentiate seed-failure restarts by checking if `spec.bootstrapSeedUri` is set on the CR and examining the pod log for structured decision fields: (1) `decision=\"seeded\"` = seed succeeded, look for other causes (probe failures, image pull, resource limits); (2) `decision=\"skipped_existing_state\"` = seed was skipped (PVC already had data), pod is healthy; (3) NEITHER line present before a crash = seed fetch/decode failed (bad URI, IAM, corrupt object) — restore logs show which. #2468: the one-shot seed cleared bit is separate. See docs/runbooks/cold-restore.md.";
 
 /// #2485's consumer-liveness triage, verbatim from the static component.
 /// Growing lag is only sometimes a fault — the runbook exists to separate a

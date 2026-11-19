@@ -14,7 +14,7 @@ use rcgen::{
     BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa,
     KeyPair,
 };
-use tape_replication::peer_tls::PeerTlsConfig;
+use tape_replication::peer_tls::{spawn_reload, PeerTlsConfig};
 use tape_replication::raft::TapeRaft;
 use tape_shared_kernel::TapeJournal;
 use tape_shared_kernel::TapeOutcome;
@@ -62,12 +62,7 @@ fn material(signer: &Authority, trust: &Authority, identity: &str) -> Material {
     std::fs::write(&ca_path, trust.cert.pem()).expect("write CA");
     Material {
         _dir: dir,
-        config: PeerTlsConfig {
-            cert: cert_path,
-            key: key_path,
-            ca: ca_path,
-            required: true,
-        },
+        config: PeerTlsConfig::new(cert_path, key_path, ca_path, true),
     }
 }
 
@@ -99,17 +94,17 @@ impl SecureCluster {
             );
             listeners.push(listener);
         }
-        let membership = Membership {
-            voters: (0..replicas).collect(),
-            learners: vec![],
-        };
+        let membership = Membership::new(
+            (0..replicas).map(raft_runtime::NodeId::new).collect(),
+            vec![],
+        );
         let mut nodes = Vec::new();
         for (id, listener) in listeners.into_iter().enumerate() {
-            let node_id = id as u64;
+            let node_id = raft_runtime::NodeId::new(id as u64);
             let peers = urls
                 .iter()
-                .filter(|(peer_id, _)| **peer_id != node_id)
-                .map(|(peer_id, url)| (*peer_id, url.clone()))
+                .filter(|(peer_id, _)| **peer_id != id as u64)
+                .map(|(peer_id, url)| (raft_runtime::NodeId::new(*peer_id), url.clone()))
                 .collect();
             let journal = Arc::new(Mutex::new(TapeJournal::default()));
             let dir = tempfile::tempdir().expect("raft directory");
@@ -225,11 +220,8 @@ async fn untrusted_peer_is_rejected_before_tape_raft_router() {
         TapeRaft::spawn_with_peer_transport(
             Arc::new(Mutex::new(TapeJournal::default())),
             dir.path(),
-            0,
-            Membership {
-                voters: vec![0],
-                learners: vec![],
-            },
+            raft_runtime::NodeId::new(0),
+            Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
             HashMap::new(),
             TapeRaft::host_config(1024),
             server_transport.clone(),
@@ -253,6 +245,113 @@ async fn untrusted_peer_is_rejected_before_tape_raft_router() {
         .send()
         .await;
     assert!(result.is_err(), "untrusted client must not reach /raftz");
+    let _ = shutdown.send(());
+    task.await.expect("peer task").expect("peer result");
+    drop(raft);
+    drop(dir);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rotated_peer_certificate_is_used_by_new_connections() {
+    let ca1 = Authority::generate("tape peer CA one");
+    let ca2 = Authority::generate("tape peer CA two");
+    let server_material = material(&ca1, &ca1, "localhost");
+    let old_client_material = material(&ca1, &ca1, "localhost");
+    let new_material = material(&ca2, &ca2, "localhost");
+    let stale_material = material(&ca1, &ca1, "localhost");
+
+    let server_transport =
+        PeerTransport::from_config(&server_material.config).expect("server transport");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind peer listener");
+    let address = listener.local_addr().expect("peer listener address");
+    let dir = tempfile::tempdir().expect("raft directory");
+    let raft = Arc::new(
+        TapeRaft::spawn_with_peer_transport(
+            Arc::new(Mutex::new(TapeJournal::default())),
+            dir.path(),
+            raft_runtime::NodeId::new(0),
+            Membership::new(vec![raft_runtime::NodeId::new(0)], vec![]),
+            HashMap::new(),
+            TapeRaft::host_config(1024),
+            server_transport.clone(),
+        )
+        .expect("spawn secure tape raft"),
+    );
+    let router = raft.router();
+    let (shutdown, shutdown_rx) = oneshot::channel();
+    let serve_transport = server_transport.clone();
+    let task = tokio::spawn(async move {
+        serve_transport
+            .serve(listener, router, async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
+    let reload = spawn_reload(
+        server_transport.clone(),
+        server_material.config.clone(),
+        Duration::from_millis(100),
+    );
+    let url = format!("https://localhost:{}/raftz", address.port());
+
+    let old_client =
+        PeerTransport::from_config(&old_client_material.config).expect("old client transport");
+    let before = old_client
+        .http_client()
+        .get(&url)
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await;
+    assert!(
+        before.is_ok(),
+        "trusted client reaches /raftz before rotation"
+    );
+    assert_eq!(server_transport.generation(), 1);
+
+    for (from, to) in [
+        (new_material.config.cert(), server_material.config.cert()),
+        (new_material.config.key(), server_material.config.key()),
+        (new_material.config.ca(), server_material.config.ca()),
+    ] {
+        std::fs::copy(from, to).expect("rotate peer TLS file");
+    }
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while server_transport.generation() < 2 {
+        assert!(
+            Instant::now() < deadline,
+            "rotated certificate was not picked up"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let new_client =
+        PeerTransport::from_config(&new_material.config).expect("new client transport");
+    let after = new_client
+        .http_client()
+        .get(&url)
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await;
+    assert!(
+        after.is_ok(),
+        "client of the new CA reaches /raftz after rotation"
+    );
+
+    let stale = PeerTransport::from_config(&stale_material.config).expect("stale client transport");
+    let stale_result = stale
+        .http_client()
+        .get(&url)
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await;
+    assert!(
+        stale_result.is_err(),
+        "old CA no longer reaches /raftz after rotation"
+    );
+
+    reload.abort();
     let _ = shutdown.send(());
     task.await.expect("peer task").expect("peer result");
     drop(raft);

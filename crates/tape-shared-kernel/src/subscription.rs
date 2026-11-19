@@ -19,6 +19,8 @@ pub const MAX_PULL_BATCH: usize = 1_000;
 pub struct Subscription {
     pub topic: String,
     pub name: String,
+    #[serde(default)]
+    pub epoch: u64,
 }
 
 /// One caller-driven pull window. `cursor` is the checkpoint used to read;
@@ -28,8 +30,21 @@ pub struct Subscription {
 pub struct PullSubscriptionBatch {
     pub topic: String,
     pub subscription: String,
+    #[serde(default)]
+    pub epoch: u64,
     pub cursor: u64,
     pub limit: usize,
     pub next_offset: u64,
     pub events: Vec<TapeEvent>,
+}
+
+/// The state of a pull subscription after an explicit seek.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct SeekOutcome {
+    pub topic: String,
+    pub subscription: String,
+    pub epoch: u64,
+    pub cursor: u64,
+    pub earliest_offset: u64,
+    pub end_offset: u64,
 }

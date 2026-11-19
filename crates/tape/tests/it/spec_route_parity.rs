@@ -151,3 +151,35 @@ fn openapi_committed_snapshot_matches_live_generation() {
         "clients/openapi.json is stale: regenerate via `cargo run -q -p tape --bin tape -- spec --format openapi > clients/openapi.json`"
     );
 }
+
+/// #204 step 7: the served schema must describe the epoch that a pull returns
+/// and an ack must send back, so a client can fence a late ack from the schema.
+#[test]
+fn subscription_schemas_publish_the_epoch() {
+    let doc: serde_json::Value =
+        serde_json::from_str(&tape_journal::interfaces::spec::openapi_json())
+            .expect("openapi_json parses");
+    let schemas = &doc["components"]["schemas"];
+
+    let subscription = &schemas["Subscription"];
+    assert!(
+        subscription["properties"]["epoch"].is_object(),
+        "Subscription schema must publish `epoch`: {subscription}"
+    );
+
+    let batch = &schemas["PullSubscriptionBatch"];
+    assert!(
+        batch["properties"]["epoch"].is_object(),
+        "PullSubscriptionBatch schema must publish `epoch`: {batch}"
+    );
+    let required: Vec<&str> = batch["required"]
+        .as_array()
+        .expect("PullSubscriptionBatch.required")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    assert!(
+        required.contains(&"epoch"),
+        "PullSubscriptionBatch must require `epoch`: {required:?}"
+    );
+}

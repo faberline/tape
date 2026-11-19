@@ -45,6 +45,7 @@ pub fn routes_json() -> String {
             {"method": "DELETE", "path": "/topics/{topic}/subscriptions/{subscription}", "purpose": "delete named pull cursor metadata"},
             {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/pull", "purpose": "read a bounded pull subscription window"},
             {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/ack", "purpose": "advance a pull subscription cursor"},
+            {"method": "POST", "path": "/topics/{topic}/subscriptions/{subscription}/seek", "purpose": "rewind a pull subscription cursor and bump its epoch"},
             {"method": "PUT", "path": "/topics/{topic}/consumers/{consumer}/checkpoint", "purpose": "advance a durable consumer cursor"},
             {"method": "GET", "path": "/topics/{topic}/consumers/{consumer}/checkpoint", "purpose": "read a durable consumer cursor"},
             {"method": "PUT", "path": "/topics/{topic}/retention", "purpose": "configure retention windows"},
@@ -57,9 +58,10 @@ pub fn routes_json() -> String {
 pub const fn llm_workflow_md() -> &'static str {
     r#"# tape workflow
 
-Tape is the historical topic replay journal. Relay owns online broker delivery;
-Tape owns append-only topic history, offset/time replay, consumer checkpoints,
-retention, and backfill/audit reads.
+Tape is a Pub/Sub-style message service: publishers append messages to a topic,
+and each subscription pulls every message at its own offset. Relay owns
+low-latency online delivery; Tape owns append-only topic history, offset/time
+replay, consumer checkpoints, retention, and backfill/audit reads.
 
 Start with:
 
@@ -99,6 +101,7 @@ The initial service contract is intentionally compact:
 - `GET`/`DELETE /topics/{topic}/subscriptions/{subscription}` declare one resource.
 - `POST /topics/{topic}/subscriptions/{subscription}/pull` declares bounded pull reads.
 - `POST /topics/{topic}/subscriptions/{subscription}/ack` declares explicit cursor advance; callers must self-enforce pull-before-ack by acking next_offset.
+- `POST /topics/{topic}/subscriptions/{subscription}/seek` rewinds a pull subscription cursor and bumps its epoch; an ack with an old `epoch` gets 409 `stale_epoch`.
 - `PUT /topics/{topic}/consumers/{consumer}/checkpoint` advances a replay cursor.
 - `GET /topics/{topic}/consumers/{consumer}/checkpoint` reads the replay cursor.
 - `GET /admin/backup` returns an admin-gated whole-journal snapshot.
@@ -122,7 +125,7 @@ pub const fn llm_boundaries_md() -> &'static str {
 /// Prose companion to the `TopicSection::Generated` section in
 /// [`LLM_BACKUP_TOPICS`] — everything about Tape's own backup usage except
 /// the destination scheme list. #2483 found three hand-copied
-/// `file://`+`s3://`-only claims (CLI help, deployment-handoff.md, README)
+/// `file://`+`s3://`-only claims (CLI help, the deployment docs, README)
 /// that had drifted stale against the unconditionally-shipped `gs://`
 /// scheme; #2494 is the durable fix: derive the scheme list from
 /// `service_backup::SUPPORTED_SCHEMES` at call time instead of freezing a
@@ -149,13 +152,13 @@ fn llm_backup_destination_contract() -> String {
         "tape",
         env!("CARGO_PKG_VERSION"),
         service_backup::llm::SECTIONED_TOPICS,
-        backing.id,
+        backing.id(),
         cli_std::llm::Format::Md,
     )
     .unwrap_or_else(|e| {
         panic!(
             "service_backup::llm::SECTIONED_TOPICS failed to render its `{}` topic: {e}",
-            backing.id
+            backing.id()
         )
     })
 }
@@ -171,17 +174,17 @@ fn llm_backup_destination_contract() -> String {
 /// `tape llm` (`crates/tape/src/bin/tape/llm.rs`) routes these ids through
 /// `cli_std::llm::render_sectioned`; every other topic stays on the static
 /// `&[cli_std::llm::Topic]` path.
-pub const LLM_BACKUP_TOPICS: &[cli_std::llm::SectionedTopic] = &[cli_std::llm::SectionedTopic {
-    id: "backup",
-    summary: "backup destination schemes, feature gating, and cold-seed restore, composed live from the shared service-backup contract",
-    sections: &[
+pub const LLM_BACKUP_TOPICS: &[cli_std::llm::SectionedTopic] = &[cli_std::llm::SectionedTopic::new(
+    "backup",
+    "backup destination schemes, feature gating, and cold-seed restore, composed live from the shared service-backup contract",
+    &[
         cli_std::llm::TopicSection::Prose(LLM_BACKUP_INTRO),
         cli_std::llm::TopicSection::Generated {
             id: "service-backup-destination-contract",
             render: llm_backup_destination_contract,
         },
     ],
-}];
+)];
 
 /// Return Tape's backup-destination topic in
 /// [`cli_std::llm::SectionedTopic`] form for CLI composition.
@@ -221,7 +224,7 @@ mod tests {
 
     #[test]
     fn llm_backup_sectioned_topic_matches_id() {
-        assert_eq!(llm_backup_sectioned_topic().id, "backup");
+        assert_eq!(llm_backup_sectioned_topic().id(), "backup");
         assert_eq!(LLM_BACKUP_TOPICS.len(), 1);
     }
 }

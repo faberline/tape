@@ -164,7 +164,9 @@ gate. This area spans the README capabilities `backup-and-seed`,
   window, refused with the shared error envelope; the default router enables
   bounded admission; the GCP acceptance script proves a replica-count
   transition under load with no committed loss, zonal.
-- Non-goals: billing-style accounting; a regional profile.
+- Non-goals: billing-style accounting; a regional profile; driving
+  membership from tape. Core's `membership-controller` runs the transition,
+  and this outcome proves it under tape's load.
 - Open: the quota dimensions and defaults; whether quotas are set on the
   custom resource or through the API.
 - Neighbours: extends Grants and bounded admission and Kubernetes operator

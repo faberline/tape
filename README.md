@@ -83,6 +83,8 @@ behaviour.
      -H 'content-type: application/json' -d '{"offset":1}'
    ```
 
+New here? Follow [docs/quickstart.md](docs/quickstart.md).
+
 The same verbs exist offline against a journal file for local inspection:
 `tape append`, `tape subscription create|list|show|pull|ack|delete`,
 `tape replay`, and `tape checkpoint`, each taking `--store <path>`.
@@ -123,7 +125,7 @@ readback oracle for the current acceptance scripts.
 | Support state per Pub/Sub surface | [STATUS.md](STATUS.md) |
 | Future outcomes and non-goals | [ROADMAP.md](ROADMAP.md) |
 | Typed clients | [`clients/README.md`](clients/README.md) |
-| Serve flags, environment, ports, probes, runbooks | [`docs/deployment-handoff.md`](docs/deployment-handoff.md) |
+| Serve flags, environment, ports, probes, runbooks | [`docs/operations/`](docs/operations/README.md) |
 | Kubernetes custom resource | `tape k8s crd render`; the operator and instance layers come from `tape k8s operator render` and `tape k8s instance render`. |
 | Reaching an in-cluster node | `tape connect --namespace <ns> --cr <name> -- <command>` port-forwards to the Service and runs the command with `TAPE_URL` set; `tape connect --help`. |
 | Backup destinations | `tape backup --help` lists the accepted schemes: `file://`, `s3://` (feature `backup`), and `gs://`. |
@@ -163,9 +165,9 @@ source below states its direct contribution.
 - Sources:
   - [`tape`](./) defines the message envelope, the journal, the WAL frame
     format, the group-commit fsync, and the storage-full degraded mode.
-  - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.4.14/crates/storage-durable/README.md) provides
+  - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.5.1/crates/storage-durable/README.md) provides
     durable files, atomic replacement, fsync, and framed logs.
-  - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.4.14/crates/raft-runtime/README.md) orders and
+  - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.5.1/crates/raft-runtime/README.md) orders and
     replicates the append when the node runs in a group.
 - Gate: `cargo test -p tape --test it -- http_transport:: durable_write_path:: durable_crash_recovery::`
 - Gate: `cargo test --workspace --lib`
@@ -205,9 +207,9 @@ source below states its direct contribution.
   - [`tape`](./) defines the replicated command set, the applied-floor
     recovery, and the peer mTLS listener that keeps raft routes off the public
     router.
-  - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.4.14/crates/raft-runtime/README.md) hosts the group,
+  - [`core/raft-runtime`](https://github.com/faberline/core/blob/v0.5.1/crates/raft-runtime/README.md) hosts the group,
     the log, snapshots, and forwarding.
-  - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.4.14/crates/peer-tls/README.md) provides the mutual TLS
+  - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.5.1/crates/peer-tls/README.md) provides the mutual TLS
     material and verification for peer links.
 - Gate: `cargo test -p tape --test it -- raft_cluster:: raft_persistence:: raft_peer_mtls::`
 - Gate: `cargo test -p tape --test it -- raft_failover::`
@@ -221,9 +223,9 @@ source below states its direct contribution.
 - Sources:
   - [`tape`](./) defines the snapshot route, the backup verb, the
     seed-only-into-empty rule, and the redacted backup audit.
-  - [`core/service-backup`](https://github.com/faberline/core/blob/v0.4.14/crates/service-backup/README.md) provides the
+  - [`core/service-backup`](https://github.com/faberline/core/blob/v0.5.1/crates/service-backup/README.md) provides the
     destination sinks and retention pruning.
-  - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.4.14/crates/storage-durable/README.md) provides
+  - [`core/storage-durable`](https://github.com/faberline/core/blob/v0.5.1/crates/storage-durable/README.md) provides
     the atomic restore write.
 - Gate: `cargo test -p tape --features backup --test it -- backup:: backup_destination_docs::`
 - Gate: `cargo test -p tape --test it -- bootstrap:: seed_ha_bootstrap::`
@@ -237,11 +239,11 @@ source below states its direct contribution.
 - Sources:
   - [`tape`](./) defines the grant model, the admission classification,
     and the audit record.
-  - [`core/service-auth`](https://github.com/faberline/core/blob/v0.4.14/crates/service-auth/README.md) provides the
+  - [`core/service-auth`](https://github.com/faberline/core/blob/v0.5.1/crates/service-auth/README.md) provides the
     bearer-token registry and grant evaluation.
-  - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
+  - [`core/service-http`](https://github.com/faberline/core/blob/v0.5.1/crates/service-http/README.md) provides the
     shared router shell, error envelope, and admission hooks.
-  - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.4.14/crates/peer-tls/README.md) provides the peer
+  - [`core/peer-tls`](https://github.com/faberline/core/blob/v0.5.1/crates/peer-tls/README.md) provides the peer
     identity plane.
 - Gate: `cargo test -p tape --test it -- service_auth:: service_admission:: audit_contract::`
 - Gate: `cargo test -p tape --test it -- raft_peer_mtls::`
@@ -254,13 +256,13 @@ source below states its direct contribution.
   pair with status conditions; ship a direct-install base for a durable
   singleton; provision topics and subscriptions declaratively. The CRD
   versioning policy, CRD-first upgrade order, and journal rollback contract
-  are in [`docs/deployment-handoff.md`](docs/deployment-handoff.md) section 3e;
+  are in [`docs/operations/crd-capacity-and-quotas.md`](docs/operations/crd-capacity-and-quotas.md) section 3e;
   capacity planning, on-disk layout, per-event storage formulas, and PVC
   sizing are in section 3f; the per-topic quota boundary is in section 3g.
 - Sources:
   - [`tape`](./) defines the CRD, defaults, topology policy, conditions,
     render verbs, direct-install base, and provisioning.
-  - [`core/service-k8s`](https://github.com/faberline/core/blob/v0.4.14/crates/service-k8s/README.md) provides reusable
+  - [`core/service-k8s`](https://github.com/faberline/core/blob/v0.5.1/crates/service-k8s/README.md) provides reusable
     reconciliation, leader election, workload, Service, and status mechanisms.
   - `external:kubernetes` stores desired state and runs the workload,
     network, lease, RBAC, and Secret contracts.
@@ -284,11 +286,11 @@ evidence; it does not define the current contract.
 - Sources:
   - [`tape`](./) defines the tape metric families, the shutdown sequence, and
     the stateful restart behaviour.
-  - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
+  - [`core/service-http`](https://github.com/faberline/core/blob/v0.5.1/crates/service-http/README.md) provides the
     probe routes, `Server-Timing`, structured logs, and OTLP wiring.
-  - [`core/server-lifecycle`](https://github.com/faberline/core/blob/v0.4.14/crates/server-lifecycle/README.md)
+  - [`core/server-lifecycle`](https://github.com/faberline/core/blob/v0.5.1/crates/server-lifecycle/README.md)
     provides the one shutdown deadline the drain and the raft handoff share.
-  - [`core/metrics-prometheus`](https://github.com/faberline/core/blob/v0.4.14/crates/metrics-prometheus/README.md)
+  - [`core/metrics-prometheus`](https://github.com/faberline/core/blob/v0.5.1/crates/metrics-prometheus/README.md)
     provides the Prometheus text exposition.
 - Gate: `cargo test -p tape --test it -- http_transport:: shared_otlp_tracing:: long_running_stability::`
 - Gate: `cargo test -p tape --test it -- rig_stateful_adapter::`
@@ -302,13 +304,13 @@ evidence; it does not define the current contract.
 - Sources:
   - [`tape`](./) defines the route inventory, the OpenAPI document, and
     the CLI verbs.
-  - [`core/service-http`](https://github.com/faberline/core/blob/v0.4.14/crates/service-http/README.md) provides the
+  - [`core/service-http`](https://github.com/faberline/core/blob/v0.5.1/crates/service-http/README.md) provides the
     router shell and error envelope.
-  - [`core/transport-h2c`](https://github.com/faberline/core/blob/v0.4.14/crates/transport-h2c/README.md) provides the
+  - [`core/transport-h2c`](https://github.com/faberline/core/blob/v0.5.1/crates/transport-h2c/README.md) provides the
     cleartext HTTP/2 listener shared with HTTP/1.1.
-  - [`core/openapi-codegen`](https://github.com/faberline/core/blob/v0.4.14/crates/openapi-codegen/README.md) provides
+  - [`core/openapi-codegen`](https://github.com/faberline/core/blob/v0.5.1/crates/openapi-codegen/README.md) provides
     the in-binary client generator.
-  - [`core/cli-std`](https://github.com/faberline/core/blob/v0.4.14/crates/cli-std/README.md) provides the standard
+  - [`core/cli-std`](https://github.com/faberline/core/blob/v0.5.1/crates/cli-std/README.md) provides the standard
     command set, output conventions, and the `kubectl port-forward`
     lifecycle behind `tape connect`.
 - Gate: `cargo test -p tape --test it -- spec_route_parity:: spec_generated_clients:: cli_contract::`
@@ -332,7 +334,7 @@ evidence; it does not define the current contract.
 | [STATUS.md](STATUS.md) | Current support per Cloud Pub/Sub surface, with limits and gates |
 | [ROADMAP.md](ROADMAP.md) | Future outcomes and explicit non-goals |
 | [Generated clients](clients/README.md) | Client generation, language matrix, connection inputs, and current limits |
-| [Deployment handoff](docs/deployment-handoff.md) | Images, serve flags, environment, HTTP surface, smoke sequence, backup and restore runbooks, CRD upgrade order and rollback contract, PVC sizing, per-topic quota boundary |
+| [Operations](docs/operations/README.md) | Images, CLI, serve flags, environment, HTTP surface, smoke sequence, release gates, CRD upgrade order and rollback contract, PVC sizing, per-topic quota boundary, backup and restore runbooks |
 | [Node drain and PodDisruptionBudget](docs/runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](docs/benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Tape edit rules and required verification commands |

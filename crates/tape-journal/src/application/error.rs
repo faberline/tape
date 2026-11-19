@@ -35,11 +35,24 @@ pub enum JournalError {
     SubscriptionExists(String),
     #[error("{0}")]
     PullBatchTooLarge(String),
+    /// An ack carried an epoch older than the subscription's current epoch.
+    #[error("{0}")]
+    StaleEpoch(String),
+    /// A seek or cursor outside the retained offset range.
+    #[error("{0}")]
+    OutOfRange(String),
 }
 
 impl From<TapeError> for JournalError {
     fn from(error: TapeError) -> Self {
-        Self::Conflict(error.to_string())
+        let message = error.to_string();
+        match error {
+            TapeError::StaleEpoch { .. } => Self::StaleEpoch(message),
+            TapeError::OffsetOutOfRange { .. } => Self::OutOfRange(message),
+            TapeError::StaleCheckpoint { .. }
+            | TapeError::CheckpointBeyondEnd { .. }
+            | TapeError::ExpectedOffsetMismatch { .. } => Self::Conflict(message),
+        }
     }
 }
 
@@ -50,6 +63,7 @@ impl From<SubscriptionError> for JournalError {
             SubscriptionError::NotFound { .. } => Self::SubscriptionNotFound(message),
             SubscriptionError::AlreadyExists { .. } => Self::SubscriptionExists(message),
             SubscriptionError::PullBatchTooLarge { .. } => Self::PullBatchTooLarge(message),
+            SubscriptionError::CursorOutOfRetention { .. } => Self::OutOfRange(message),
         }
     }
 }

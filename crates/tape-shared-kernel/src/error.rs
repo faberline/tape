@@ -13,6 +13,19 @@ pub enum TapeError {
     },
     #[error("checkpoint offset {offset} is beyond topic end offset {end_offset}")]
     CheckpointBeyondEnd { offset: u64, end_offset: u64 },
+    #[error("ack expected offset {expected_offset} but the current offset is {current_offset}")]
+    ExpectedOffsetMismatch {
+        expected_offset: u64,
+        current_offset: u64,
+    },
+    #[error("ack epoch {epoch} is stale: the subscription epoch is {current_epoch}")]
+    StaleEpoch { epoch: u64, current_epoch: u64 },
+    #[error("offset {offset} is outside the retained range {earliest_offset}..={end_offset}")]
+    OffsetOutOfRange {
+        offset: u64,
+        earliest_offset: u64,
+        end_offset: u64,
+    },
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +36,12 @@ pub enum SubscriptionError {
     NotFound { topic: String, name: String },
     #[error("pull batch limit {limit} exceeds maximum {max}")]
     PullBatchTooLarge { limit: usize, max: usize },
+    #[error("cursor {cursor} is older than the earliest retained offset {earliest_offset} (end offset {end_offset})")]
+    CursorOutOfRetention {
+        cursor: u64,
+        earliest_offset: u64,
+        end_offset: u64,
+    },
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq, Serialize, Deserialize)]

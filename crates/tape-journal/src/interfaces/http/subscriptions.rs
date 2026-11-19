@@ -8,12 +8,12 @@ use service_auth::{AuditedRoleMapPrincipal, Role};
 
 use super::dto::{
     SubscriptionAckRequest, SubscriptionCreateRequest, SubscriptionListResponse,
-    SubscriptionPullRequest,
+    SubscriptionPullRequest, SubscriptionSeekRequest,
 };
 use super::errors::parse_body;
 use crate::application::JournalService;
 use tape_access::authorize;
-use tape_shared_kernel::PullSubscriptionBatch;
+use tape_shared_kernel::{ConsumerCheckpoint, PullSubscriptionBatch, SeekOutcome, Subscription};
 
 #[utoipa::path(
     post,
@@ -168,6 +168,7 @@ pub async fn subscription_pull(
     request_body = SubscriptionAckRequest,
     responses(
         (status = 200, description = "Explicitly advanced checkpoint", body = ConsumerCheckpoint),
+        (status = 409, description = "Stale or beyond-end offset, or expected_offset differs from the current cursor (conflict); stale epoch (stale_epoch)"),
         (status = 507, description = "Node is in ENOSPC degraded read-only mode (storage_full)")
     )
 )]
@@ -187,7 +188,47 @@ pub async fn subscription_ack(
         Ok(req) => req,
         Err(bad) => return bad.into_response(),
     };
-    match service.ack_subscription(topic, name, req.offset).await {
+    match service
+        .ack_subscription(topic, name, req.offset, req.expected_offset, req.epoch)
+        .await
+    {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(error) => error.into_response(),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/topics/{topic}/subscriptions/{subscription}/seek",
+    params(
+        ("topic" = String, Path, description = "Topic name"),
+        ("subscription" = String, Path, description = "Subscription name")
+    ),
+    request_body = SubscriptionSeekRequest,
+    responses(
+        (status = 200, description = "Cursor rewound and epoch bumped", body = SeekOutcome),
+        (status = 404, description = "Unknown subscription (subscription_error)"),
+        (status = 409, description = "Offset outside the retained range (out_of_range)"),
+        (status = 507, description = "Node is in ENOSPC degraded read-only mode (storage_full)")
+    )
+)]
+pub async fn subscription_seek(
+    State(service): State<JournalService>,
+    Extension(principal): Extension<AuditedRoleMapPrincipal>,
+    Path((topic, name)): Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Response {
+    if let Err(deny) = authorize(&principal, &topic, Role::Read) {
+        return deny.into_response();
+    }
+    if let Err(full) = service.storage_writable() {
+        return full.into_response();
+    }
+    let req: SubscriptionSeekRequest = match parse_body(&body) {
+        Ok(req) => req,
+        Err(bad) => return bad.into_response(),
+    };
+    match service.seek_subscription(topic, name, req.offset).await {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(error) => error.into_response(),
     }

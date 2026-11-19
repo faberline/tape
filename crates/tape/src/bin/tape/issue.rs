@@ -73,11 +73,10 @@ pub(crate) async fn issue(args: IssueArgs) -> Result<()> {
             let query = (!args.query.is_empty()).then(|| args.query.join(" "));
             cli_std::issue::search(
                 &crate::cli::TOOL,
-                cli_std::issue::SearchOptions {
-                    query,
-                    state: args.state,
-                    limit: args.limit,
-                },
+                cli_std::issue::SearchOptions::default()
+                    .with_query(query)
+                    .with_state(args.state)
+                    .with_limit(args.limit),
             )
             .await
         }
@@ -93,33 +92,28 @@ pub(crate) async fn issue(args: IssueArgs) -> Result<()> {
             });
             cli_std::issue::create(
                 &crate::cli::TOOL,
-                cli_std::issue::CreateOptions {
-                    title,
-                    message,
-                    url: args.url,
-                    repo: args.repo,
-                    label: std::iter::once("app:tape".to_string())
-                        .chain(args.label)
-                        .collect(),
-                    dry_run: args.dry_run,
-                    yes: args.yes,
-                },
+                cli_std::issue::CreateOptions::new(title)
+                    .with_message(message)
+                    .with_url(args.url)
+                    .with_repo(args.repo)
+                    .with_label(
+                        std::iter::once("app:tape".to_string())
+                            .chain(args.label)
+                            .collect(),
+                    )
+                    .with_dry_run(args.dry_run)
+                    .with_yes(args.yes),
             )
             .await
         }
         IssueCommand::Comment(args) => {
             let message = (!args.message.is_empty()).then(|| args.message.join(" "));
-            cli_std::issue::comment(
-                &crate::cli::TOOL,
-                cli_std::issue::CommentOptions {
-                    number: args.number,
-                    message,
-                    repo: args.repo,
-                    dry_run: args.dry_run,
-                    yes: args.yes,
-                },
-            )
-            .await
+            let options = cli_std::issue::CommentOptions::try_new(args.number)?
+                .with_message(message)
+                .with_repo(args.repo)
+                .with_dry_run(args.dry_run)
+                .with_yes(args.yes);
+            cli_std::issue::comment(&crate::cli::TOOL, options).await
         }
     }
 }

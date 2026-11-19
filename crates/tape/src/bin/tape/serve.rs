@@ -155,7 +155,7 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
     // so use that PVC for the ordinary journal store. An explicit --store
     // still wins, and replica mode continues to keep journal durability in
     // the Raft state machine instead of a second local store.
-    let replica_mode = raft_runtime::cluster::replica_mode();
+    let replica_mode = raft_runtime::replica_mode();
     let store_kind =
         resolve_journal_store(args.store.clone(), args.data_dir.as_deref(), replica_mode);
     // #3052: the WAL arm additionally needs a `probe_dir` for the periodic
@@ -218,10 +218,15 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
         );
     }
     if replica_mode {
-        let transport = peer_tls::from_env()?
-            .map(|config| peer_tls::peer_transport(&config))
+        let peer_config = peer_tls::from_env()?;
+        let transport = peer_config
+            .as_ref()
+            .map(peer_tls::peer_transport)
             .transpose()
             .context("raft: build shared required-mTLS peer transport")?;
+        if let (Some(transport), Some(config)) = (transport.as_ref(), peer_config) {
+            peer_tls::spawn_reload(transport.clone(), config, peer_tls::RELOAD_INTERVAL);
+        }
         let (peer_port, peer_scheme) = match transport.as_ref() {
             Some(_) => (args.raft_port, "https"),
             None => (
@@ -295,9 +300,9 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
             )?,
         });
         tracing::info!(
-            node_id = topo.node_id,
+            node_id = topo.node_id.get(),
             replicas = topo.replicas_per_shard,
-            voters = topo.membership.voters.len(),
+            voters = topo.membership.voters().len(),
             peer_scheme,
             peer_port,
             "raft: replica/HA mode — append/checkpoint-put replicate"
@@ -311,9 +316,10 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
         spawn_raft_leader_poller(state.metrics(), raft_for_poller);
     }
 
-    // Ensure CR-declared subscriptions after journal/raft is ready but before listener starts.
-    // This is idempotent and tolerates AlreadyExists errors, so repeated boots converge safely.
-    ensure_subscriptions(&state).await;
+    // In single-node mode, ensure CR-declared subscriptions before listener starts.
+    if state.raft().is_none() {
+        ensure_subscriptions(&state).await;
+    }
 
     let app = if peer_transport.is_some() {
         router_without_raft_routes_with_admission(state.clone(), admission)
@@ -347,6 +353,16 @@ pub(crate) async fn serve_main(args: ServeArgs) -> Result<()> {
     };
 
     let http = PublicHttp::spawn(listener, app);
+
+    // In HA mode, startup does not wait for leadership: the listeners bind first,
+    // and provisioning runs in a spawned task that retries an unavailable or
+    // not-yet-leader error with bounded backoff.
+    if state.raft().is_some() {
+        let state_for_provision = state.clone();
+        tokio::spawn(async move {
+            ensure_subscriptions(&state_for_provision).await;
+        });
+    }
     shutdown_on_signal(
         state,
         http,

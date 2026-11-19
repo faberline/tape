@@ -18,6 +18,8 @@ Regenerate and commit the snapshot in the same change that alters a route or a
 schema field. The subscription, push, and seek outcomes in
 [ROADMAP.md](../ROADMAP.md) each move this file.
 
+`openapi.baseline.json` is the compatibility floor. The live contract may add to it, not remove from it; see [docs/operations/compatibility.md](../docs/operations/compatibility.md).
+
 ## Generate
 
 Clients are generated in-binary by `tape spec gen` through the shared
@@ -77,5 +79,5 @@ committed `openapi.json` agree byte for byte.
 
 - [README.md](../README.md) for the product workflow and capabilities.
 - [STATUS.md](../STATUS.md) for the support state of each route family.
-- [Deployment handoff](../docs/deployment-handoff.md) for serve flags, ports,
+- [Environment and HTTP surface](../docs/operations/environment-and-http.md) for serve flags, ports,
   and environment.

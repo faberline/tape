@@ -50,6 +50,6 @@ No supported mechanism removes or purges an individual topic from a running Tape
 Topic removal is only available for the whole service:
 
 - **Service Retirement**: decommission the whole Tape custom resource and its data.
-- **State Restoration**: restore the service from a backup taken before the topic was created, following the cold restore runbook in [deployment-handoff.md](deployment-handoff.md) section 7. Every write to any topic since that backup is lost.
+- **State Restoration**: restore the service from a backup taken before the topic was created, following the [cold restore runbook](runbooks/cold-restore.md). Every write to any topic since that backup is lost.
 
 A retention policy can empty a topic's events, which bounds its storage, but it leaves the five entries listed above in place.

@@ -1,0 +1,41 @@
+# What the suite reads and does in the run's namespace, and nothing
+# cluster-wide: it reads the server pods, the StatefulSet and the Tape CR,
+# runs `tape --version` in each server pod, and patches the Tape CR's spec
+# (image, replicasPerShard, voterCount, graceSecs). It deletes no pod: the
+# operator rolls the StatefulSet.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tape-e2e
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tape.dev"]
+    resources: ["tapes"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tape-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tape-e2e
+subjects:
+  - kind: ServiceAccount
+    name: tape-e2e
+    namespace: tape

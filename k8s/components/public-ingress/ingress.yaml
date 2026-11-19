@@ -1,0 +1,29 @@
+# Public API TLS (docs/operations/public-api-tls.md). Placeholder host
+# tape.example.com and secret tape-public-tls: replace both for the
+# environment. The ingress controller must redirect or refuse plain HTTP.
+# Do not expose port 7138 (raft peers) through this Ingress.
+# ingressClassName is not set: the cluster default applies. Set it when the
+# cluster has more than one controller.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tape-public
+  labels:
+    app: tape
+    role: server
+spec:
+  tls:
+    - hosts:
+        - tape.example.com
+      secretName: tape-public-tls
+  rules:
+    - host: tape.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tape
+                port:
+                  name: http

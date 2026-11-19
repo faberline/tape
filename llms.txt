@@ -33,6 +33,6 @@ HTTP/1.1 + h2c API.
 
 - `README.md`: product brief, workflow, capabilities, and gates.
 - `STATUS.md`, `ROADMAP.md`: support matrix and outcomes.
-- `docs/deployment-handoff.md`: serve flags, environment, probes, runbooks.
+- `docs/operations/`: images, CLI, serve flags, environment, probes, smoke sequence, release gates; `docs/runbooks/`: restore, disk-full, drain.
 - `docs/product/`: promises, one `## <title>` section per capability area.
 - `build.sh`, `install.sh`: local build and install entrypoints.

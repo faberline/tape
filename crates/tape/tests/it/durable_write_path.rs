@@ -238,7 +238,9 @@ fn apply_fixture_commands_via_public_journal_api(journal: &mut TapeJournal) {
             TapeCommand::SubscriptionCreate { topic, name } => {
                 journal.create_subscription(topic, name).unwrap();
             }
-            TapeCommand::SubscriptionDelete { .. } | TapeCommand::SubscriptionAck { .. } => {
+            TapeCommand::SubscriptionDelete { .. }
+            | TapeCommand::SubscriptionAck { .. }
+            | TapeCommand::SubscriptionSeek { .. } => {
                 unreachable!("fixture_commands() never emits these variants")
             }
             TapeCommand::RetentionPut {

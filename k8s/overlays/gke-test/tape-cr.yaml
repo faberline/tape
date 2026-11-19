@@ -11,7 +11,8 @@ spec:
   shardCount: 1
   replicasPerShard: 1
   voterCount: 1
-  storage: 1Gi
+  # Hyperdisk Balanced needs at least 4 GB (aw docs/standards/test-cluster.md).
+  storage: 4Gi
   graceSecs: 1
   logLevel: info
   # Stated, not omitted: an absent spec.auth defaults to required, and a CR
@@ -19,10 +20,14 @@ spec:
   # startup. The recovery suite tests PVC-retained replay, not auth.
   auth: disabled
   # The defaults (1 CPU, 4Gi) do not fit next to the node's system pods on
-  # an e2-standard-2.
+  # an n4-standard-2.
   resources:
     cpu: 250m
     memory: 512Mi
+  # N4 nodes attach only Hyperdisk, not the cluster default standard-rwo
+  # (PD). Without this the PVC data-tape-0 has no storageClassName, and the
+  # autoscaler cannot place tape-0 on the tape-server pool.
+  storageClass: dynamic-rwo
   imagePullSecrets:
     - name: ghcr-pull
   placement:

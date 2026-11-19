@@ -10,10 +10,7 @@ use tape_shared_kernel::TapeJournal;
 use tape_shared_kernel::TapeOutcome;
 
 fn membership() -> Membership {
-    Membership {
-        voters: vec![0],
-        learners: vec![],
-    }
+    Membership::new(vec![raft_runtime::NodeId::new(0)], vec![])
 }
 
 async fn wait_leader(raft: &TapeRaft) {
@@ -39,7 +36,7 @@ async fn repeated_restarts_preserve_append_history_and_checkpoint_progress() {
         let raft = TapeRaft::spawn(
             Arc::clone(&journal),
             &dir.path().join("raft"),
-            0,
+            raft_runtime::NodeId::new(0),
             membership(),
             HashMap::new(),
             TapeRaft::host_config(8),
@@ -64,13 +61,15 @@ async fn repeated_restarts_preserve_append_history_and_checkpoint_progress() {
             .await
             .unwrap();
         assert!(matches!(checkpoint, Some(TapeOutcome::Checkpoint(Ok(_)))));
+        // Stop the host before reopening the same directory (#164).
+        raft.shutdown().await.unwrap();
         drop(raft);
 
         let recovered = Arc::new(Mutex::new(TapeJournal::default()));
         let raft = TapeRaft::spawn(
             Arc::clone(&recovered),
             &dir.path().join("raft"),
-            0,
+            raft_runtime::NodeId::new(0),
             membership(),
             HashMap::new(),
             TapeRaft::host_config(8),
@@ -84,14 +83,17 @@ async fn repeated_restarts_preserve_append_history_and_checkpoint_progress() {
             );
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        let journal = raft.journal();
-        let journal = journal.lock().unwrap();
-        assert_eq!(
-            journal.checkpoint("orders", "worker").unwrap().offset,
-            total
-        );
-        let events = journal.replay("orders", None, None, None);
-        assert_eq!(events.len() as u64, total);
-        assert_eq!(events.last().unwrap().payload["n"], total - 1);
+        {
+            let journal = raft.journal();
+            let journal = journal.lock().unwrap();
+            assert_eq!(
+                journal.checkpoint("orders", "worker").unwrap().offset,
+                total
+            );
+            let events = journal.replay("orders", None, None, None);
+            assert_eq!(events.len() as u64, total);
+            assert_eq!(events.last().unwrap().payload["n"], total - 1);
+        }
+        raft.shutdown().await.unwrap();
     }
 }

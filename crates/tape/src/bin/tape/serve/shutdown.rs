@@ -20,7 +20,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use server_lifecycle::{LifecycleController, ShutdownDeadline};
 use tape::http::AppState;
-use tape_replication::raft::HostShutdownReport;
+use tape_replication::raft::{HostShutdownReport, TapeRaft};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -125,11 +125,15 @@ pub(crate) async fn shutdown_on_signal(
         drain_delay_ms = drain_delay.as_millis() as u64,
         "shutdown signal received; draining"
     );
+    if let Some(raft) = state.raft() {
+        log_leadership(&raft, "sigterm").await;
+    }
     state.start_drain();
     tokio::time::sleep_until(drain_until(deadline, drain_delay)).await;
 
     let (raft_result, close_safe) = match state.raft() {
         Some(raft) => {
+            log_leadership(&raft, "before_handoff").await;
             raft.quiesce_proposals();
             let report = raft.shutdown_within(deadline).await;
             log_raft_report(&report, deadline);
@@ -154,7 +158,24 @@ pub(crate) async fn shutdown_on_signal(
 /// When the readiness drain ends: `drain_delay` from now, but never past the
 /// deadline.
 pub(crate) fn drain_until(deadline: ShutdownDeadline, drain_delay: Duration) -> Instant {
-    (Instant::now() + drain_delay).min(deadline.expires_at)
+    (Instant::now() + drain_delay).min(deadline.expires_at())
+}
+
+/// Whether this node is the raft leader now, and who the leader is.
+pub(crate) async fn leadership_snapshot(raft: &TapeRaft) -> (bool, Option<raft_runtime::NodeId>) {
+    (raft.is_leader().await, raft.leader().await)
+}
+
+/// Log the leadership seen at one point of the SIGTERM sequence (#183).
+async fn log_leadership(raft: &TapeRaft, phase: &'static str) {
+    let (is_leader, leader) = leadership_snapshot(raft).await;
+    tracing::info!(
+        event = "raft_leadership",
+        phase = phase,
+        is_leader = is_leader,
+        leader = ?leader,
+        "raft leadership during shutdown"
+    );
 }
 
 /// Close the raft peer listener. `close_safe` comes from the host's shutdown
@@ -180,7 +201,7 @@ pub(crate) async fn finish_peer_listener(
         return Ok(());
     }
     let _ = shutdown_tx.send(());
-    match tokio::time::timeout_at(deadline.expires_at, &mut task).await {
+    match tokio::time::timeout_at(deadline.expires_at(), &mut task).await {
         Ok(joined) => {
             tracing::info!(
                 event = "raft_peer_listener_closed",
@@ -204,7 +225,7 @@ pub(crate) async fn finish_peer_listener(
 /// connections by the deadline; the task is aborted only if it overruns that
 /// by [`HTTP_JOIN_SLACK`].
 pub(crate) async fn finish_http(mut task: JoinHandle<()>, deadline: ShutdownDeadline) {
-    if tokio::time::timeout_at(deadline.expires_at + HTTP_JOIN_SLACK, &mut task)
+    if tokio::time::timeout_at(deadline.expires_at() + HTTP_JOIN_SLACK, &mut task)
         .await
         .is_err()
     {
@@ -223,7 +244,7 @@ fn log_raft_report(report: &HostShutdownReport, deadline: ShutdownDeadline) {
         incomplete_phase = ?report.incomplete_phase,
         peer_listener_close_safe = report.peer_listener_close_safe,
         storage_failure = ?report.storage_failure,
-        shutdown_budget_ms = deadline.total.as_millis() as u64,
+        shutdown_budget_ms = deadline.total().as_millis() as u64,
         "raft host shut down"
     );
 }

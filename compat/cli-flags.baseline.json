@@ -1,0 +1,178 @@
+{
+  "tape": [
+    "cmd:append",
+    "cmd:backup",
+    "cmd:checkpoint",
+    "cmd:connect",
+    "cmd:dockerfile",
+    "cmd:issue",
+    "cmd:k8s",
+    "cmd:llm",
+    "cmd:replay",
+    "cmd:serve",
+    "cmd:spec",
+    "cmd:subscription",
+    "cmd:upgrade"
+  ],
+  "tape append": [
+    "--key",
+    "--payload",
+    "--store",
+    "--timestamp-ms"
+  ],
+  "tape backup": [
+    "--dest",
+    "--retention-secs",
+    "--token",
+    "--url"
+  ],
+  "tape checkpoint": [
+    "cmd:get",
+    "cmd:put"
+  ],
+  "tape checkpoint get": [
+    "--store"
+  ],
+  "tape checkpoint put": [
+    "--offset",
+    "--store"
+  ],
+  "tape connect": [
+    "--context",
+    "--cr",
+    "--local-port",
+    "--namespace",
+    "--remote-port",
+    "--service"
+  ],
+  "tape dockerfile": [
+    "cmd:render"
+  ],
+  "tape dockerfile render": [
+    "--out",
+    "--variant"
+  ],
+  "tape issue": [
+    "cmd:comment",
+    "cmd:create",
+    "cmd:search",
+    "cmd:view"
+  ],
+  "tape issue comment": [
+    "--dry-run",
+    "--repo",
+    "--yes"
+  ],
+  "tape issue create": [
+    "--dry-run",
+    "--label",
+    "--repo",
+    "--title",
+    "--url",
+    "--yes"
+  ],
+  "tape issue search": [
+    "--limit",
+    "--state"
+  ],
+  "tape issue view": [],
+  "tape k8s": [
+    "cmd:crd",
+    "cmd:instance",
+    "cmd:operator"
+  ],
+  "tape k8s crd": [
+    "cmd:render"
+  ],
+  "tape k8s crd render": [
+    "--out"
+  ],
+  "tape k8s instance": [
+    "cmd:render"
+  ],
+  "tape k8s instance render": [
+    "--image",
+    "--name",
+    "--namespace",
+    "--out",
+    "--profile"
+  ],
+  "tape k8s operator": [
+    "cmd:render",
+    "cmd:run"
+  ],
+  "tape k8s operator render": [
+    "--monitoring",
+    "--namespace",
+    "--out"
+  ],
+  "tape k8s operator run": [],
+  "tape llm": [
+    "--format",
+    "--topic"
+  ],
+  "tape replay": [
+    "--from-offset",
+    "--from-timestamp-ms",
+    "--limit",
+    "--store"
+  ],
+  "tape serve": [
+    "--auth",
+    "--bind",
+    "--body-limit-bytes",
+    "--bootstrap-seed-uri",
+    "--data-dir",
+    "--drain-delay-secs",
+    "--grace-secs",
+    "--log-format",
+    "--otlp-endpoint",
+    "--peer-service",
+    "--raft-port",
+    "--store",
+    "--token-registry-file"
+  ],
+  "tape spec": [
+    "--format",
+    "cmd:gen"
+  ],
+  "tape spec gen": [
+    "--http",
+    "--lang",
+    "--out",
+    "--target"
+  ],
+  "tape subscription": [
+    "cmd:ack",
+    "cmd:create",
+    "cmd:delete",
+    "cmd:list",
+    "cmd:pull",
+    "cmd:show"
+  ],
+  "tape subscription ack": [
+    "--offset",
+    "--store"
+  ],
+  "tape subscription create": [
+    "--store"
+  ],
+  "tape subscription delete": [
+    "--store"
+  ],
+  "tape subscription list": [
+    "--store"
+  ],
+  "tape subscription pull": [
+    "--limit",
+    "--store"
+  ],
+  "tape subscription show": [
+    "--store"
+  ],
+  "tape upgrade": [
+    "--check",
+    "--force",
+    "--yes"
+  ]
+}

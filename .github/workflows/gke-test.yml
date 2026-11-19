@@ -12,7 +12,14 @@
 # at a time, each on a fresh deploy:
 #   operator_recovery  k8s/gke-test-job/operator_recovery
 #   operator_ha        k8s/gke-test-job/operator_ha
-# A pull request runs all of them; a dispatch can pick one.
+#   operator_restore   k8s/gke-test-job/operator_restore (dispatch only, paid, needs backup_bucket: never in all and never in ci.yml)
+#   operator_upgrade   k8s/gke-test-job/operator_upgrade (dispatch only, paid: never in all and never in ci.yml)
+#   operator_partition k8s/gke-test-job/operator_partition (dispatch only, paid: never in all and never in ci.yml)
+#   operator_rollback  k8s/gke-test-job/operator_rollback (dispatch only, paid: never in all and never in ci.yml)
+#   operator_nodeloss  k8s/gke-test-job/operator_nodeloss (dispatch only, paid: never in all and never in ci.yml)
+#   operator_diskfull  k8s/gke-test-job/operator_diskfull (dispatch only, paid: never in all and never in ci.yml)
+#   operator_soak      k8s/gke-test-job/operator_soak (dispatch only, paid, soak_hours default 4: never in all and never in ci.yml)
+# ci.yml runs all of them on a pull request; a dispatch here can pick one.
 #
 # GKE runs linux/amd64 only. The suite `image` covers linux/arm64 without a
 # cluster: the image-arm64 job runs crates/tape/tests/it/e2e/image.rs on
@@ -28,21 +35,28 @@
 name: gke-test
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/gke-test.yml"
-      - ".github/workflows/tape-test-image.yml"
-      - "Dockerfile.test"
-      - "k8s/**"
-      - "crates/tape-operator/**"
-      - "crates/tape/tests/it/e2e/**"
   workflow_dispatch:
     inputs:
       suite:
         description: Suite to run; all runs every suite, one at a time.
         type: choice
-        options: [all, operator_recovery, operator_ha]
+        options: [all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback, operator_diskfull, operator_nodeloss, operator_soak]
         default: all
+      backup_bucket:
+        description: Name of the gs:// bucket for operator_restore (no gs:// prefix).
+        type: string
+        required: false
+        default: ""
+      previous_image:
+        description: "Image under test replaces this one after the first rollout: ghcr.io/faberline/tape@sha256:<64 hex> of the previous release. Needed only by operator_upgrade and operator_rollback."
+        type: string
+        required: false
+        default: ""
+      soak_hours:
+        description: "Length of the operator_soak window in hours, from 0.05 to 5. The paid default of 4 hours needs the approval of the owner; use 0.05 to check the suite."
+        type: string
+        required: false
+        default: "4"
 
 permissions:
   contents: read
@@ -68,6 +82,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
+          toolchain: 1.99.1
           targets: x86_64-unknown-linux-musl
 
       - name: Install musl toolchain
@@ -160,6 +175,9 @@ jobs:
           RAW_IMAGE: ${{ needs.image.outputs.image }}
           # A pull request has no inputs, so it runs all suites.
           INPUT_SUITE: ${{ inputs.suite || 'all' }}
+          INPUT_BACKUP_BUCKET: ${{ inputs.backup_bucket }}
+          INPUT_PREVIOUS_IMAGE: ${{ inputs.previous_image }}
+          INPUT_SOAK_HOURS: ${{ inputs.soak_hours }}
         run: |
           set -euo pipefail
           die() { echo "::error::$*" >&2; exit 1; }
@@ -186,8 +204,31 @@ jobs:
 
           case "$INPUT_SUITE" in
             all) suites='["operator_recovery","operator_ha"]' ;;
-            operator_recovery | operator_ha) suites="[\"${INPUT_SUITE}\"]" ;;
-            *) die "suite must be all, operator_recovery or operator_ha, got: $INPUT_SUITE" ;;
+            operator_recovery | operator_ha | operator_partition | operator_diskfull | operator_nodeloss) suites="[\"${INPUT_SUITE}\"]" ;;
+            operator_restore)
+              [[ "$INPUT_BACKUP_BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]] \
+                || die "operator_restore needs backup_bucket, got: $INPUT_BACKUP_BUCKET"
+              suites='["operator_restore"]'
+              ;;
+            operator_upgrade)
+              [[ "$INPUT_PREVIOUS_IMAGE" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] \
+                || die "operator_upgrade needs previous_image ghcr.io/faberline/tape@sha256:<64 hex>, got: $INPUT_PREVIOUS_IMAGE"
+              [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
+              suites='["operator_upgrade"]'
+              ;;
+            operator_rollback)
+              [[ "$INPUT_PREVIOUS_IMAGE" =~ ^ghcr\.io/faberline/tape@sha256:[0-9a-f]{64}$ ]] \
+                || die "operator_rollback needs previous_image ghcr.io/faberline/tape@sha256:<64 hex>, got: $INPUT_PREVIOUS_IMAGE"
+              [[ "$INPUT_PREVIOUS_IMAGE" != "$image" ]] || die "previous_image must differ from the image under test"
+              suites='["operator_rollback"]'
+              ;;
+            operator_soak)
+              [[ "$INPUT_SOAK_HOURS" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+                && awk -v h="$INPUT_SOAK_HOURS" 'BEGIN { exit !(h >= 0.05 && h <= 5) }' \
+                || die "operator_soak needs soak_hours from 0.05 to 5, got: $INPUT_SOAK_HOURS"
+              suites='["operator_soak"]'
+              ;;
+            *) die "suite must be all, operator_recovery, operator_ha, operator_restore, operator_upgrade, operator_partition, operator_rollback, operator_diskfull, operator_nodeloss or operator_soak, got: $INPUT_SUITE" ;;
           esac
 
           {
@@ -201,6 +242,15 @@ jobs:
             echo "E2E_EXPECTED_GIT_SHA=${git_sha}"
             echo "E2E_EXPECTED_IMAGE=${image}"
             echo "E2E_EXPECTED_RUNTIME_DIGEST=${runtime_digest}"
+            if [[ "$INPUT_SUITE" == operator_restore ]]; then
+              echo "E2E_BACKUP_BUCKET=${INPUT_BACKUP_BUCKET}"
+            fi
+            if [[ "$INPUT_SUITE" == operator_upgrade || "$INPUT_SUITE" == operator_rollback ]]; then
+              echo "E2E_PREVIOUS_IMAGE=${INPUT_PREVIOUS_IMAGE}"
+            fi
+            if [[ "$INPUT_SUITE" == operator_soak ]]; then
+              echo "E2E_SOAK_HOURS=${INPUT_SOAK_HOURS}"
+            fi
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           {
@@ -230,9 +280,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+    uses: faberline/aw/.github/workflows/gke-test.yml@8e6189b1a244da71a0c09f71ce869e8715d04f0c
     with:
-      aw-ref: f5b4c093ca2b5525e594c6ea154f0159af1fb9cc
+      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c
       image: ${{ needs.resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
@@ -241,6 +291,10 @@ jobs:
       test-image-name: tape-test-client
       test-env: ${{ needs.resolve.outputs.test-env }}
       evidence-suffix: ${{ matrix.suite }}
+      # The soak is the one long suite. The aw workflow needs queue-minutes + ttl-minutes < 360,
+      # so the soak has 330 + 29 = 359; the other suites keep the aw defaults (90 and 120).
+      ttl-minutes: ${{ matrix.suite == 'operator_soak' && 330 || 90 }}
+      queue-minutes: ${{ matrix.suite == 'operator_soak' && 29 || 120 }}
 
   image-arm64:
     name: image e2e (arm64)
@@ -257,6 +311,8 @@ jobs:
         run: test "$(uname -m)" = aarch64
 
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: 1.99.1
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:

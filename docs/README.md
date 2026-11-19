@@ -6,13 +6,17 @@ Project-level documentation for tape. Usage starts at the root
 
 | Document | What it answers |
 |----------|-----------------|
+| [quickstart.md](quickstart.md) | How a new user goes from install to a published and pulled message, and to a 3-replica group. |
 | [architecture.md](architecture.md) | How the workspace is cut into crates, bounded contexts and layers, what may depend on what, and which rule breaks are allowed and why. |
 | [delivery-semantics.md](delivery-semantics.md) | What an append guarantees on retry, what the envelope `key` does and does not do, and where deduplication belongs. |
 | [glossary.md](glossary.md) | The terms tape's code, API and docs use, and what each one means here. |
 | [topic-lifecycle.md](topic-lifecycle.md) | How a topic comes into existence, what retention leaves behind, and why there is no per-topic delete. |
+| [design/pull-subscription-wire-format.md](design/pull-subscription-wire-format.md) | The wire format of pull-subscription offsets, checkpoint compare-and-set, seek epochs and commit retry, with the rule, an example and the proving test for each. |
 | [domain/](domain/) | One page per context: what it models, its ports, its invariants, and its recorded exceptions. |
 | [adr/](adr/) | Architecture decisions and the reasons behind them. |
 | [operations/](operations/README.md) | Deploying, running, benchmarking and checking tape, with links to the runbooks. |
+| [security/threat-model.md](security/threat-model.md) | What tape protects, where its trust boundaries are, the STRIDE threats at each, the control in place and the known gap. |
+| [runbooks/](runbooks/README.md) | The alert index and one page per operator procedure: restore, disk full, node drain, raft member loss. |
 | [product/](product/README.md) | What tape promises per capability area. |
 
 The architecture contract itself is [`ddd.toml`](../ddd.toml) at the repository

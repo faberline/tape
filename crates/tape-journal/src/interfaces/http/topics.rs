@@ -12,6 +12,7 @@ use super::dto::{
 use super::errors::parse_body;
 use crate::application::{JournalService, REPLAY_CONTENT_TYPE};
 use tape_access::authorize;
+use tape_shared_kernel::{ConsumerCheckpoint, TapeEvent};
 
 /// `POST /topics/{topic}/append` — append one event envelope to the topic
 /// journal.

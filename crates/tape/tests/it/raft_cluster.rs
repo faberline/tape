@@ -54,10 +54,7 @@ impl Cluster {
         Cluster {
             urls,
             listeners,
-            membership: Membership {
-                voters: (0..n).collect(),
-                learners: vec![],
-            },
+            membership: Membership::new((0..n).map(raft_runtime::NodeId::new).collect(), vec![]),
             nodes: (0..n).map(|_| None).collect(),
             _dirs: (0..n).map(|_| tempfile::tempdir().unwrap()).collect(),
             client: reqwest::Client::builder()
@@ -72,17 +69,17 @@ impl Cluster {
     /// its peer router on the pre-bound listener.
     fn start_node(&mut self, id: usize, snapshot_every: u64) {
         let journal = Arc::new(Mutex::new(TapeJournal::default()));
-        let peers: HashMap<u64, String> = self
+        let peers: HashMap<raft_runtime::NodeId, String> = self
             .urls
             .iter()
             .filter(|(k, _)| **k != id as u64)
-            .map(|(k, v)| (*k, v.clone()))
+            .map(|(k, v)| (raft_runtime::NodeId::new(*k), v.clone()))
             .collect();
         let raft = Arc::new(
             TapeRaft::spawn(
                 journal,
                 &self._dirs[id].path().join("raft"),
-                id as u64,
+                raft_runtime::NodeId::new(id as u64),
                 self.membership.clone(),
                 peers,
                 TapeRaft::host_config(snapshot_every),
@@ -491,6 +488,41 @@ async fn three_node_group_elects_replicates_forwards_and_fails_over() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn subscription_seek_proposal_bumps_the_epoch() {
+    let _guard = CLUSTER_TEST_LOCK.lock().await;
+    let mut c = Cluster::prepare(3).await;
+    c.start_all(1024);
+    let leader = c.wait_leader().await;
+
+    let (_, created) = c
+        .raft(leader)
+        .propose_subscription_create("orders".into(), "audit".into())
+        .await
+        .unwrap();
+    assert!(matches!(
+        created,
+        Some(tape_shared_kernel::TapeOutcome::SubscriptionCreated(Ok(_)))
+    ));
+    propose(c.raft(leader), 1).await;
+    propose(c.raft(leader), 2).await;
+    c.wait_converged(2).await;
+
+    let (_, sought) = c
+        .raft(leader)
+        .propose_subscription_seek("orders".into(), "audit".into(), 0, 300)
+        .await
+        .unwrap();
+    match sought {
+        Some(tape_shared_kernel::TapeOutcome::SubscriptionSought(Ok(outcome))) => {
+            assert_eq!(outcome.epoch, 1);
+            assert_eq!(outcome.cursor, 0);
+        }
+        other => panic!("unexpected seek outcome: {other:?}"),
+    }
+    c.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn pull_subscription_metadata_and_explicit_ack_converge() {
     let _guard = CLUSTER_TEST_LOCK.lock().await;
     let mut c = Cluster::prepare(3).await;
@@ -524,7 +556,7 @@ async fn pull_subscription_metadata_and_explicit_ack_converge() {
 
     let (_, acked) = c
         .raft(follower)
-        .propose_subscription_ack("orders".into(), "audit".into(), 2, 200)
+        .propose_subscription_ack("orders".into(), "audit".into(), 2, None, 200)
         .await
         .unwrap();
     assert!(matches!(
@@ -610,7 +642,7 @@ async fn fresh_node_catches_up_via_install_snapshot() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert!(
-        c.raft(2).applied_index() >= 20,
+        c.raft(2).applied_index().get() >= 20,
         "snapshot restore set the applied floor"
     );
     let got = c.payload_ns(2);

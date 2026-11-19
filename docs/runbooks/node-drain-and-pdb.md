@@ -143,5 +143,4 @@ tape backup --url http://tape-0.tape-headless.<namespace>.svc.cluster.local:7137
 the StatefulSet's `serviceName`; `tape` is the load-balanced ClusterIP and does
 not resolve per-pod.)
 
-See [the deployment handoff](../deployment-handoff.md) § 7 for the full backup/restore
-runbook.
+See the [cold restore runbook](cold-restore.md) and the [disk-full runbook](disk-full.md) for the full backup/restore runbooks.

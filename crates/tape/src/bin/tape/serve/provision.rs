@@ -1,8 +1,19 @@
 //! CR-declared startup subscriptions (`TAPE_PROVISION_TOPICS`), ensured
-//! idempotently before the listener starts.
+//! idempotently.
+//!
+//! Single-node provisioning ensures subscriptions through the durable mutation
+//! seam before the listener binds. HA mode provisions through the replicated
+//! journal mutation path (`JournalService::create_subscription`), which proposes
+//! through Raft and forwards to the leader, retrying while no leader is elected.
+
+use std::time::Duration;
 
 use tape::http::AppState;
-use tape_shared_kernel::{SubscriptionError, TapeOutcome};
+use tape_journal::application::JournalError;
+use tape_shared_kernel::{Subscription, SubscriptionError, TapeOutcome};
+
+#[cfg(test)]
+mod tests;
 
 /// Declarative topic/subscription provisioning from CR.
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -13,11 +24,42 @@ pub(crate) struct ProvisionTopic {
     pub(crate) subscriptions: Vec<String>,
 }
 
-/// Ensure subscriptions from CR-declared topics. Called after journal/raft
-/// is ready but before listener starts. Parses TAPE_PROVISION_TOPICS (compact JSON
-/// array of {name, subscriptions}), ensures each subscription, and logs decisions
-/// (created|already_exists|noted_implicit). Single-node provisioning uses the
-/// durable mutation seam; HA keeps its established direct-memory path.
+/// Classification of a subscription create attempt in HA mode.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ProvisionDecision {
+    /// Subscription was created successfully.
+    Created,
+    /// Subscription already exists (idempotent no-op).
+    AlreadyExists,
+    /// Proposal failed due to election / not-yet-leader / unavailable; retry.
+    Retry(String),
+    /// Non-retryable error.
+    Failed(String),
+}
+
+/// Classify the result of [`AppState::create_subscription`] in HA mode to
+/// determine whether to retry, log success, or log failure.
+pub(crate) fn classify_ha_create_result(
+    result: &Result<Subscription, JournalError>,
+) -> ProvisionDecision {
+    match result {
+        Ok(_) => ProvisionDecision::Created,
+        Err(JournalError::SubscriptionExists(_)) => ProvisionDecision::AlreadyExists,
+        Err(JournalError::Unavailable(reason)) => ProvisionDecision::Retry(reason.clone()),
+        Err(error) => ProvisionDecision::Failed(error.to_string()),
+    }
+}
+
+/// Ensure subscriptions from CR-declared topics.
+///
+/// Parses `TAPE_PROVISION_TOPICS` (compact JSON array of `{name, subscriptions}`),
+/// ensures each subscription, and logs decisions (`created` | `already_exists` |
+/// `noted_implicit`).
+///
+/// In single-node mode, this uses [`AppState::provision_startup_subscription`].
+/// In HA mode, every subscription is proposed through Raft via
+/// [`AppState::create_subscription`], retrying with bounded backoff while
+/// no leader exists.
 pub(crate) async fn ensure_subscriptions(state: &AppState) {
     let json_str = match std::env::var("TAPE_PROVISION_TOPICS") {
         Ok(s) => s,
@@ -91,35 +133,62 @@ pub(crate) async fn ensure_subscriptions(state: &AppState) {
                 continue;
             }
 
-            // Attempt to create the subscription using the same path the API uses.
-            // HA provisioning runs before the listener starts, so it keeps its
-            // established in-process journal mutation path.
-            let journal_handle = state.journal_handle();
-            let mut journal = journal_handle.lock().expect("journal mutex poisoned");
-            match journal.create_subscription(&topic.name, subscription) {
-                Ok(_) => {
-                    tracing::info!(
+            // In HA mode, propose subscription creation through Raft, retrying with
+            // bounded backoff while the group has no leader or is electing.
+            let mut backoff = Duration::from_millis(50);
+            let max_backoff = Duration::from_millis(500);
+            loop {
+                if state.is_draining() {
+                    tracing::debug!(
                         topic = %topic.name,
                         subscription = %subscription,
-                        decision = "created",
-                        "subscription created (cr-provisioned)"
+                        "node draining; stopping provisioning attempts"
                     );
+                    break;
                 }
-                Err(SubscriptionError::AlreadyExists { .. }) => {
-                    tracing::info!(
-                        topic = %topic.name,
-                        subscription = %subscription,
-                        decision = "already_exists",
-                        "subscription already exists (idempotent)"
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        topic = %topic.name,
-                        subscription = %subscription,
-                        error = %e,
-                        "subscription ensure failed; continuing with other subscriptions"
-                    );
+
+                let result = state
+                    .create_subscription(topic.name.clone(), subscription.clone())
+                    .await;
+
+                match classify_ha_create_result(&result) {
+                    ProvisionDecision::Created => {
+                        tracing::info!(
+                            topic = %topic.name,
+                            subscription = %subscription,
+                            decision = "created",
+                            "subscription created (cr-provisioned)"
+                        );
+                        break;
+                    }
+                    ProvisionDecision::AlreadyExists => {
+                        tracing::info!(
+                            topic = %topic.name,
+                            subscription = %subscription,
+                            decision = "already_exists",
+                            "subscription already exists (idempotent)"
+                        );
+                        break;
+                    }
+                    ProvisionDecision::Retry(reason) => {
+                        tracing::debug!(
+                            topic = %topic.name,
+                            subscription = %subscription,
+                            %reason,
+                            "provisioning proposal unavailable; retrying with backoff"
+                        );
+                        tokio::time::sleep(backoff).await;
+                        backoff = std::cmp::min(backoff.saturating_mul(2), max_backoff);
+                    }
+                    ProvisionDecision::Failed(error) => {
+                        tracing::warn!(
+                            topic = %topic.name,
+                            subscription = %subscription,
+                            %error,
+                            "subscription ensure failed; continuing with other subscriptions"
+                        );
+                        break;
+                    }
                 }
             }
         }

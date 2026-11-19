@@ -4,7 +4,7 @@
 //! destination.rs`) is the single fact source for which backup destination
 //! URI schemes Tape accepts and whether each has a live sink linked into
 //! this build. #2483 found three hand-copied `file://`+`s3://`-only claims
-//! (CLI help, `docs/deployment-handoff.md`, `README.md`) that had drifted
+//! (CLI help, `docs/runbooks/cold-restore.md`, `README.md`) that had drifted
 //! stale against the unconditionally-shipped `gs://` scheme; these tests
 //! pin every doc surface plus Tape's own sectioned LLM topic
 //! (`tape_journal::interfaces::spec::LLM_BACKUP_TOPICS`, #2494) to that fact source so the same
@@ -37,12 +37,12 @@ fn readme_backup_sections_list_every_supported_scheme() {
 }
 
 #[test]
-fn deployment_handoff_lists_every_supported_scheme() {
-    let handoff = manifest_doc("docs/deployment-handoff.md");
+fn cold_restore_runbook_lists_every_supported_scheme() {
+    let runbook = manifest_doc("docs/runbooks/cold-restore.md");
     for info in service_backup::SUPPORTED_SCHEMES {
         assert!(
-            handoff.contains(info.scheme),
-            "docs/deployment-handoff.md is missing backup destination scheme `{}` from service_backup::SUPPORTED_SCHEMES — #2483 drift is back",
+            runbook.contains(info.scheme),
+            "docs/runbooks/cold-restore.md is missing backup destination scheme `{}` from service_backup::SUPPORTED_SCHEMES — #2483 drift is back",
             info.scheme
         );
     }

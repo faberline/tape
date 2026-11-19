@@ -85,6 +85,35 @@ runner does not rerun it to hide the result.
 | Multi-hour soak | `scripts/soak.sh` | manual, not a gate |
 | Scale transition under load | replica-count change on GKE | not proven; see [ROADMAP.md](../ROADMAP.md#quotas-and-scale-transition) |
 
+## Published numbers and thresholds
+
+The release-mode perf gate (`cargo test --release --locked -p tape-bench --test tape_perf_gate`) runs in CI as the `test: perf gate` job. A run above a threshold below fails that job, and the `gate` job with it. The thresholds are not lowered to fit a result.
+
+Measured 2026-11-14 as the median of three runs each: `tape-bench run --events 1000 --format json` and `tape-bench durable --events-per-connection 200 --connections 1,4,16 --format json`. Machine: `nproc` 4, `uname -sr` Linux 6.18.44-fc-v470. These numbers come from a shared CI-class machine, not a dedicated benchmark host.
+
+| Measure | Median |
+|---|---|
+| Append p50 (us) | 0 |
+| Append p95 (us) | 2 |
+| Append p99 (us) | 11 |
+| Full replay, 1000 events (us) | 19 |
+| Checkpoint p50 (us) | 0 |
+| Checkpoint p95 (us) | 0 |
+| Durable throughput at 1 connection (ops/s) | 1486.2 |
+| Durable throughput at 4 connections (ops/s) | 4633.6 |
+| Durable throughput at 16 connections (ops/s) | 11541.3 |
+| Durable scaling ratio (16 vs 1 connections) | 7.87 |
+
+| Threshold | Value | Constant in `tape_perf_gate.rs` |
+|---|---|---|
+| Append p95 (us) | at most 5000 | `MAX_APPEND_P95_US` |
+| Full replay (us) | at most 50000 | `MAX_REPLAY_FULL_US` |
+| Checkpoint p95 (us) | at most 5000 | `MAX_CHECKPOINT_P95_US` |
+| Durable scaling ratio, 16 vs 1 connections | at least 4.0 | `DURABLE_SCALING_MIN_RATIO` |
+| Durable noise floor, fraction of the 1-connection rate | 0.8 | `DURABLE_NOISE_FLOOR_RATIO` |
+
+RSS and the 24-hour soak are measured by the cluster soak suite, a separate issue. They are not part of this gate.
+
 ## History: retired peer-broker calibrations
 
 These numbers were measured once and are not a product claim. The harnesses
