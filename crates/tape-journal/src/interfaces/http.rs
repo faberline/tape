@@ -20,6 +20,7 @@ use axum::Router;
 use crate::application::JournalService;
 
 mod admin;
+mod audit;
 mod dto;
 mod errors;
 mod openapi;

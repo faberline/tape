@@ -2,6 +2,16 @@
 
 const ADMIN: &str = include_str!("../../../tape-journal/src/interfaces/http/admin.rs");
 const AUTH: &str = include_str!("../../../tape-access/src/authorization.rs");
+const SUBSCRIPTIONS: &str =
+    include_str!("../../../tape-journal/src/interfaces/http/subscriptions.rs");
+const RETENTION: &str = include_str!("../../../tape-journal/src/interfaces/http/retention.rs");
+
+#[test]
+fn management_writes_are_audited_in_source() {
+    assert!(SUBSCRIPTIONS.contains("\"subscription_created\""));
+    assert!(SUBSCRIPTIONS.contains("\"subscription_deleted\""));
+    assert!(RETENTION.contains("\"retention_changed\""));
+}
 
 #[test]
 fn backup_audit_is_redacted_and_kept_off_hot_data_plane_routes() {

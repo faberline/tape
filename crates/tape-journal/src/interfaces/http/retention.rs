@@ -59,8 +59,12 @@ pub async fn retention_put(
         Ok(policy) => policy,
         Err(bad) => return bad.into_response(),
     };
+    let audit_topic = topic.clone();
     match service.put_retention(topic, policy).await {
-        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Ok(value) => {
+            super::audit::record("retention_changed", &principal, &audit_topic, None);
+            (StatusCode::OK, Json(value)).into_response()
+        }
         Err(error) => error.into_response(),
     }
 }
