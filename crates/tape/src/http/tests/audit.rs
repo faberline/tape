@@ -1,20 +1,23 @@
 //! Audit records for management writes and failed authentication.
 
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 
 use axum::http::StatusCode;
 use axum::Router;
 
 use super::*;
 
-/// Captures everything the thread-local subscriber writes.
-#[derive(Clone, Default)]
-struct Capture(Arc<Mutex<Vec<u8>>>);
+thread_local! {
+    static CAPTURED: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
-impl Write for Capture {
+/// Writes every record of the current thread into `CAPTURED`.
+#[derive(Clone, Copy)]
+struct ThreadWriter;
+
+impl Write for ThreadWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(buf);
+        CAPTURED.with(|c| c.borrow_mut().extend_from_slice(buf));
         Ok(buf.len())
     }
 
@@ -23,17 +26,20 @@ impl Write for Capture {
     }
 }
 
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Capture {
-    type Writer = Capture;
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for ThreadWriter {
+    type Writer = ThreadWriter;
 
     fn make_writer(&'a self) -> Self::Writer {
-        self.clone()
+        *self
     }
 }
 
+/// Reads the records that the current thread has written since `capture_subscriber`.
+struct Capture;
+
 impl Capture {
     fn text(&self) -> String {
-        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        CAPTURED.with(|c| String::from_utf8(c.borrow().clone()).unwrap())
     }
 
     /// Lines of the two audit targets only.
@@ -46,25 +52,20 @@ impl Capture {
     }
 }
 
-/// The four tests share the global callsite interest cache, so they run one at a time.
-static AUDIT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
-async fn capture_subscriber() -> (
-    Capture,
-    tracing::subscriber::DefaultGuard,
-    tokio::sync::MutexGuard<'static, ()>,
-) {
-    let serial = AUDIT_LOCK.lock().await;
-    let capture = Capture::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(capture.clone())
-        .with_ansi(false)
-        .with_max_level(tracing::Level::DEBUG)
-        .finish();
-    let guard = tracing::subscriber::set_default(subscriber);
-    // Callsites cached as "never" before this subscriber existed would drop the records.
-    tracing::callsite::rebuild_interest_cache();
-    (capture, guard, serial)
+/// One global subscriber for the whole test binary. A scoped subscriber raced with the callsite
+/// interest cache when other tests hit the same callsites on other threads.
+fn capture_subscriber() -> Capture {
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(ThreadWriter)
+            .with_ansi(false)
+            .with_max_level(tracing::Level::DEBUG)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).expect("no global subscriber yet");
+    });
+    CAPTURED.with(|c| c.borrow_mut().clear());
+    Capture
 }
 
 fn app() -> Router {
@@ -105,7 +106,7 @@ async fn call(
 
 #[tokio::test]
 async fn subscription_create_and_delete_each_make_one_audit_record() {
-    let (capture, _guard, _serial) = capture_subscriber().await;
+    let capture = capture_subscriber();
     let app = app();
     let appended = call(
         &app,
@@ -157,7 +158,7 @@ async fn subscription_create_and_delete_each_make_one_audit_record() {
 
 #[tokio::test]
 async fn retention_change_makes_one_record_without_policy_values() {
-    let (capture, _guard, _serial) = capture_subscriber().await;
+    let capture = capture_subscriber();
     let app = app();
     let appended = call(
         &app,
@@ -207,7 +208,7 @@ async fn retention_change_makes_one_record_without_policy_values() {
 
 #[tokio::test]
 async fn append_makes_no_audit_record() {
-    let (capture, _guard, _serial) = capture_subscriber().await;
+    let capture = capture_subscriber();
     let app = app();
     let appended = call(
         &app,
@@ -231,7 +232,7 @@ async fn append_makes_no_audit_record() {
 
 #[tokio::test]
 async fn failed_authentication_makes_a_record_without_the_token() {
-    let (capture, _guard, _serial) = capture_subscriber().await;
+    let capture = capture_subscriber();
     let app = app();
     let missing = call(&app, "GET", "/topics/orders/replay", None, None).await;
     assert_eq!(missing, StatusCode::UNAUTHORIZED);
