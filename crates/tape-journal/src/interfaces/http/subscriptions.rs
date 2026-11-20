@@ -41,8 +41,18 @@ pub async fn subscription_create(
         Ok(req) => req,
         Err(bad) => return bad.into_response(),
     };
+    let audit_topic = topic.clone();
+    let audit_name = req.name.clone();
     match service.create_subscription(topic, req.name).await {
-        Ok(value) => (StatusCode::CREATED, Json(value)).into_response(),
+        Ok(value) => {
+            super::audit::record(
+                "subscription_created",
+                &principal,
+                &audit_topic,
+                Some(&audit_name),
+            );
+            (StatusCode::CREATED, Json(value)).into_response()
+        }
         Err(error) => error.into_response(),
     }
 }
@@ -119,8 +129,18 @@ pub async fn subscription_delete(
     if let Err(full) = service.storage_writable() {
         return full.into_response();
     }
+    let audit_topic = topic.clone();
+    let audit_name = name.clone();
     match service.delete_subscription(topic, name).await {
-        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Ok(value) => {
+            super::audit::record(
+                "subscription_deleted",
+                &principal,
+                &audit_topic,
+                Some(&audit_name),
+            );
+            (StatusCode::OK, Json(value)).into_response()
+        }
         Err(error) => error.into_response(),
     }
 }

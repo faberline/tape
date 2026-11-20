@@ -272,5 +272,6 @@ pub(crate) async fn put_json(
     (status, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
+mod audit;
 mod degraded;
 mod recovery;
