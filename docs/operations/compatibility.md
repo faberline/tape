@@ -29,11 +29,11 @@ Three baselines in `compat/` guard the other public surfaces the way `clients/op
 
 ## Raft peer protocol
 
-No version number is exchanged between raft peers, and no compatibility across versions is tested.
+No version number is exchanged between raft peers.
 
 The only supported mixed-version window is the Kubernetes `RollingUpdate` of the StatefulSet (`crates/tape-operator/src/render/statefulset.rs`, `k8s/base/statefulset.yaml`) between two adjacent releases, one pod at a time. Do not leave a group mixed after the rollout. Do not skip a release. Read the release notes first.
 
-This window is stated, not tested; no test runs two versions in one group.
+One test runs the mixed window locally: `raft_mixed_version::mixed_version_group_appends_reads_and_changes_leader` starts one replica from the previous released binary (`TAPE_PREVIOUS_BIN`, the image pinned in `.github/previous-release-image`) and two from the current build, appends, reads from all three, stops the leader and appends again. It proves one adjacent-release group, not every pair of releases.
 
 ## CRD
 

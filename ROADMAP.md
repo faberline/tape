@@ -343,4 +343,6 @@ keep tape's own proof.
 - ID: `cross-release-mixed-version-guarantees-beyond-adjacent-releases`
 - Reason: Tape documents the compatibility rules between adjacent releases
   and does not promise or run mixed-version clusters beyond them. The raft
-  mixed-version window stays stated, not tested across released versions.
+  mixed-version window runs for one adjacent pair, tested locally by
+  `raft_mixed_version::`; other pairs stay stated, not tested across released
+  versions.

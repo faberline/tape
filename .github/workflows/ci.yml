@@ -60,6 +60,9 @@ jobs:
     needs: [lint]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -68,6 +71,15 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: tape-ci-test
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Fetch the previous release binary
+        run: |
+          scripts/ci/fetch_previous_tape.sh "$RUNNER_TEMP/tape-previous"
+          echo "TAPE_PREVIOUS_BIN=$RUNNER_TEMP/tape-previous" >> "$GITHUB_ENV"
       - run: cargo test --locked --workspace
 
   test-features:
@@ -75,6 +87,9 @@ jobs:
     needs: [lint]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -83,6 +98,15 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: tape-ci-test
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Fetch the previous release binary
+        run: |
+          scripts/ci/fetch_previous_tape.sh "$RUNNER_TEMP/tape-previous"
+          echo "TAPE_PREVIOUS_BIN=$RUNNER_TEMP/tape-previous" >> "$GITHUB_ENV"
       - run: cargo test --locked -p tape --features operator,backup
 
   test-coverage:
@@ -90,6 +114,9 @@ jobs:
     needs: [lint]
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
@@ -102,6 +129,15 @@ jobs:
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-llvm-cov@0.9.1
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Fetch the previous release binary
+        run: |
+          scripts/ci/fetch_previous_tape.sh "$RUNNER_TEMP/tape-previous"
+          echo "TAPE_PREVIOUS_BIN=$RUNNER_TEMP/tape-previous" >> "$GITHUB_ENV"
       - run: cargo llvm-cov --workspace --locked --json --summary-only --output-path target/coverage.json
       - uses: faberline/aw/.github/actions/coverage@4340a382c73351cffff85edba7079e4c24adf3db # S8 (aw 0.7.42)
         with:

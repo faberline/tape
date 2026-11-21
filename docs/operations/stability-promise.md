@@ -14,7 +14,7 @@ The JSON bodies of the HTTP API (the append, replay and checkpoint envelopes, an
 
 Rule: an old client works against a new server of the same major version. A field is added, never changed in meaning.
 
-Raft peers: a `1.x` pod meets another `1.x` pod only during a rolling update between adjacent releases (`RollingUpdate`, one pod at a time), as the "Raft peer protocol" section of [compatibility.md](compatibility.md) says. No test runs two versions in one group. This is stated, not tested.
+Raft peers: a `1.x` pod meets another `1.x` pod only during a rolling update between adjacent releases (`RollingUpdate`, one pod at a time), as the "Raft peer protocol" section of [compatibility.md](compatibility.md) says. One local test runs the previous release and the current build in one group (`raft_mixed_version::`); other release pairs are stated, not tested.
 
 ## On-disk format
 
