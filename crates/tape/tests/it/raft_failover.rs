@@ -60,13 +60,33 @@ pub(crate) fn spawn_node_with(
     peers_csv: &str,
     configure: impl FnOnce(&mut Command),
 ) -> Node {
+    spawn_node_from(
+        std::path::Path::new(env!("CARGO_BIN_EXE_tape")),
+        id,
+        bind,
+        data_dir,
+        peers_csv,
+        configure,
+    )
+}
+
+/// [`spawn_node_with`] for a `tape` binary at `program`, such as a previous
+/// release. The environment and arguments are the same as for this build.
+pub(crate) fn spawn_node_from(
+    program: &std::path::Path,
+    id: u32,
+    bind: &str,
+    data_dir: &std::path::Path,
+    peers_csv: &str,
+    configure: impl FnOnce(&mut Command),
+) -> Node {
     let child_log = std::env::var("TAPE_CHILD_RUST_LOG").unwrap_or_else(|_| "warn".into());
     let stderr = if std::env::var_os("TAPE_TEST_LOG").is_some() {
         Stdio::inherit()
     } else {
         Stdio::null()
     };
-    let mut command = Command::new(env!("CARGO_BIN_EXE_tape"));
+    let mut command = Command::new(program);
     command
         .arg("serve")
         .arg("--bind")

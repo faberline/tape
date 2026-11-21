@@ -34,6 +34,7 @@ mod public_tls_assets;
 mod quickstart_docs;
 mod raft_cluster;
 mod raft_failover;
+mod raft_mixed_version;
 mod raft_peer_mtls;
 mod raft_persistence;
 mod raft_provisioning_convergence;
