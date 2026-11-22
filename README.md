@@ -338,6 +338,7 @@ evidence; it does not define the current contract.
 | [Node drain and PodDisruptionBudget](docs/runbooks/node-drain-and-pdb.md) | Unblocking a drain on the direct-install singleton and verifying recovery |
 | [Benchmark history](docs/benchmarks-scale.md) | The local performance gate and the retired peer-broker calibrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Tape edit rules and required verification commands |
+| [AGENTS.md](AGENTS.md) | Standing instructions for agents that work in this repository |
 
 Historical evidence and implementation planning do not define the current
 product contract. Use the capability gates and the published runtime
