@@ -124,39 +124,176 @@ fn operator_monitoring_is_a_component_and_the_operator_layer_stays_crd_free() {
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    let files = [
-        (
-            "crd.yaml",
-            include_str!("../../../../k8s/operator/crd.yaml"),
-        ),
-        (
-            "rbac.yaml",
-            include_str!("../../../../k8s/operator/rbac.yaml"),
-        ),
-        (
-            "deployment.yaml",
-            include_str!("../../../../k8s/operator/deployment.yaml"),
-        ),
-        (
-            "service.yaml",
-            include_str!("../../../../k8s/operator/service.yaml"),
-        ),
-        (
-            "pdb.yaml",
-            include_str!("../../../../k8s/operator/pdb.yaml"),
-        ),
-    ];
     assert_eq!(
         listed,
-        files.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+        ["namespace", "cluster", "namespaced"],
         "k8s/operator/kustomization.yaml resources changed; check them here too"
     );
-    for (name, text) in files {
-        for (api, kind) in kinds(text) {
-            assert!(
-                !api.starts_with("monitoring.coreos.com/"),
-                "k8s/operator/{name} installs {api} {kind}"
-            );
+
+    // Each base lists its own files; check the files it lists, not the old flat set.
+    // (base, its kustomization.yaml, its files as (file name, text)).
+    type BaseFiles = &'static [(&'static str, &'static str)];
+    let bases: [(&str, &str, BaseFiles); 3] = [
+        (
+            "namespace",
+            include_str!("../../../../k8s/operator/namespace/kustomization.yaml"),
+            &[(
+                "namespace.yaml",
+                include_str!("../../../../k8s/operator/namespace/namespace.yaml"),
+            )],
+        ),
+        (
+            "cluster",
+            include_str!("../../../../k8s/operator/cluster/kustomization.yaml"),
+            &[
+                (
+                    "crd.yaml",
+                    include_str!("../../../../k8s/operator/cluster/crd.yaml"),
+                ),
+                (
+                    "clusterrole.yaml",
+                    include_str!("../../../../k8s/operator/cluster/clusterrole.yaml"),
+                ),
+                (
+                    "clusterrolebinding.yaml",
+                    include_str!("../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
+                ),
+            ],
+        ),
+        (
+            "namespaced",
+            include_str!("../../../../k8s/operator/namespaced/kustomization.yaml"),
+            &[
+                (
+                    "serviceaccount.yaml",
+                    include_str!("../../../../k8s/operator/namespaced/serviceaccount.yaml"),
+                ),
+                (
+                    "deployment.yaml",
+                    include_str!("../../../../k8s/operator/namespaced/deployment.yaml"),
+                ),
+                (
+                    "service.yaml",
+                    include_str!("../../../../k8s/operator/namespaced/service.yaml"),
+                ),
+                (
+                    "pdb.yaml",
+                    include_str!("../../../../k8s/operator/namespaced/pdb.yaml"),
+                ),
+            ],
+        ),
+    ];
+    for (base, kustomization, files) in bases {
+        let base_doc = yaml(kustomization);
+        let names: Vec<&str> = base_doc["resources"]
+            .as_sequence()
+            .expect("operator base lists resources")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert_eq!(
+            names,
+            files.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
+            "k8s/operator/{base}/kustomization.yaml resources changed; check them here too"
+        );
+        for &(name, text) in files {
+            for (api, kind) in kinds(text) {
+                assert!(
+                    !api.starts_with("monitoring.coreos.com/"),
+                    "k8s/operator/{base}/{name} installs {api} {kind}"
+                );
+            }
         }
     }
+}
+
+/// Parse every document of a manifest file, skipping empty ones.
+fn documents(text: &str) -> Vec<Value> {
+    use serde::Deserialize;
+
+    serde_yaml::Deserializer::from_str(text)
+        .map(|doc| Value::deserialize(doc).expect("operator manifest parses"))
+        .filter(|doc| !doc.is_null())
+        .collect()
+}
+
+/// Kind of each document, in file order.
+fn kind_names(docs: &[Value]) -> Vec<String> {
+    docs.iter()
+        .map(|doc| doc["kind"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// The operator install is split by scope: the cluster-scoped identity applies
+/// `cluster/`, the namespaced identity applies `namespaced/`, and `namespace/`
+/// is opt-in (issue #232). A namespaced apply must not hold RBAC, a Namespace
+/// or a CRD, because the least-privileged identity cannot create them.
+#[test]
+fn operator_install_splits_by_scope() {
+    let cluster: Vec<Value> = [
+        include_str!("../../../../k8s/operator/cluster/crd.yaml"),
+        include_str!("../../../../k8s/operator/cluster/clusterrole.yaml"),
+        include_str!("../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
+    ]
+    .into_iter()
+    .flat_map(documents)
+    .collect();
+    assert_eq!(
+        kind_names(&cluster),
+        [
+            "CustomResourceDefinition",
+            "ClusterRole",
+            "ClusterRoleBinding"
+        ],
+        "cluster/ must hold only cluster-scoped objects"
+    );
+
+    let namespaced = documents(include_str!(
+        "../../../../k8s/operator/namespaced/serviceaccount.yaml"
+    ))
+    .into_iter()
+    .chain(documents(include_str!(
+        "../../../../k8s/operator/namespaced/deployment.yaml"
+    )))
+    .chain(documents(include_str!(
+        "../../../../k8s/operator/namespaced/service.yaml"
+    )))
+    .chain(documents(include_str!(
+        "../../../../k8s/operator/namespaced/pdb.yaml"
+    )))
+    .collect::<Vec<Value>>();
+    assert_eq!(
+        kind_names(&namespaced),
+        [
+            "ServiceAccount",
+            "Deployment",
+            "Service",
+            "PodDisruptionBudget"
+        ],
+        "namespaced/ must hold exactly the namespaced objects"
+    );
+    for doc in &namespaced {
+        let kind = doc["kind"].as_str().unwrap_or_default();
+        assert_eq!(
+            doc["metadata"]["namespace"].as_str(),
+            Some("tape-system"),
+            "namespaced/ {kind} must live in tape-system"
+        );
+        assert!(
+            !matches!(
+                kind,
+                "Namespace" | "ClusterRole" | "ClusterRoleBinding" | "CustomResourceDefinition"
+            ),
+            "namespaced/ must not hold a cluster-scoped {kind}"
+        );
+    }
+
+    let namespace = documents(include_str!(
+        "../../../../k8s/operator/namespace/namespace.yaml"
+    ));
+    assert_eq!(kind_names(&namespace), ["Namespace"]);
+    assert_eq!(
+        namespace[0]["metadata"]["name"].as_str(),
+        Some("tape-system")
+    );
 }

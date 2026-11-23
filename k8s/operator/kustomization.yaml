@@ -2,24 +2,31 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Installs the tape Operator: the Tape CRD, its RBAC, and the controller
-# Deployment + PodDisruptionBudget (in the tape-system namespace). After this
-# is applied, create `Tape` objects (see ../../examples/tape-cr.yaml) instead
-# of hand-applying k8s/base + overlays.
+# Installs the tape Operator in three bases that can be applied alone:
 #
-#   kubectl apply -k k8s/operator
+#   namespace   the tape-system Namespace (opt-in; skip it when the Namespace is owned elsewhere)
+#   cluster     the Tape CRD, the ClusterRole and the ClusterRoleBinding (cluster-scoped)
+#   namespaced  the ServiceAccount, the operator Deployment, its Service and PodDisruptionBudget
+#
+# Apply order:
+#   1. cluster     (cluster-scoped identity), with namespace first if you want it
+#   2. namespaced  (namespaced identity)
+#   3. Tape objects (see ../../examples/tape-cr.yaml)
+#
+#   kubectl apply -k k8s/operator/cluster
+#   kubectl apply -k k8s/operator/namespaced
 #   kubectl apply -f examples/tape-cr.yaml
 #
-# crd.yaml is generated — regenerate with:
-#   cargo run -p tape --features operator --bin tape -- k8s crd render > k8s/operator/crd.yaml
+# kubectl apply -k k8s/operator applies all three bases in one go.
+#
+# cluster/crd.yaml is generated — regenerate with:
+#   cargo run -p tape --features operator --bin tape -- k8s crd render > k8s/operator/cluster/crd.yaml
 
 resources:
-  - crd.yaml
-  - rbac.yaml
-  - deployment.yaml
-  # The operator's own scrape target. Unconditional because it carries no CRD
-  # dependency; the ServiceMonitor + alerts that consume it are the opt-in
+  - namespace
+  - cluster
+  - namespaced
+  # The operator's own scrape target lives in namespaced/service.yaml. Unconditional
+  # because it carries no CRD dependency; the ServiceMonitor + alerts that consume it are the opt-in
   # ../components/operator-monitoring component.
-  - service.yaml
-  - pdb.yaml
 # CODEGEN-END

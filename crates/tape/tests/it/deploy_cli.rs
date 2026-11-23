@@ -68,6 +68,24 @@ fn render_verbs_emit_parseable_yaml_offline() {
     ] {
         assert!(kinds.contains(&kind), "operator render missing {kind}");
     }
+    // The split bases (#232) must keep the render order: Namespace,
+    // ServiceAccount, ClusterRole, ClusterRoleBinding, Deployment, Service, PDB.
+    let mut last = 0;
+    for kind in [
+        "Namespace",
+        "ServiceAccount",
+        "ClusterRole",
+        "ClusterRoleBinding",
+        "Deployment",
+        "Service",
+        "PodDisruptionBudget",
+    ] {
+        let at = ops_yaml
+            .find(&format!("kind: {kind}\n"))
+            .unwrap_or_else(|| panic!("operator render has no `kind: {kind}`"));
+        assert!(at > last, "operator render puts {kind} out of order");
+        last = at;
+    }
     let ns = ops.iter().find(|d| d["kind"] == "Namespace").unwrap();
     assert_eq!(ns["metadata"]["name"], "tape-ops", "namespace substituted");
     let deployment = ops.iter().find(|d| d["kind"] == "Deployment").unwrap();

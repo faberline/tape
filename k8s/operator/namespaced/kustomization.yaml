@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespaced objects in tape-system: the ServiceAccount, the operator Deployment,
+# its Service and PodDisruptionBudget. Needs only namespaced rights (no RBAC, no Namespace).
+
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml

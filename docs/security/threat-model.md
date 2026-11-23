@@ -43,18 +43,18 @@ plaintext HA the peer routes share port 7137
 
 ## Boundary: operator and Kubernetes API
 
-The operator reconciles the `Tape` CR (`k8s/operator/crd.yaml`). Its
-ClusterRole (`k8s/operator/rbac.yaml`) lets it create, update and delete the
+The operator reconciles the `Tape` CR (`k8s/operator/cluster/crd.yaml`). Its
+ClusterRole (`k8s/operator/cluster/clusterrole.yaml`) lets it create, update and delete the
 objects it renders, and write Leases and Events.
 
 | STRIDE | Threat | Control | Known gap |
 |---|---|---|---|
-| Spoofing | A workload impersonates the operator against the Kubernetes API. | The operator acts under its own ServiceAccount, bound by a ClusterRoleBinding (`k8s/operator/rbac.yaml`). | none |
+| Spoofing | A workload impersonates the operator against the Kubernetes API. | The operator acts under its own ServiceAccount, bound by a ClusterRoleBinding (`k8s/operator/cluster/clusterrole.yaml`). | none |
 | Tampering | A rendered workload is changed outside the operator. | none | none |
 | Repudiation | An operator action on a Tape object cannot be traced. | The operator writes Kubernetes Events on the objects it manages (`events` create and patch). | none |
 | Information disclosure | The operator reads Kubernetes objects beyond what it needs. | none | none |
 | Denial of service | The operator is stopped or starved and the group is not reconciled. | none | none |
-| Elevation of privilege | The operator's grant lets it change workloads outside the Tape namespace. | The grant names its resources and verbs (`k8s/operator/rbac.yaml`). | The grant is a ClusterRole, so it is cluster-wide. |
+| Elevation of privilege | The operator's grant lets it change workloads outside the Tape namespace. | The grant names its resources and verbs (`k8s/operator/cluster/clusterrole.yaml`). | The grant is a ClusterRole, so it is cluster-wide. |
 
 ## Boundary: backup bucket
 

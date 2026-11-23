@@ -40,7 +40,7 @@ class SelectTests(unittest.TestCase):
             ".github/workflows/ci.yml",
             ".github/workflows/gke-test.yml",
             "crates/tape-operator/src/lib.rs",
-            "k8s/operator/deployment.yaml",
+            "k8s/operator/namespaced/deployment.yaml",
             "k8s/overlays/gke-test/kustomization.yaml",
         ]:
             self.assertEqual(pr(path), (BOTH, True), path)
