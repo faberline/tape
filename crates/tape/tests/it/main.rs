@@ -17,6 +17,7 @@ mod durable_write_path;
 mod e2e;
 mod graceful_shutdown;
 mod http_transport;
+mod install_script;
 mod jetstream_benchmark_contract;
 mod limits_docs;
 mod long_running_stability;
