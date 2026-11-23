@@ -5,6 +5,7 @@ REPO="${TAPE_REPO:-faberline/tape}"
 INSTALL_DIR="${TAPE_INSTALL:-$HOME/.local/bin}"
 VERSION="${TAPE_VERSION:-latest}"
 TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+SKIP_VERIFY="${TAPE_INSTALL_SKIP_VERIFY:-}"
 
 say() { printf 'tape-install: %s\n' "$*" >&2; }
 die() { say "error: $*"; exit "${2:-1}"; }
@@ -13,10 +14,13 @@ need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1" 3; }
 need curl
 need tar
 need uname
+need tr
+need awk
 
 if [ -z "${TOKEN}" ] && command -v gh >/dev/null 2>&1; then
   if gh auth status >/dev/null 2>&1; then
     TOKEN="$(gh auth token 2>/dev/null || true)"
+    [ -z "${TOKEN}" ] || say "using the GitHub token from gh auth (set GH_TOKEN to use another)"
   fi
 fi
 
@@ -75,16 +79,22 @@ trap 'rm -rf "${tmpdir}"' EXIT INT TERM
 say "downloading ${url}"
 auth_curl "${url}" -o "${tmpdir}/${asset}" || die "download failed: ${url}"
 
-if auth_curl "${sha_url}" -o "${tmpdir}/${asset}.sha256" 2>/dev/null; then
-  expected="$(cat "${tmpdir}/${asset}.sha256")"
+if [ "${SKIP_VERIFY}" = "1" ]; then
+  say "warning: TAPE_INSTALL_SKIP_VERIFY=1, sha256 check skipped"
+else
+  auth_curl "${sha_url}" -o "${tmpdir}/${asset}.sha256" 2>/dev/null || die "could not download the checksum ${sha_url} (set TAPE_INSTALL_SKIP_VERIFY=1 to skip the check)"
+  expected="$(awk 'NR==1 {print $1}' "${tmpdir}/${asset}.sha256" | tr 'A-F' 'a-f')"
+  [ -n "${expected}" ] || die "checksum file is empty: ${sha_url}"
   if command -v shasum >/dev/null 2>&1; then
-    actual="$(shasum -a 256 "${tmpdir}/${asset}" | awk '{print $1}')"
+    hash_cmd="shasum -a 256"
   elif command -v sha256sum >/dev/null 2>&1; then
-    actual="$(sha256sum "${tmpdir}/${asset}" | awk '{print $1}')"
+    hash_cmd="sha256sum"
   else
-    actual=""
+    die "no sha256 tool (shasum or sha256sum) found; install one or set TAPE_INSTALL_SKIP_VERIFY=1"
   fi
-  [ -z "${actual}" ] || [ "${actual}" = "${expected}" ] || die "sha256 mismatch"
+  actual="$(${hash_cmd} "${tmpdir}/${asset}" | awk '{print $1}' | tr 'A-F' 'a-f')"
+  [ "${actual}" = "${expected}" ] || die "sha256 mismatch: expected ${expected}, got ${actual}"
+  say "sha256 verified"
 fi
 
 tar -C "${tmpdir}" -xzf "${tmpdir}/${asset}" || die "extract failed: ${asset}"
