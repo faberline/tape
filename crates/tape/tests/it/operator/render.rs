@@ -38,6 +38,7 @@ fn crd_flattens_cluster_spec() {
         "tokensSecretProviderClass",
         "tokensSecretCsiDriver",
         "bootstrapSeedUri",
+        "peerTls",
     ] {
         assert!(props.get(field).is_some(), "missing tape knob `{field}`");
     }
@@ -671,5 +672,82 @@ fn generated_crd_carries_the_backup_properties() {
         "k8s/operator/crd.yaml has drifted from the generator — \
          regenerate it with `cargo run -p tape --bin tape --features operator \
          -- k8s crd render --out k8s/operator/crd.yaml`"
+    );
+}
+
+/// Issue #242 — `spec.peerTls` turns on raft peer mTLS: the render sets the
+/// `TAPE_PEER_*` env, a read-only Secret volume and its mount.
+#[test]
+fn peer_tls_secret_renders_env_volume_and_mount() {
+    let mut s = spec(3);
+    s.peer_tls = Some(TapePeerTls {
+        secret_name: "tape-peer".into(),
+    });
+    let objs = render(&Tape::new("tape", s)).unwrap();
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    assert_eq!(
+        env.iter().find(|(n, _)| *n == "TAPE_PEER_MTLS").unwrap().1["value"],
+        "on"
+    );
+    for (name, file) in [
+        ("TAPE_PEER_TLS_CERT", "tls.crt"),
+        ("TAPE_PEER_TLS_KEY", "tls.key"),
+        ("TAPE_PEER_TLS_CA", "ca.crt"),
+    ] {
+        assert_eq!(
+            env.iter().find(|(n, _)| *n == name).unwrap().1["value"],
+            format!("/var/run/secrets/tape-peer-tls/{file}").as_str(),
+            "{name} must point at the mounted Secret key"
+        );
+    }
+
+    let vols = sts["spec"]["template"]["spec"]["volumes"]
+        .as_array()
+        .unwrap();
+    let vol = vols
+        .iter()
+        .find(|v| v["name"] == "tape-peer-tls")
+        .expect("peer TLS volume");
+    assert_eq!(vol["secret"]["secretName"], "tape-peer");
+    assert_eq!(vol["secret"]["defaultMode"], 288, "0o440");
+
+    let mounts = sts["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+        .as_array()
+        .unwrap();
+    let mount = mounts
+        .iter()
+        .find(|m| m["name"] == "tape-peer-tls")
+        .expect("peer TLS mount on the container");
+    assert_eq!(mount["mountPath"], "/var/run/secrets/tape-peer-tls");
+    assert_eq!(mount["readOnly"], true);
+}
+
+/// Issue #242 — without `spec.peerTls` the render adds no peer wiring.
+#[test]
+fn no_peer_tls_renders_no_peer_env() {
+    let objs = render(&Tape::new("tape", spec(3))).unwrap();
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    assert!(
+        !env.iter()
+            .any(|(n, _)| n.starts_with("TAPE_PEER_TLS") || *n == "TAPE_PEER_MTLS"),
+        "no peer TLS env without spec.peerTls"
+    );
+    let vols = sts["spec"]["template"]["spec"]["volumes"]
+        .as_array()
+        .unwrap();
+    assert!(
+        vols.iter().all(|v| v["name"] != "tape-peer-tls"),
+        "no peer TLS volume without spec.peerTls"
+    );
+    let mounts = sts["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+        .as_array()
+        .unwrap();
+    assert!(
+        mounts.iter().all(|m| m["name"] != "tape-peer-tls"),
+        "no peer TLS mount without spec.peerTls"
     );
 }

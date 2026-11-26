@@ -51,6 +51,8 @@ const TOKEN_REGISTRY_VOLUME: &str = "tape-token-registry";
 const TOKEN_REGISTRY_KEY: &str = "token-registry.json";
 const TOKEN_REGISTRY_MOUNT_DIR: &str = "/var/run/secrets/tape";
 const TOKEN_REGISTRY_FILE: &str = "/var/run/secrets/tape/token-registry.json";
+const PEER_TLS_VOLUME: &str = "tape-peer-tls";
+const PEER_TLS_MOUNT_DIR: &str = "/var/run/secrets/tape-peer-tls";
 
 /// Resolve the instance name (defaults to `tape` only when metadata is
 /// absent, which never happens for a real CR).

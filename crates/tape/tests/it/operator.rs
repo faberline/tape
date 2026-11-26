@@ -14,8 +14,8 @@ use service_k8s::{ClusterSpec, ConditionStatus, ManagedService, ReadyFacts};
 use tape_operator::reconcile::{backup_run_fact, CronJobStatusFacts, TapeContext};
 use tape_operator::render::{prunes, render};
 use tape_operator::{
-    crd_yaml, AuthMode, LocalObjectReference, LogFormat, Tape, TapeBackupSpec, TapePlacement,
-    TapeSpec, Toleration,
+    crd_yaml, AuthMode, LocalObjectReference, LogFormat, Tape, TapeBackupSpec, TapePeerTls,
+    TapePlacement, TapeSpec, Toleration,
 };
 
 fn spec(replicas: u32) -> TapeSpec {
@@ -45,6 +45,7 @@ fn spec(replicas: u32) -> TapeSpec {
         topics: None,
         observability: false,
         backup: None,
+        peer_tls: None,
         service_account_name: None,
         image_pull_secrets: Vec::new(),
         placement: None,

@@ -10,8 +10,8 @@ use service_k8s::stateful::{
 use super::super::crd::Tape;
 use super::placement::{placement_node_selector, placement_tolerations, set_image_pull_secrets};
 use super::{
-    token_registry_source, CLIENT_PORT, COMPONENT, RAFT_PORT, TERMINATION_SLACK_SECS,
-    TOKEN_REGISTRY_FILE, TOKEN_REGISTRY_MOUNT_DIR, TOKEN_REGISTRY_VOLUME,
+    token_registry_source, CLIENT_PORT, COMPONENT, PEER_TLS_MOUNT_DIR, PEER_TLS_VOLUME, RAFT_PORT,
+    TERMINATION_SLACK_SECS, TOKEN_REGISTRY_FILE, TOKEN_REGISTRY_MOUNT_DIR, TOKEN_REGISTRY_VOLUME,
 };
 
 /// Container resources for tape's workload: requests for both CPU and memory,
@@ -102,6 +102,14 @@ pub(super) fn statefulset(
     if let Some(seed_uri) = &s.bootstrap_seed_uri {
         extra_env.push(json!({ "name": "TAPE_BOOTSTRAP_SEED_URI", "value": seed_uri }));
     }
+    if s.peer_tls.is_some() {
+        extra_env.push(json!({ "name": "TAPE_PEER_MTLS", "value": "on" }));
+        extra_env.push(json!({ "name": "TAPE_PEER_TLS_CERT", "value": format!("{PEER_TLS_MOUNT_DIR}/tls.crt") }));
+        extra_env.push(json!({ "name": "TAPE_PEER_TLS_KEY", "value": format!("{PEER_TLS_MOUNT_DIR}/tls.key") }));
+        extra_env.push(
+            json!({ "name": "TAPE_PEER_TLS_CA", "value": format!("{PEER_TLS_MOUNT_DIR}/ca.crt") }),
+        );
+    }
     if let Some(topics) = &s.topics {
         if !topics.is_empty() {
             // Compact JSON representation of topic/subscription declarations for the serve path
@@ -120,6 +128,17 @@ pub(super) fn statefulset(
         };
         volumes.push(render::token_registry_volume(&projection));
         volume_mounts.push(render::token_registry_mount(&projection));
+    }
+    if let Some(peer_tls) = &s.peer_tls {
+        volumes.push(json!({
+            "name": PEER_TLS_VOLUME,
+            "secret": { "secretName": peer_tls.secret_name, "defaultMode": 288 }
+        }));
+        volume_mounts.push(json!({
+            "name": PEER_TLS_VOLUME,
+            "mountPath": PEER_TLS_MOUNT_DIR,
+            "readOnly": true
+        }));
     }
 
     let mut sts = render::service_statefulset(ServiceStatefulSet {

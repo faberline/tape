@@ -121,6 +121,16 @@ spec:
 
                   Opt-in, and default-off on purpose: both are `monitoring.coreos.com/v1` kinds, so a cluster without the Prometheus Operator CRDs installed would reject them. Leaving it off keeps a vanilla cluster installable; turning it on there is a reconcile error the operator reports, not a surprise the CR author meets at install time. Same shape and default as lumen's `spec.observability`.
                 type: boolean
+              peerTls:
+                description: Optional raft peer mTLS. When set, the Secret named by `secretName` is mounted read-only and the serving process runs peer mTLS (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and `tls.key`, the keys that a cert-manager `Certificate` writes. Unset renders no peer TLS wiring.
+                nullable: true
+                properties:
+                  secretName:
+                    description: Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and `tls.key`. Mounted read-only into the workload pods.
+                    type: string
+                required:
+                - secretName
+                type: object
               placement:
                 description: |-
                   Which nodes the operator-rendered pods may run on. Unset leaves the scheduler free to pick any node, the previous behavior.
