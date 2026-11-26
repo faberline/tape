@@ -181,6 +181,40 @@ fn backup_verb_parses() {
     }
 }
 
+/// #245: `tape backup --token-file` conflicts with `--token`.
+#[test]
+fn token_and_token_file_conflict() {
+    let both = Cli::try_parse_from([
+        "tape",
+        "backup",
+        "--url",
+        "u",
+        "--dest",
+        "d",
+        "--token",
+        "a",
+        "--token-file",
+        "f",
+    ]);
+    assert!(both.is_err());
+
+    let file_only = Cli::try_parse_from([
+        "tape",
+        "backup",
+        "--url",
+        "u",
+        "--dest",
+        "d",
+        "--token-file",
+        "f",
+    ])
+    .expect("token-file alone should parse");
+    match file_only.command {
+        Command::Backup(a) => assert_eq!(a.token_file, Some(PathBuf::from("f"))),
+        _ => panic!("expected backup"),
+    }
+}
+
 /// #1329: `tape spec gen` parses its flags and generates non-empty client
 /// output for each supported language from tape's own OpenAPI document.
 #[test]
