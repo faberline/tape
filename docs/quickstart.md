@@ -15,6 +15,8 @@ curl -fsSL https://raw.githubusercontent.com/faberline/tape/main/install.sh | sh
 tape --version
 ```
 
+The installer checks the SHA-256 of the archive and stops when it cannot. Set `TAPE_INSTALL_SKIP_VERIFY=1` to skip the check.
+
 The script installs into `~/.local/bin` by default. Set `TAPE_INSTALL` to choose
 another directory, and `TAPE_VERSION` to pin a release. For a private repository,
 set `GH_TOKEN` to a GitHub token.
