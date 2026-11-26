@@ -208,3 +208,126 @@ pub(super) fn statefulset(
     set_image_pull_secrets(&mut sts["spec"]["template"]["spec"], tape);
     Ok(sts)
 }
+
+#[cfg(test)]
+mod tests {
+    use service_k8s::ClusterSpec;
+
+    use crate::{AuthMode, LogFormat, Tape, TapePeerTls, TapeSpec};
+
+    fn spec(peer_tls: Option<TapePeerTls>) -> TapeSpec {
+        TapeSpec {
+            cluster: ClusterSpec {
+                image: "tape:test".into(),
+                image_pull_policy: None,
+                shard_count: 1,
+                replicas_per_shard: 3,
+                voter_count: 3,
+                resources: Default::default(),
+            },
+            storage: "10Gi".into(),
+            storage_class: None,
+            grace_secs: 10,
+            log_level: None,
+            log_format: LogFormat::default(),
+            auth: AuthMode::default(),
+            tokens_secret: None,
+            tokens_secret_provider_class: None,
+            tokens_secret_csi_driver: None,
+            bootstrap_seed_uri: None,
+            body_limit_bytes: None,
+            topics: None,
+            observability: false,
+            backup: None,
+            peer_tls,
+            service_account_name: None,
+            image_pull_secrets: Vec::new(),
+            placement: None,
+        }
+    }
+
+    fn statefulset_of(peer_tls: Option<TapePeerTls>) -> serde_json::Value {
+        let objs = crate::render::render(&Tape::new("tape", spec(peer_tls))).unwrap();
+        objs.into_iter()
+            .find(|o| o["kind"] == "StatefulSet")
+            .expect("render output has a StatefulSet")
+    }
+
+    fn env_value(sts: &serde_json::Value, name: &str) -> Option<String> {
+        sts["spec"]["template"]["spec"]["containers"][0]["env"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["name"] == name)
+            .map(|e| e["value"].as_str().unwrap().to_owned())
+    }
+
+    #[test]
+    fn peer_tls_renders_env_volume_and_read_only_mount() {
+        let sts = statefulset_of(Some(TapePeerTls {
+            secret_name: "tape-peer".into(),
+        }));
+
+        assert_eq!(env_value(&sts, "TAPE_PEER_MTLS").as_deref(), Some("on"));
+        assert_eq!(
+            env_value(&sts, "TAPE_PEER_TLS_CERT").as_deref(),
+            Some("/var/run/secrets/tape-peer-tls/tls.crt")
+        );
+        assert_eq!(
+            env_value(&sts, "TAPE_PEER_TLS_KEY").as_deref(),
+            Some("/var/run/secrets/tape-peer-tls/tls.key")
+        );
+        assert_eq!(
+            env_value(&sts, "TAPE_PEER_TLS_CA").as_deref(),
+            Some("/var/run/secrets/tape-peer-tls/ca.crt")
+        );
+
+        let pod = &sts["spec"]["template"]["spec"];
+        let vol = pod["volumes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == "tape-peer-tls")
+            .expect("peer TLS volume");
+        assert_eq!(vol["secret"]["secretName"], "tape-peer");
+        assert_eq!(vol["secret"]["defaultMode"], 288, "0o440");
+
+        let mount = pod["containers"][0]["volumeMounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["name"] == "tape-peer-tls")
+            .expect("peer TLS mount");
+        assert_eq!(mount["mountPath"], "/var/run/secrets/tape-peer-tls");
+        assert_eq!(mount["readOnly"], true);
+    }
+
+    #[test]
+    fn no_peer_tls_renders_no_peer_wiring() {
+        let sts = statefulset_of(None);
+
+        assert_eq!(env_value(&sts, "TAPE_PEER_MTLS"), None);
+        for name in [
+            "TAPE_PEER_TLS_CERT",
+            "TAPE_PEER_TLS_KEY",
+            "TAPE_PEER_TLS_CA",
+        ] {
+            assert_eq!(env_value(&sts, name), None, "{name} must not render");
+        }
+
+        let pod = &sts["spec"]["template"]["spec"];
+        let has_volume = pod["volumes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["name"] == "tape-peer-tls");
+        assert!(!has_volume, "no peer TLS volume without spec.peerTls");
+
+        let has_mount = pod["containers"][0]["volumeMounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "tape-peer-tls");
+        assert!(!has_mount, "no peer TLS mount without spec.peerTls");
+    }
+}
