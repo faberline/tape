@@ -11,17 +11,13 @@ no-default-features = false
 db-path = "~/.cargo/advisory-db"
 version = 2
 ignore = [
-    # backoff 0.4.0, pinned by kube-runtime 0.98.0 (no patched release)
-    "RUSTSEC-2025-0012",
-    # instant 0.1.13, pinned by backoff 0.4.0 (no patched release)
-    "RUSTSEC-2024-0384",
     # proc-macro-error 1.0.4, pinned by utoipa-gen 4.3.1 (no patched release)
     "RUSTSEC-2024-0370",
-    # rustls-pemfile 2.2.0, pinned by kube-client 0.98.0 and peer-tls 0.1.0 (no patched release)
+    # rustls-pemfile 2.2.0, pinned by async-nats 0.38 (benchmark feature only; no patched release)
     "RUSTSEC-2025-0134",
     # unsafe-libyaml 0.2.11, pinned by serde_yaml 0.9.34 (no patched release)
     "RUSTSEC-2024-0449",
-    # chrono 0.4.44, pinned by k8s-openapi 0.24.0 and kube 0.98.0 (no patched release)
+    # chrono 0.4.44, pinned by service-backup, service-k8s and storage-object of faberline/core v0.5.4 (no patched release)
     "RUSTSEC-2026-0543",
 ]
 

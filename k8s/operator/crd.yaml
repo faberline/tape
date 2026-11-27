@@ -5,7 +5,6 @@ metadata:
 spec:
   group: tape.dev
   names:
-    categories: []
     kind: Tape
     plural: tapes
     shortNames:
@@ -29,36 +28,59 @@ spec:
         description: Auto-generated derived type for TapeSpec via `CustomResource`
         properties:
           spec:
-            description: '`tape.dev/v1alpha1` `Tape`. Namespaced: every child object the operator renders lands in this object''s namespace, so independent tape deployments coexist by name.'
+            description: |-
+              `tape.dev/v1alpha1` `Tape`. Namespaced: every child object the operator
+              renders lands in this object's namespace, so independent tape deployments
+              coexist by name.
             properties:
               auth:
                 default: required
                 description: |-
-                  Request-auth mode for the data plane: `required` (the default — supply a token registry via `tokensSecret` or `tokensSecretProviderClass`) or `disabled`.
+                  Request-auth mode for the data plane: `required` (the default — supply
+                  a token registry via `tokensSecret` or `tokensSecretProviderClass`) or
+                  `disabled`.
 
-                  `required` is the default because the other way round, forgetting this field ships an open cluster and nothing says so; forgetting it now fails startup with a message naming the field to set. `disabled` remains a one-word opt-out for local development (#2765).
+                  `required` is the default because the other way round, forgetting this
+                  field ships an open cluster and nothing says so; forgetting it now
+                  fails startup with a message naming the field to set. `disabled`
+                  remains a one-word opt-out for local development (#2765).
 
-                  Spelled `disabled`, not `off`: YAML 1.1 reads a bare `off` as the boolean `false`. (`off` is what the serving process's own `TAPE_AUTH` env var takes — the two spellings are not interchangeable.)
+                  Spelled `disabled`, not `off`: YAML 1.1 reads a bare `off` as the
+                  boolean `false`. (`off` is what the serving process's own `TAPE_AUTH`
+                  env var takes — the two spellings are not interchangeable.)
                 enum:
                 - disabled
                 - required
                 type: string
               backup:
                 description: |-
-                  Optional scheduled backup. When set, the operator renders a CronJob that runs `tape backup` against this instance's client Service on the declared schedule (#2574). Unset renders no CronJob — the previous behavior, and still the default.
+                  Optional scheduled backup. When set, the operator renders a CronJob
+                  that runs `tape backup` against this instance's client Service on the
+                  declared schedule (#2574). Unset renders no CronJob — the previous
+                  behavior, and still the default.
 
-                  The `tape backup` CLI verb and the `/admin/backup` endpoint it pulls from both already existed (#1329); what was missing was any declarative way to schedule them, so the only route was running the verb by hand or hand-authoring a CronJob outside the operator — which then did not track the CR's image, ServiceAccount, or auth wiring.
+                  The `tape backup` CLI verb and the `/admin/backup` endpoint it pulls
+                  from both already existed (#1329); what was missing was any
+                  declarative way to schedule them, so the only route was running the
+                  verb by hand or hand-authoring a CronJob outside the operator — which
+                  then did not track the CR's image, ServiceAccount, or auth wiring.
                 nullable: true
                 properties:
                   adminTokenSecret:
-                    description: 'Name of a Secret holding a bearer token with `admin` on `*`, projected into the CronJob as `TAPE_BACKUP_TOKEN` (key `token`). Required when the instance runs `auth: required` (enforced by CEL rule on the spec); omit for `auth: disabled`.'
+                    description: |-
+                      Name of a Secret holding a bearer token with `admin` on `*`, projected
+                      into the CronJob as `TAPE_BACKUP_TOKEN` (key `token`). Required when
+                      the instance runs `auth: required` (enforced by CEL rule on the spec);
+                      omit for `auth: disabled`.
                     nullable: true
                     type: string
                   destination:
                     description: Destination URI accepted by [`BackupDestination::from_uri`].
                     type: string
                   retentionSecs:
-                    description: Drop objects older than this many seconds after a successful put. `None` keeps every object.
+                    description: |-
+                      Drop objects older than this many seconds after a successful put.
+                      `None` keeps every object.
                     type: integer
                     minimum: 0.0
                     nullable: true
@@ -70,17 +92,37 @@ spec:
                 - schedule
                 type: object
               bodyLimitBytes:
-                description: Data-plane request body size limit (bytes). Requests with `Content-Length` exceeding this are rejected with 413; streamed bodies are bounded mid-read. Defaults to 8 MiB. Unset means the server default (#2484).
+                description: |-
+                  Data-plane request body size limit (bytes). Requests with
+                  `Content-Length` exceeding this are rejected with 413; streamed bodies
+                  are bounded mid-read. Defaults to 8 MiB. Unset means the server
+                  default (#2484).
                 type: integer
                 minimum: 0.0
                 nullable: true
               bootstrapSeedUri:
-                description: 'Exact backup object URI consulted to seed a replica whose data directory is still EMPTY before Raft catch-up. Bootstrap-if-empty (#2468): the server probes the durable data directory first — a pod that already has raft state (including a routine restart onto its own PVC) skips the seed and boots from that existing state instead of refusing, so this field may harmlessly stay set on the CR after a successful bootstrap. It only ever seeds a fresh (empty) data directory, so this is cold recovery rather than live replica synchronization. Recommended hygiene: remove it once the bootstrap converges anyway, so the CR does not silently re-seed if the PVC is ever recreated (e.g. deleted-and-reprovisioned) — the field''s presence alone would then look like a fresh empty PVC again.'
+                description: |-
+                  Exact backup object URI consulted to seed a replica whose data
+                  directory is still EMPTY before Raft catch-up. Bootstrap-if-empty
+                  (#2468): the server probes the durable data directory first — a pod
+                  that already has raft state (including a routine restart onto its own
+                  PVC) skips the seed and boots from that existing state instead of
+                  refusing, so this field may harmlessly stay set on the CR after a
+                  successful bootstrap. It only ever seeds a fresh (empty) data
+                  directory, so this is cold recovery rather than live replica
+                  synchronization. Recommended hygiene: remove it once the bootstrap
+                  converges anyway, so the CR does not silently re-seed if the PVC is
+                  ever recreated (e.g. deleted-and-reprovisioned) — the field's presence
+                  alone would then look like a fresh empty PVC again.
                 nullable: true
                 type: string
               graceSecs:
                 default: 10
-                description: 'Shutdown budget on SIGTERM (seconds): the readiness drain, the raft leadership handoff and the listener drains finish within it. The pod''s `terminationGracePeriodSeconds` is this plus 5. Defaults to 10 (`TAPE_GRACE_SECS`).'
+                description: |-
+                  Shutdown budget on SIGTERM (seconds): the readiness drain, the raft
+                  leadership handoff and the listener drains finish within it. The pod's
+                  `terminationGracePeriodSeconds` is this plus 5. Defaults to 10
+                  (`TAPE_GRACE_SECS`).
                 type: integer
                 minimum: 0.0
               image:
@@ -89,12 +131,21 @@ spec:
                 nullable: true
                 type: string
               imagePullSecrets:
-                description: Secrets in the instance's namespace used to pull `image`, copied to `imagePullSecrets` of every pod the operator renders (the serving StatefulSet and the optional backup CronJob). Empty means the node's own registry credentials, the previous behavior.
+                description: |-
+                  Secrets in the instance's namespace used to pull `image`, copied to
+                  `imagePullSecrets` of every pod the operator renders (the serving
+                  StatefulSet and the optional backup CronJob). Empty means the node's
+                  own registry credentials, the previous behavior.
                 items:
-                  description: A Secret named in the instance's namespace, mirroring the Kubernetes `v1.LocalObjectReference`. Declared here because the CRD schema is derived with `schemars`, which `k8s-openapi`'s types do not implement.
+                  description: |-
+                    A Secret named in the instance's namespace, mirroring the Kubernetes
+                    `v1.LocalObjectReference`. Declared here because the CRD schema is
+                    derived with `schemars`, which `k8s-openapi`'s types do not implement.
                   properties:
                     name:
-                      description: Name of a Secret of type `kubernetes.io/dockerconfigjson` in the instance's namespace.
+                      description: |-
+                        Name of a Secret of type `kubernetes.io/dockerconfigjson` in the
+                        instance's namespace.
                       type: string
                   required:
                   - name
@@ -105,21 +156,33 @@ spec:
                 description: |-
                   Log output format for the serving container (`TAPE_LOG_FORMAT`).
 
-                  A closed enum for the same reason `AuthMode` is one: a typo in a free-form string would fall back at boot instead of being rejected at `kubectl apply` (#2582).
+                  A closed enum for the same reason `AuthMode` is one: a typo in a
+                  free-form string would fall back at boot instead of being rejected at
+                  `kubectl apply` (#2582).
                 enum:
                 - pretty
                 - json
                 type: string
               logLevel:
-                description: Log level (`trace|debug|info|warn|error`), injected as `RUST_LOG`. Unset means the server default (`info`).
+                description: |-
+                  Log level (`trace|debug|info|warn|error`), injected as `RUST_LOG`.
+                  Unset means the server default (`info`).
                 nullable: true
                 type: string
               observability:
                 default: false
                 description: |-
-                  Emit a `ServiceMonitor` + `PrometheusRule` alongside the workload (#2575), carrying the same alerts the hand-maintained `k8s/components/observability` kustomize component ships — including #2485's seed-failure and consumer-liveness runbooks.
+                  Emit a `ServiceMonitor` + `PrometheusRule` alongside the workload
+                  (#2575), carrying the same alerts the hand-maintained
+                  `k8s/components/observability` kustomize component ships — including
+                  #2485's seed-failure and consumer-liveness runbooks.
 
-                  Opt-in, and default-off on purpose: both are `monitoring.coreos.com/v1` kinds, so a cluster without the Prometheus Operator CRDs installed would reject them. Leaving it off keeps a vanilla cluster installable; turning it on there is a reconcile error the operator reports, not a surprise the CR author meets at install time. Same shape and default as lumen's `spec.observability`.
+                  Opt-in, and default-off on purpose: both are `monitoring.coreos.com/v1`
+                  kinds, so a cluster without the Prometheus Operator CRDs installed
+                  would reject them. Leaving it off keeps a vanilla cluster installable;
+                  turning it on there is a reconcile error the operator reports, not a
+                  surprise the CR author meets at install time. Same shape and default as
+                  lumen's `spec.observability`.
                 type: boolean
               peerTls:
                 description: Optional raft peer mTLS. When set, the Secret named by `secretName` is mounted read-only and the serving process runs peer mTLS (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and `tls.key`, the keys that a cert-manager `Certificate` writes. Unset renders no peer TLS wiring.
@@ -133,9 +196,13 @@ spec:
                 type: object
               placement:
                 description: |-
-                  Which nodes the operator-rendered pods may run on. Unset leaves the scheduler free to pick any node, the previous behavior.
+                  Which nodes the operator-rendered pods may run on. Unset leaves the
+                  scheduler free to pick any node, the previous behavior.
 
-                  The StatefulSet is operator-rendered, so a `kubectl patch` adding a nodeSelector or toleration is reverted on the next reconcile; without this field a tape instance cannot be scheduled onto a tainted, dedicated node pool at all.
+                  The StatefulSet is operator-rendered, so a `kubectl patch` adding a
+                  nodeSelector or toleration is reverted on the next reconcile; without
+                  this field a tape instance cannot be scheduled onto a tainted,
+                  dedicated node pool at all.
                 nullable: true
                 properties:
                   nodeSelector:
@@ -144,19 +211,27 @@ spec:
                     description: 'Pod `nodeSelector`, e.g. `{ "faberline.dev/pool": "tape-server" }`.'
                     type: object
                   tolerations:
-                    description: Pod taint tolerations, so a dedicated node pool can carry a taint that keeps every other workload off it.
+                    description: |-
+                      Pod taint tolerations, so a dedicated node pool can carry a taint that
+                      keeps every other workload off it.
                     items:
                       description: |-
-                        One entry of `placement.tolerations`, mirroring the Kubernetes `v1.Toleration` fields.
+                        One entry of `placement.tolerations`, mirroring the Kubernetes
+                        `v1.Toleration` fields.
 
-                        Declared here rather than reused from `k8s-openapi` because the CRD schema is derived with `schemars`, which `k8s-openapi`'s types do not implement.
+                        Declared here rather than reused from `k8s-openapi` because the CRD schema
+                        is derived with `schemars`, which `k8s-openapi`'s types do not implement.
                       properties:
                         effect:
-                          description: '`NoSchedule`, `PreferNoSchedule`, or `NoExecute`. Unset tolerates every effect of the matching taint.'
+                          description: |-
+                            `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. Unset tolerates every
+                            effect of the matching taint.
                           nullable: true
                           type: string
                         key:
-                          description: 'The taint key this tolerates. Empty with `operator: Exists` tolerates every taint.'
+                          description: |-
+                            The taint key this tolerates. Empty with `operator: Exists` tolerates
+                            every taint.
                           nullable: true
                           type: string
                         operator:
@@ -164,7 +239,9 @@ spec:
                           nullable: true
                           type: string
                         tolerationSeconds:
-                          description: 'How long the pod stays bound after the node gains a matching taint. Only meaningful with `effect: NoExecute`.'
+                          description: |-
+                            How long the pod stays bound after the node gains a matching taint.
+                            Only meaningful with `effect: NoExecute`.
                           format: int64
                           nullable: true
                           type: integer
@@ -177,14 +254,20 @@ spec:
                 type: object
               replicasPerShard:
                 default: 1
-                description: Desired members per shard. Changing it is a Raft membership transition (add learner, promote, demote, remove) that the controller completes one step at a time before it changes the pod count.
+                description: |-
+                  Desired members per shard. Changing it is a Raft membership transition
+                  (add learner, promote, demote, remove) that the controller completes one
+                  step at a time before it changes the pod count.
                 type: integer
                 minimum: 0.0
               resources:
                 default:
                   cpu: ''
                   memory: ''
-                description: Per-pod CPU/memory requests. Empty values resolve to the shared data-plane defaults (`1` CPU / `4Gi`) at render time. Limits are intentionally omitted so a dedicated-node pod can use otherwise-idle node capacity.
+                description: |-
+                  Per-pod CPU/memory requests. Empty values resolve to the shared data-plane
+                  defaults (`1` CPU / `4Gi`) at render time. Limits are intentionally omitted
+                  so a dedicated-node pod can use otherwise-idle node capacity.
                 properties:
                   cpu:
                     default: ''
@@ -194,7 +277,11 @@ spec:
                     type: string
                 type: object
               serviceAccountName:
-                description: Optional external ServiceAccount name for the workload StatefulSet. When set, the operator skips rendering the `<instance>` ServiceAccount entirely and configures the workload StatefulSet to use this name instead (#2581). `<name>-backup` identity is unaffected.
+                description: |-
+                  Optional external ServiceAccount name for the workload StatefulSet.
+                  When set, the operator skips rendering the `<instance>` ServiceAccount
+                  entirely and configures the workload StatefulSet to use this name
+                  instead (#2581). `<name>-backup` identity is unaffected.
                 nullable: true
                 type: string
               shardCount:
@@ -203,26 +290,58 @@ spec:
                 minimum: 0.0
               storage:
                 default: 10Gi
-                description: Per-pod journal plus shared Raft hard-state/log/snapshot PVC size. Defaults to `10Gi`.
+                description: |-
+                  Per-pod journal plus shared Raft hard-state/log/snapshot PVC size.
+                  Defaults to `10Gi`.
                 type: string
               storageClass:
-                description: PVC StorageClass for the journal disk. Unset means the cluster default.
+                description: |-
+                  PVC StorageClass for the journal disk. Unset means the cluster
+                  default.
                 nullable: true
                 type: string
               tokensSecret:
-                description: 'Name of the Secret carrying the bearer-token registry (key `token-registry.json`). When set with `auth: required`, the render mounts it read-only at `/var/run/secrets/tape` and injects `TAPE_TOKEN_REGISTRY_FILE` (relay/lumen''s pattern). Tape watches a changed projection and atomically applies only a valid replacement without a pod restart. Ignored when `auth: disabled`. Setting **both** this and `tokensSecretProviderClass` is rejected by the CRD schema (#2765), because silently preferring one leaves an operator reading credentials that are not the ones being served.'
+                description: |-
+                  Name of the Secret carrying the bearer-token registry (key
+                  `token-registry.json`). When set with `auth: required`, the render
+                  mounts it read-only at `/var/run/secrets/tape` and injects
+                  `TAPE_TOKEN_REGISTRY_FILE` (relay/lumen's pattern). Tape watches a
+                  changed projection and atomically applies only a valid replacement
+                  without a pod restart. Ignored when `auth: disabled`. Setting **both**
+                  this and `tokensSecretProviderClass` is rejected by the CRD schema
+                  (#2765), because silently preferring one leaves an operator reading
+                  credentials that are not the ones being served.
                 nullable: true
                 type: string
               tokensSecretCsiDriver:
-                description: CSI driver name for the `tokensSecretProviderClass` projection. Defaults to the community `secrets-store.csi.k8s.io`; GKE's managed Secrets Store add-on registers `secrets-store-gke.csi.k8s.io`, so GKE instances must set that value (#2456).
+                description: |-
+                  CSI driver name for the `tokensSecretProviderClass` projection.
+                  Defaults to the community `secrets-store.csi.k8s.io`; GKE's managed
+                  Secrets Store add-on registers `secrets-store-gke.csi.k8s.io`, so GKE
+                  instances must set that value (#2456).
                 nullable: true
                 type: string
               tokensSecretProviderClass:
-                description: 'Name of a Secrets Store CSI `SecretProviderClass` that projects the same `token-registry.json` file as [`Self::tokens_secret`]. When the CSI driver refreshes that file, Tape''s watcher applies valid rotations without a pod restart. Ignored when `auth: disabled`. Mutual exclusion with `tokensSecret` is enforced by the CRD schema (`x-kubernetes-validations`), so setting both is rejected at `kubectl apply` rather than resolved by a precedence rule nothing surfaces (#2765).'
+                description: |-
+                  Name of a Secrets Store CSI `SecretProviderClass` that projects the
+                  same `token-registry.json` file as [`Self::tokens_secret`]. When the
+                  CSI driver refreshes that file, Tape's watcher applies valid rotations
+                  without a pod restart. Ignored when `auth: disabled`. Mutual exclusion
+                  with `tokensSecret` is enforced by the CRD schema
+                  (`x-kubernetes-validations`), so setting both is rejected at
+                  `kubectl apply` rather than resolved by a precedence rule nothing
+                  surfaces (#2765).
                 nullable: true
                 type: string
               topics:
-                description: 'Declarative topic/subscription provisioning: a list of topics and their pre-created subscriptions. The serve path (after the journal is ready) idempotently ensures each subscription, tolerating `AlreadyExists` errors. Topic creation is implicit (no journal mutation); declaring a topic alone is documentation + future-proofing for per-topic config (retention/quotas — #2550). **Additive-only**: removing an entry from this list never deletes anything (deletion lifecycle is #2549''s decision). Cross-ref: #2557.'
+                description: |-
+                  Declarative topic/subscription provisioning: a list of topics and their
+                  pre-created subscriptions. The serve path (after the journal is ready)
+                  idempotently ensures each subscription, tolerating `AlreadyExists` errors.
+                  Topic creation is implicit (no journal mutation); declaring a topic alone
+                  is documentation + future-proofing for per-topic config (retention/quotas
+                  — #2550). **Additive-only**: removing an entry from this list never deletes
+                  anything (deletion lifecycle is #2549's decision). Cross-ref: #2557.
                 items:
                   description: Topic declaration with optional subscriptions.
                   properties:
@@ -258,17 +377,30 @@ spec:
             properties:
               conditions:
                 description: |-
-                  Kubernetes-convention convergence conditions (#3054): `Ready`, `Progressing`, `StorageHealthy`, `BackupConfigured`, and (#3071) `BackupSucceeded`. This is the surface `kubectl wait --for=condition=Ready`, Argo CD health assessment, and Flux readiness gates read; `phase` is unchanged and still populated, so nothing already consuming it breaks.
+                  Kubernetes-convention convergence conditions (#3054): `Ready`,
+                  `Progressing`, `StorageHealthy`, `BackupConfigured`, and (#3071)
+                  `BackupSucceeded`. This is the
+                  surface `kubectl wait --for=condition=Ready`, Argo CD health
+                  assessment, and Flux readiness gates read; `phase` is unchanged and
+                  still populated, so nothing already consuming it breaks.
 
-                  `lastTransitionTime` is stamped by the reconcile loop, not here — see [`super::reconcile`]'s no-I/O `status_patch` contract.
+                  `lastTransitionTime` is stamped by the reconcile loop, not here — see
+                  [`super::reconcile`]'s no-I/O `status_patch` contract.
                 items:
                   description: |-
-                    One entry of a Kubernetes `status.conditions[]` array, in the shape every controller-aware tool already reads — `kubectl wait --for=condition=…`, Argo CD health assessment, Flux readiness gates.
+                    One entry of a Kubernetes `status.conditions[]` array, in the shape every
+                    controller-aware tool already reads — `kubectl wait --for=condition=…`,
+                    Argo CD health assessment, Flux readiness gates.
 
-                    Hand-written rather than reused from `k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition` because that type does not derive `JsonSchema`, so it cannot be embedded in a CRD schema generated by `kube`'s derive.
+                    Hand-written rather than reused from
+                    `k8s_openapi::apimachinery::pkg::apis::meta::v1::Condition` because that type
+                    does not derive `JsonSchema`, so it cannot be embedded in a CRD schema
+                    generated by `kube`'s derive.
                   properties:
                     lastTransitionTime:
-                      description: RFC3339 instant the status last *changed* — not the last time it was observed. Carried across reconciles by [`project`].
+                      description: |-
+                        RFC3339 instant the status last *changed* — not the last time it was
+                        observed. Carried across reconciles by [`project`].
                       type: string
                     message:
                       default: ''

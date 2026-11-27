@@ -139,7 +139,7 @@ jobs:
           scripts/ci/fetch_previous_tape.sh "$RUNNER_TEMP/tape-previous"
           echo "TAPE_PREVIOUS_BIN=$RUNNER_TEMP/tape-previous" >> "$GITHUB_ENV"
       - run: cargo llvm-cov --workspace --locked --json --summary-only --output-path target/coverage.json
-      - uses: faberline/aw/.github/actions/coverage@4340a382c73351cffff85edba7079e4c24adf3db # S8 (aw 0.7.42)
+      - uses: faberline/aw/.github/actions/coverage@8d6f37d733d402efe7a8b1efee61aa6cc4f81e99 # S8 (aw 0.7.80)
         with:
           summary: target/coverage.json
 
@@ -203,7 +203,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: tape-ci-aw
-      - run: cargo install --locked --git https://github.com/faberline/aw --rev 655b90a aw
+      - run: cargo install --locked --git https://github.com/faberline/aw --rev 8d6f37d733d402efe7a8b1efee61aa6cc4f81e99 aw
       - run: aw standards check --repo . --core core-checkout
 
   test-deps:
@@ -413,9 +413,9 @@ jobs:
       id-token: write
       contents: read
       packages: read
-    uses: faberline/aw/.github/workflows/gke-test.yml@8e6189b1a244da71a0c09f71ce869e8715d04f0c
+    uses: faberline/aw/.github/workflows/gke-test.yml@8d6f37d733d402efe7a8b1efee61aa6cc4f81e99
     with:
-      aw-ref: 8e6189b1a244da71a0c09f71ce869e8715d04f0c
+      aw-ref: 8d6f37d733d402efe7a8b1efee61aa6cc4f81e99
       image: ${{ needs.e2e-resolve.outputs.image }}
       image-name: ghcr.io/faberline/tape
       namespace: tape
