@@ -185,11 +185,18 @@ spec:
                   lumen's `spec.observability`.
                 type: boolean
               peerTls:
-                description: Optional raft peer mTLS. When set, the Secret named by `secretName` is mounted read-only and the serving process runs peer mTLS (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and `tls.key`, the keys that a cert-manager `Certificate` writes. Unset renders no peer TLS wiring.
+                description: |-
+                  Optional raft peer mTLS. When set, the Secret named by `secretName`
+                  is mounted read-only and the serving process runs peer mTLS
+                  (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and
+                  `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
+                  renders no peer TLS wiring.
                 nullable: true
                 properties:
                   secretName:
-                    description: Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and `tls.key`. Mounted read-only into the workload pods.
+                    description: |-
+                      Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and
+                      `tls.key`. Mounted read-only into the workload pods.
                     type: string
                 required:
                 - secretName
