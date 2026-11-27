@@ -374,7 +374,8 @@ fn walk(schema: &serde_json::Value, prefix: &str, out: &mut Vec<String>) {
 /// `spec` and `status` field paths of the `v1alpha1` schema in the CRD.
 fn live_crd_fields() -> Surface {
     let crd: serde_json::Value =
-        serde_yaml::from_str(&manifest_doc("k8s/operator/crd.yaml")).expect("parse crd.yaml");
+        serde_yaml::from_str(&manifest_doc("k8s/operator/cluster/crd.yaml"))
+            .expect("parse crd.yaml");
     let version = crd["spec"]["versions"]
         .as_array()
         .expect("versions array")
