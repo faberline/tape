@@ -40,7 +40,12 @@ impl IntoResponse for JournalError {
 
 /// Decode a JSON request body, rendering a malformed one as `400
 /// bad_request`.
-pub(super) fn parse_body<T: DeserializeOwned>(body: &[u8]) -> Result<T, ApiErr> {
-    serde_json::from_slice(body)
-        .map_err(|error| ApiErr::new(StatusCode::BAD_REQUEST, "bad_request", error.to_string()))
+pub(super) fn parse_body<T: DeserializeOwned>(body: &[u8]) -> Result<T, Box<ApiErr>> {
+    serde_json::from_slice(body).map_err(|error| {
+        Box::new(ApiErr::new(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            error.to_string(),
+        ))
+    })
 }
