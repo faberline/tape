@@ -26,7 +26,7 @@ Rule: a `1.x` binary reads every data directory that an earlier `1.x` binary wro
 
 ## CRD
 
-The custom resource `Tape` in the group `tape.dev`, served by `k8s/operator/crd.yaml`.
+The custom resource `Tape` in the group `tape.dev`, served by `k8s/operator/cluster/crd.yaml`.
 
 Rule: `v1alpha1` serves `1.0.0`. Additive `spec` and `status` fields land inside the served version. Renaming, removing or retyping a field needs a new CRD version and a conversion mechanism.
 

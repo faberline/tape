@@ -5,7 +5,7 @@ Copied from the retiring deployment handoff page (sections 3e to 3g). Text uncha
 ### 3e. CRD versioning & upgrade order
 
 **Versioning Policy:**
-`k8s/operator/crd.yaml` serves a single version, `v1alpha1` (`served: true`, `storage: true`), with no `conversion:` stanza (API server strategy defaults to `None`). Additive `spec` and `status` fields land inside `v1alpha1` across releases. Renaming, removing, or retyping an existing field requires a new CRD version and a conversion mechanism; no conversion webhook exists today, which is stated as a present limitation.
+`k8s/operator/cluster/crd.yaml` serves a single version, `v1alpha1` (`served: true`, `storage: true`), with no `conversion:` stanza (API server strategy defaults to `None`). Additive `spec` and `status` fields land inside `v1alpha1` across releases. Renaming, removing, or retyping an existing field requires a new CRD version and a conversion mechanism; no conversion webhook exists today, which is stated as a present limitation.
 
 **Upgrade Order (CRD First):**
 Always apply the updated CRD before deploying a newer operator or applying updated Custom Resources (following the `kubectl apply` sequence in `### 3d`).

@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Opt-in: the tape-system Namespace. Skip this base when the Namespace is owned
+# elsewhere (for example with its own Pod Security labels).
+
+resources:
+  - namespace.yaml

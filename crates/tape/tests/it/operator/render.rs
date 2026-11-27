@@ -89,7 +89,7 @@ fn crd_flattens_cluster_spec() {
          YAML 1.1 boolean-like and the enum can never be coerced to a bool"
     );
     assert_eq!(
-        include_str!("../../../../../k8s/operator/crd.yaml"),
+        include_str!("../../../../../k8s/operator/cluster/crd.yaml"),
         yaml,
         "checked-in CRD must be regenerated from the renderer"
     );
@@ -634,7 +634,7 @@ fn backup_cron_job_omits_unset_retention_and_token() {
 /// drifted from the generator at all.
 ///
 /// Asserting on the generator alone would pass while the checked-in
-/// `k8s/operator/crd.yaml` still pruned `spec.backup` in-cluster — a
+/// `k8s/operator/cluster/crd.yaml` still pruned `spec.backup` in-cluster — a
 /// structural schema drops properties it does not declare. That is not
 /// hypothetical: this test's byte-equality half caught the committed file
 /// still missing `spec.topics` from #2557, which had never been regenerated.
@@ -644,7 +644,7 @@ fn backup_cron_job_omits_unset_retention_and_token() {
 #[test]
 fn generated_crd_carries_the_backup_properties() {
     let yaml = crd_yaml();
-    let committed = include_str!("../../../../../k8s/operator/crd.yaml");
+    let committed = include_str!("../../../../../k8s/operator/cluster/crd.yaml");
 
     for field in [
         "backup",
@@ -668,8 +668,8 @@ fn generated_crd_carries_the_backup_properties() {
     // line that matters.
     assert!(
         committed.trim_end() == yaml.trim_end(),
-        "k8s/operator/crd.yaml has drifted from the generator — \
+        "k8s/operator/cluster/crd.yaml has drifted from the generator — \
          regenerate it with `cargo run -p tape --bin tape --features operator \
-         -- k8s crd render --out k8s/operator/crd.yaml`"
+         -- k8s crd render --out k8s/operator/cluster/crd.yaml`"
     );
 }

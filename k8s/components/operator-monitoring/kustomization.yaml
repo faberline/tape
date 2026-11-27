@@ -25,8 +25,9 @@ kind: Component
 #
 # Unlike ../observability, this component hardcodes `namespace: tape-system`
 # and needs no `replacements:` block in the consumer. The operator install is
-# not namespace-remapped — k8s/operator/rbac.yaml pins tape-system for the
-# Namespace, ServiceAccount and ClusterRoleBinding subject — so the ordering
+# not namespace-remapped — k8s/operator/namespace/namespace.yaml and
+# k8s/operator/cluster/clusterrolebinding.yaml pin tape-system for the Namespace
+# and the ClusterRoleBinding subject — so the ordering
 # problem documented there (a Component's transformers resolve before the
 # enclosing kustomization's `namespace:`) has nothing to bite here. Rendering
 # the operator elsewhere goes through `tape k8s operator render --namespace`,
