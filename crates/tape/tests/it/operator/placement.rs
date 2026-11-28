@@ -129,7 +129,7 @@ fn placement_fields_round_trip_through_the_cr_and_the_crd() {
     assert_eq!(cr.spec.placement, Some(pool_placement()));
     assert_eq!(cr.spec.image_pull_secrets[0].name, "ghcr-pull");
 
-    let committed = include_str!("../../../../../k8s/operator/crd.yaml");
+    let committed = include_str!("../../../../../k8s/operator/cluster/crd.yaml");
     for field in [
         "imagePullSecrets",
         "placement",

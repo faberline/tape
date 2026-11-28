@@ -172,35 +172,57 @@ pub(crate) fn crd_yaml() -> String {
 
 #[cfg(not(feature = "operator"))]
 pub(crate) fn crd_yaml() -> String {
-    cli_std::artifact::ensure_trailing_newline(include_str!("../../../../../k8s/operator/crd.yaml"))
+    cli_std::artifact::ensure_trailing_newline(include_str!(
+        "../../../../../k8s/operator/cluster/crd.yaml"
+    ))
 }
 
-/// Render the operator control-plane manifests -- RBAC, Deployment, the
+/// Render the operator control-plane manifests -- the Namespace, the
+/// ServiceAccount, the ClusterRole and its binding, the Deployment, the
 /// metrics Service, and the PDB, plus the ServiceMonitor/PrometheusRule pair
 /// when `monitoring` is set -- with the namespace substituted, from the
-/// checked-in fixtures. Same set, same order as `k8s/operator/kustomization.yaml`.
+/// checked-in fixtures. Same set, same order as the bases under
+/// `k8s/operator/` (see `k8s/operator/kustomization.yaml`).
 pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String {
     let mut out = String::new();
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
-        include_str!("../../../../../k8s/operator/rbac.yaml"),
+        include_str!("../../../../../k8s/operator/namespace/namespace.yaml"),
         "tape-system",
         namespace,
     ));
     out.push_str("\n---\n");
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
-        include_str!("../../../../../k8s/operator/deployment.yaml"),
+        include_str!("../../../../../k8s/operator/namespaced/serviceaccount.yaml"),
+        "tape-system",
+        namespace,
+    ));
+    out.push_str("\n---\n");
+    out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
+        include_str!("../../../../../k8s/operator/cluster/clusterrole.yaml"),
+        "tape-system",
+        namespace,
+    ));
+    out.push_str("\n---\n");
+    out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
+        include_str!("../../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
+        "tape-system",
+        namespace,
+    ));
+    out.push_str("\n---\n");
+    out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
+        include_str!("../../../../../k8s/operator/namespaced/deployment.yaml"),
         "tape-system",
         namespace,
     ));
     // The operator's own scrape target. Unconditional: it is plain
     // core/v1, so it applies on a cluster with no monitoring stack at all, and
     // shipping it always means turning monitoring on later never has to come
-    // back and add the target. Kept in the same order as
-    // k8s/operator/kustomization.yaml so the two paths stay comparable.
+    // back and add the target. Kept in the same order as the bases under
+    // k8s/operator/ so the two paths stay comparable.
     out.push_str("\n---\n");
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
         &cli_std::artifact::strip_source_ownership_markers(include_str!(
-            "../../../../../k8s/operator/service.yaml"
+            "../../../../../k8s/operator/namespaced/service.yaml"
         )),
         "tape-system",
         namespace,
@@ -211,7 +233,7 @@ pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String 
     out.push_str("\n---\n");
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
         &cli_std::artifact::strip_source_ownership_markers(include_str!(
-            "../../../../../k8s/operator/pdb.yaml"
+            "../../../../../k8s/operator/namespaced/pdb.yaml"
         )),
         "tape-system",
         namespace,

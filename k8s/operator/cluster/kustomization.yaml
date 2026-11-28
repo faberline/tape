@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Cluster-scoped objects: the Tape CRD, the ClusterRole and its ClusterRoleBinding.
+# Apply with the cluster-scoped identity (it needs rights on CRDs and RBAC).
+
+resources:
+  - crd.yaml
+  - clusterrole.yaml
+  - clusterrolebinding.yaml
