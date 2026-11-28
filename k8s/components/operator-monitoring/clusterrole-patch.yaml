@@ -1,0 +1,9 @@
+# JSON6902 patch: appends the monitoring.coreos.com rule to the base
+# ClusterRole. `tape k8s operator render --monitoring` reads the `value`
+# below, so this file is the single source of the rule text.
+- op: add
+  path: /rules/-
+  value:
+    apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors", "prometheusrules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

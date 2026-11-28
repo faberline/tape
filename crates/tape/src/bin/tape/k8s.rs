@@ -63,7 +63,8 @@ pub(crate) struct K8sOperatorRenderArgs {
     /// cluster without prometheus-operator rejects the whole apply; the
     /// scrape *target* Service carries no CRD dependency and is always
     /// rendered. Mirrors the opt-in `k8s/components/operator-monitoring`
-    /// kustomize component.
+    /// kustomize component. It also adds the `monitoring.coreos.com` rule to
+    /// the ClusterRole.
     #[arg(long)]
     pub(crate) monitoring: bool,
     /// Write to this path instead of stdout. A directory receives
@@ -180,7 +181,8 @@ pub(crate) fn crd_yaml() -> String {
 /// Render the operator control-plane manifests -- the Namespace, the
 /// ServiceAccount, the ClusterRole and its binding, the Deployment, the
 /// metrics Service, and the PDB, plus the ServiceMonitor/PrometheusRule pair
-/// when `monitoring` is set -- with the namespace substituted, from the
+/// when `monitoring` is set (the ClusterRole also gains the monitoring rule
+/// then) -- with the namespace substituted, from the
 /// checked-in fixtures. Same set, same order as the bases under
 /// `k8s/operator/` (see `k8s/operator/kustomization.yaml`).
 pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String {
@@ -197,11 +199,20 @@ pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String 
         namespace,
     ));
     out.push_str("\n---\n");
-    out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
+    let mut role = cli_std::artifact::replace_kubernetes_namespace(
         include_str!("../../../../../k8s/operator/cluster/clusterrole.yaml"),
         "tape-system",
         namespace,
-    ));
+    );
+    // The monitoring rule is the last item of `rules:`, so it is appended
+    // after the base file's last rule.
+    if monitoring {
+        if !role.ends_with('\n') {
+            role.push('\n');
+        }
+        role.push_str(&monitoring_clusterrole_rule());
+    }
+    out.push_str(&role);
     out.push_str("\n---\n");
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
         include_str!("../../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
@@ -254,6 +265,24 @@ pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String 
         }
     }
     cli_std::artifact::ensure_trailing_newline(&out)
+}
+
+/// The `monitoring.coreos.com` rule of the `operator-monitoring` component
+/// patch, as one item of the ClusterRole `rules:` list. The patch file is the
+/// only copy of the rule text.
+fn monitoring_clusterrole_rule() -> String {
+    let patch: serde_yaml::Value = serde_yaml::from_str(include_str!(
+        "../../../../../k8s/components/operator-monitoring/clusterrole-patch.yaml"
+    ))
+    .expect("operator-monitoring clusterrole-patch.yaml parses");
+    let rule = serde_yaml::to_string(&patch[0]["value"]).expect("monitoring rule serializes");
+    let mut out = String::new();
+    for (i, line) in rule.lines().filter(|l| !l.is_empty()).enumerate() {
+        out.push_str(if i == 0 { "  - " } else { "    " });
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 /// Rewrite the control-plane namespace in the two monitoring manifests.

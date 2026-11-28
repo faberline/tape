@@ -79,8 +79,8 @@ fn alert_rules_reference_kube_state_and_kubelet_series() {
 /// `operator-monitoring` component, never in the base layer: an
 /// `apply -k k8s/operator` that held a `monitoring.coreos.com` object would
 /// fail on any cluster without prometheus-operator, and take the operator
-/// install down with it. The ClusterRole may still grant that group's verbs;
-/// only installed objects count.
+/// install down with it. The base ClusterRole no longer grants that group
+/// either; the component patch does.
 #[test]
 fn operator_monitoring_is_a_component_and_the_operator_layer_stays_crd_free() {
     use serde::Deserialize;
@@ -296,4 +296,80 @@ fn operator_install_splits_by_scope() {
         namespace[0]["metadata"]["name"].as_str(),
         Some("tape-system")
     );
+}
+
+/// #238 — the base ClusterRole no longer grants `monitoring.coreos.com`. The
+/// opt-in component patch appends that rule, and `tape k8s operator render
+/// --monitoring` reads the same patch text.
+#[test]
+fn base_clusterrole_has_no_monitoring_rule_and_component_patch_adds_it() {
+    let role = yaml(include_str!(
+        "../../../../k8s/operator/cluster/clusterrole.yaml"
+    ));
+    let rules = role["rules"].as_sequence().expect("ClusterRole has rules");
+    let groups_of = |rule: &Value| -> Vec<String> {
+        rule["apiGroups"]
+            .as_sequence()
+            .map(|gs| {
+                gs.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    for rule in rules {
+        assert!(
+            !groups_of(rule).iter().any(|g| g == "monitoring.coreos.com"),
+            "base ClusterRole grants monitoring.coreos.com: {rule:?}"
+        );
+    }
+    // Removing the monitoring rule must not drop any other group.
+    for group in [
+        "tape.dev",
+        "apps",
+        "batch",
+        "policy",
+        "coordination.k8s.io",
+        "events.k8s.io",
+    ] {
+        assert!(
+            rules
+                .iter()
+                .any(|rule| groups_of(rule).iter().any(|g| g == group)),
+            "base ClusterRole lost the {group} rule"
+        );
+    }
+
+    let patch = yaml(include_str!(
+        "../../../../k8s/components/operator-monitoring/clusterrole-patch.yaml"
+    ));
+    let ops = patch.as_sequence().expect("patch is a sequence");
+    assert_eq!(ops.len(), 1, "one JSON6902 operation");
+    assert_eq!(ops[0]["op"], "add");
+    assert_eq!(ops[0]["path"], "/rules/-");
+    assert_eq!(ops[0]["value"]["apiGroups"][0], "monitoring.coreos.com");
+    assert_eq!(ops[0]["value"]["resources"][0], "servicemonitors");
+    assert_eq!(ops[0]["value"]["resources"][1], "prometheusrules");
+    let verbs: Vec<&str> = ops[0]["value"]["verbs"]
+        .as_sequence()
+        .expect("patch verbs")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(
+        verbs,
+        ["get", "list", "watch", "create", "update", "patch", "delete"]
+    );
+
+    let component = yaml(include_str!(
+        "../../../../k8s/components/operator-monitoring/kustomization.yaml"
+    ));
+    let patches = component["patches"]
+        .as_sequence()
+        .expect("component lists patches");
+    assert_eq!(patches.len(), 1);
+    assert_eq!(patches[0]["path"], "clusterrole-patch.yaml");
+    assert_eq!(patches[0]["target"]["kind"], "ClusterRole");
+    assert_eq!(patches[0]["target"]["name"], "tape-operator");
 }
