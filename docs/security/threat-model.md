@@ -45,7 +45,7 @@ plaintext HA the peer routes share port 7137
 
 The operator reconciles the `Tape` CR (`k8s/operator/cluster/crd.yaml`). Its
 ClusterRole (`k8s/operator/cluster/clusterrole.yaml`) lets it create, update and delete the
-objects it renders, and write Leases and Events.
+objects it renders, and write Leases and Events. The opt-in scoped mode (`tape k8s operator render --scoped-namespace <ns>`, `k8s/operator/scoped/`) replaces that ClusterRole with a watch-only ClusterRole and a Role and RoleBinding in each listed namespace.
 
 | STRIDE | Threat | Control | Known gap |
 |---|---|---|---|
@@ -54,7 +54,7 @@ objects it renders, and write Leases and Events.
 | Repudiation | An operator action on a Tape object cannot be traced. | The operator writes Kubernetes Events on the objects it manages (`events` create and patch). | none |
 | Information disclosure | The operator reads Kubernetes objects beyond what it needs. | none | none |
 | Denial of service | The operator is stopped or starved and the group is not reconciled. | none | none |
-| Elevation of privilege | The operator's grant lets it change workloads outside the Tape namespace. | The grant names its resources and verbs (`k8s/operator/cluster/clusterrole.yaml`). | The grant is a ClusterRole, so it is cluster-wide. |
+| Elevation of privilege | The operator's grant lets it change workloads outside the Tape namespace. | The grant names its resources and verbs (`k8s/operator/cluster/clusterrole.yaml`). | The default grant is a ClusterRole, so it is cluster-wide. In scoped mode child-object writes stay in the listed namespaces; the `tapes` watch stays cluster-wide until the watch-limit issue (#240) lands. |
 
 ## Boundary: backup bucket
 

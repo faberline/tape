@@ -1,0 +1,34 @@
+# Example for one watched namespace (here: tape). Copy role-children.yaml and
+# rolebinding-children.yaml per watched namespace and change metadata.namespace
+# in both. The binding subject stays the operator ServiceAccount; its namespace
+# is set by the render, not by hand.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-operator-children
+  namespace: tape
+  labels:
+    app.kubernetes.io/name: tape-operator
+    app.kubernetes.io/part-of: tape
+rules:
+  # The durable journal workload.
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # The optional scheduled-backup CronJob rendered from spec.backup (#2574).
+  # Without this the operator renders the object and then fails to apply it.
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Serving Service/ServiceAccount.
+  - apiGroups: [""]
+    resources: ["services", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Reconcile narration on the CR itself (#2620). `patch` updates the
+  # EventSeries count when the Recorder's dedup window collapses an event.
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
