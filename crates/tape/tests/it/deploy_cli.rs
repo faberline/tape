@@ -288,6 +288,75 @@ fn render_verbs_emit_parseable_yaml_offline() {
     }
 }
 
+/// #238: the base operator render grants no `monitoring.coreos.com` rule.
+/// Only `--monitoring` adds exactly one such rule to the ClusterRole, with the
+/// verbs of the `operator-monitoring` component patch.
+#[test]
+fn operator_render_grants_monitoring_rbac_only_with_monitoring_flag() {
+    fn cluster_role_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
+        let role = docs
+            .iter()
+            .find(|d| d["kind"] == "ClusterRole")
+            .expect("operator render has a ClusterRole");
+        role["rules"]
+            .as_sequence()
+            .expect("ClusterRole has rules")
+            .clone()
+    }
+    fn monitoring_rules(rules: &[serde_yaml::Value]) -> Vec<&serde_yaml::Value> {
+        rules
+            .iter()
+            .filter(|r| {
+                r["apiGroups"].as_sequence().is_some_and(|gs| {
+                    gs.iter()
+                        .any(|g| g.as_str() == Some("monitoring.coreos.com"))
+                })
+            })
+            .collect()
+    }
+
+    let plain = cluster_role_rules(&parse_yaml_docs(
+        "operator render",
+        &stdout(&["k8s", "operator", "render", "--namespace", "tape-ops"]),
+    ));
+    assert!(
+        monitoring_rules(&plain).is_empty(),
+        "render without --monitoring grants monitoring.coreos.com RBAC"
+    );
+
+    let with = cluster_role_rules(&parse_yaml_docs(
+        "operator render --monitoring",
+        &stdout(&[
+            "k8s",
+            "operator",
+            "render",
+            "--namespace",
+            "tape-ops",
+            "--monitoring",
+        ]),
+    ));
+    let granted = monitoring_rules(&with);
+    assert_eq!(granted.len(), 1, "--monitoring grants one monitoring rule");
+    let rule = granted[0];
+    assert_eq!(rule["resources"][0], "servicemonitors");
+    assert_eq!(rule["resources"][1], "prometheusrules");
+    let verbs: Vec<&str> = rule["verbs"]
+        .as_sequence()
+        .expect("monitoring rule verbs")
+        .iter()
+        .filter_map(serde_yaml::Value::as_str)
+        .collect();
+    assert_eq!(
+        verbs,
+        ["get", "list", "watch", "create", "update", "patch", "delete"]
+    );
+    assert_eq!(
+        with.len(),
+        plain.len() + 1,
+        "--monitoring adds exactly one rule to the ClusterRole"
+    );
+}
+
 /// R1: `--variant source` reproduces the committed `Dockerfile`
 /// byte-for-byte, `--variant release` the committed `Dockerfile.release`, and
 /// an explicit `--version` flows into the ARG + tag lines.
