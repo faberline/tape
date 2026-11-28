@@ -373,3 +373,86 @@ fn base_clusterrole_has_no_monitoring_rule_and_component_patch_adds_it() {
     assert_eq!(patches[0]["target"]["kind"], "ClusterRole");
     assert_eq!(patches[0]["target"]["name"], "tape-operator");
 }
+
+/// #239: the opt-in scoped RBAC base lists its files, keeps the CRD out of the
+/// base (kustomize refuses files outside a base), and grants the child objects
+/// in one Role per watched namespace, with no monitoring rule.
+#[test]
+fn scoped_operator_base_lists_its_files_and_stays_crd_free() {
+    let base = yaml(include_str!(
+        "../../../../k8s/operator/scoped/kustomization.yaml"
+    ));
+    assert_eq!(base["kind"], "Kustomization");
+    let listed: Vec<&str> = base["resources"]
+        .as_sequence()
+        .expect("k8s/operator/scoped lists resources")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            "../namespace",
+            "../namespaced",
+            "clusterrole-watch.yaml",
+            "clusterrolebinding-watch.yaml",
+            "role-lease.yaml",
+            "rolebinding-lease.yaml",
+            "role-children.yaml",
+            "rolebinding-children.yaml",
+        ]
+    );
+
+    let files = [
+        include_str!("../../../../k8s/operator/scoped/clusterrole-watch.yaml"),
+        include_str!("../../../../k8s/operator/scoped/clusterrolebinding-watch.yaml"),
+        include_str!("../../../../k8s/operator/scoped/role-lease.yaml"),
+        include_str!("../../../../k8s/operator/scoped/rolebinding-lease.yaml"),
+        include_str!("../../../../k8s/operator/scoped/role-children.yaml"),
+        include_str!("../../../../k8s/operator/scoped/rolebinding-children.yaml"),
+    ];
+    let mut all = Vec::new();
+    for text in files {
+        assert!(
+            !text.contains("monitoring.coreos.com"),
+            "scoped RBAC file grants monitoring.coreos.com"
+        );
+        all.extend(documents(text));
+    }
+    assert_eq!(
+        kind_names(&all),
+        [
+            "ClusterRole",
+            "ClusterRoleBinding",
+            "Role",
+            "RoleBinding",
+            "Role",
+            "RoleBinding",
+        ]
+    );
+
+    let children = &documents(include_str!(
+        "../../../../k8s/operator/scoped/role-children.yaml"
+    ))[0];
+    assert_eq!(children["metadata"]["namespace"], "tape");
+    let granted: Vec<String> = children["rules"]
+        .as_sequence()
+        .expect("children Role has rules")
+        .iter()
+        .flat_map(|r| r["resources"].as_sequence().cloned().unwrap_or_default())
+        .filter_map(|r| r.as_str().map(str::to_owned))
+        .collect();
+    for want in [
+        "statefulsets",
+        "cronjobs",
+        "services",
+        "serviceaccounts",
+        "poddisruptionbudgets",
+        "events",
+    ] {
+        assert!(
+            granted.iter().any(|g| g == want),
+            "children Role lacks {want}"
+        );
+    }
+}

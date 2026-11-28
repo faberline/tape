@@ -1,0 +1,15 @@
+# Watch-only ClusterRole for the operator in scoped mode (#239). The operator
+# reads and writes only the Tape custom resources cluster-wide. Child objects
+# are granted per watched namespace in role-children.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tape-operator-watch
+  labels:
+    app.kubernetes.io/name: tape-operator
+    app.kubernetes.io/part-of: tape
+rules:
+  # The custom resource it owns + its status subresource.
+  - apiGroups: ["tape.dev"]
+    resources: ["tapes", "tapes/status", "tapes/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
