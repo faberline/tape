@@ -224,6 +224,30 @@ fn kind_names(docs: &[Value]) -> Vec<String> {
         .collect()
 }
 
+/// The operator can limit its watch by env var, but the shipped manifest only
+/// documents the var as a comment: the default stays cluster-wide.
+#[test]
+fn operator_deployment_documents_the_watch_namespaces_env_but_keeps_it_off() {
+    let text = include_str!("../../../../k8s/operator/namespaced/deployment.yaml");
+    assert!(
+        text.contains("# - name: TAPE_OPERATOR_WATCH_NAMESPACES"),
+        "deployment lacks the commented TAPE_OPERATOR_WATCH_NAMESPACES example"
+    );
+    let docs = documents(text);
+    let deployment = docs
+        .iter()
+        .find(|doc| doc["kind"].as_str() == Some("Deployment"))
+        .expect("namespaced deployment present");
+    let env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        .as_sequence()
+        .expect("container env list");
+    assert!(
+        env.iter()
+            .all(|entry| entry["name"].as_str() != Some("TAPE_OPERATOR_WATCH_NAMESPACES")),
+        "TAPE_OPERATOR_WATCH_NAMESPACES must stay commented out"
+    );
+}
+
 /// The operator install is split by scope: the cluster-scoped identity applies
 /// `cluster/`, the namespaced identity applies `namespaced/`, and `namespace/`
 /// is opt-in (issue #232). A namespaced apply must not hold RBAC, a Namespace
