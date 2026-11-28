@@ -185,6 +185,14 @@ pub struct TapeSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backup: Option<TapeBackupSpec>,
 
+    /// Optional raft peer mTLS. When set, the Secret named by `secretName`
+    /// is mounted read-only and the serving process runs peer mTLS
+    /// (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and
+    /// `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
+    /// renders no peer TLS wiring.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer_tls: Option<TapePeerTls>,
+
     /// Optional external ServiceAccount name for the workload StatefulSet.
     /// When set, the operator skips rendering the `<instance>` ServiceAccount
     /// entirely and configures the workload StatefulSet to use this name
@@ -234,6 +242,16 @@ pub struct TapeBackupSpec {
     /// omit for `auth: disabled`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub admin_token_secret: Option<String>,
+}
+
+/// Raft peer mTLS projection (#242): the Secret that holds the peer
+/// certificate, its key and the CA.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TapePeerTls {
+    /// Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and
+    /// `tls.key`. Mounted read-only into the workload pods.
+    pub secret_name: String,
 }
 
 impl std::ops::Deref for TapeBackupSpec {
