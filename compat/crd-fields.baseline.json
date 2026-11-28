@@ -16,6 +16,8 @@
     "logFormat",
     "logLevel",
     "observability",
+    "peerTls",
+    "peerTls.secretName",
     "placement",
     "placement.nodeSelector",
     "placement.tolerations",

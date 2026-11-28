@@ -16,7 +16,7 @@ pub mod reconcile;
 pub mod render;
 
 pub use crd::{
-    crd_yaml, AuthMode, LocalObjectReference, LogFormat, Tape, TapeBackupSpec, TapePlacement,
-    TapeSpec, TapeStatus, Toleration,
+    crd_yaml, AuthMode, LocalObjectReference, LogFormat, Tape, TapeBackupSpec, TapePeerTls,
+    TapePlacement, TapeSpec, TapeStatus, Toleration,
 };
 pub use reconcile::run;
