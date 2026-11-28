@@ -357,6 +357,190 @@ fn operator_render_grants_monitoring_rbac_only_with_monitoring_flag() {
     );
 }
 
+/// #239: `--scoped-namespace` replaces the cluster-wide child-object grant with
+/// a watch-only ClusterRole and a Role + RoleBinding per watched namespace, and
+/// a Role + RoleBinding for the Lease in the operator namespace.
+#[test]
+fn scoped_render_has_no_cluster_wide_child_write() {
+    fn rules(doc: &serde_yaml::Value) -> Vec<serde_yaml::Value> {
+        doc["rules"].as_sequence().cloned().unwrap_or_default()
+    }
+    fn strings(v: &serde_yaml::Value) -> Vec<&str> {
+        v.as_sequence()
+            .map(|s| s.iter().filter_map(serde_yaml::Value::as_str).collect())
+            .unwrap_or_default()
+    }
+    fn grants_resource(doc: &serde_yaml::Value, resource: &str) -> bool {
+        rules(doc)
+            .iter()
+            .any(|r| strings(&r["resources"]).contains(&resource))
+    }
+    fn name(doc: &serde_yaml::Value) -> &str {
+        doc["metadata"]["name"].as_str().unwrap_or_default()
+    }
+    fn namespace(doc: &serde_yaml::Value) -> &str {
+        doc["metadata"]["namespace"].as_str().unwrap_or_default()
+    }
+    fn of_kind<'a>(docs: &'a [serde_yaml::Value], kind: &str) -> Vec<&'a serde_yaml::Value> {
+        docs.iter().filter(|d| d["kind"] == kind).collect()
+    }
+
+    let text = stdout(&[
+        "k8s",
+        "operator",
+        "render",
+        "--namespace",
+        "tape-ops",
+        "--scoped-namespace",
+        "team-a",
+        "--scoped-namespace",
+        "team-b",
+    ]);
+    let docs = parse_yaml_docs("operator render --scoped-namespace", &text);
+
+    // No cluster-wide grant of the child objects.
+    for role in of_kind(&docs, "ClusterRole") {
+        assert!(
+            !grants_resource(role, "statefulsets"),
+            "scoped render grants statefulsets cluster-wide: {}",
+            name(role)
+        );
+    }
+    let cluster_roles = of_kind(&docs, "ClusterRole");
+    assert_eq!(cluster_roles.len(), 1, "scoped render has one ClusterRole");
+    assert_eq!(name(cluster_roles[0]), "tape-operator-watch");
+    assert!(
+        grants_resource(cluster_roles[0], "tapes"),
+        "the watch ClusterRole grants tapes"
+    );
+    let cluster_bindings = of_kind(&docs, "ClusterRoleBinding");
+    assert_eq!(cluster_bindings.len(), 1);
+    assert_eq!(name(cluster_bindings[0]), "tape-operator-watch");
+    assert!(
+        !docs.iter().any(|d| {
+            (d["kind"] == "ClusterRole" || d["kind"] == "ClusterRoleBinding")
+                && name(d) == "tape-operator"
+        }),
+        "scoped render keeps a ClusterRole or ClusterRoleBinding named tape-operator"
+    );
+
+    // One children Role and RoleBinding per watched namespace, in the order given.
+    let children: Vec<&serde_yaml::Value> = of_kind(&docs, "Role")
+        .into_iter()
+        .filter(|d| name(d) == "tape-operator-children")
+        .collect();
+    assert_eq!(children.len(), 2, "one children Role per watched namespace");
+    assert_eq!(namespace(children[0]), "team-a");
+    assert_eq!(namespace(children[1]), "team-b");
+    for role in &children {
+        assert!(grants_resource(role, "statefulsets"));
+    }
+    let child_bindings: Vec<&serde_yaml::Value> = of_kind(&docs, "RoleBinding")
+        .into_iter()
+        .filter(|d| name(d) == "tape-operator-children")
+        .collect();
+    assert_eq!(
+        child_bindings.len(),
+        2,
+        "one children RoleBinding per namespace"
+    );
+    assert_eq!(namespace(child_bindings[0]), "team-a");
+    assert_eq!(namespace(child_bindings[1]), "team-b");
+    for binding in &child_bindings {
+        assert_eq!(binding["subjects"][0]["kind"], "ServiceAccount");
+        assert_eq!(binding["subjects"][0]["name"], "tape-operator");
+        assert_eq!(binding["subjects"][0]["namespace"], "tape-ops");
+    }
+
+    // The Lease Role and its binding live in the operator namespace.
+    let lease: Vec<&serde_yaml::Value> = of_kind(&docs, "Role")
+        .into_iter()
+        .filter(|d| name(d) == "tape-operator-lease")
+        .collect();
+    assert_eq!(lease.len(), 1, "exactly one lease Role");
+    assert_eq!(namespace(lease[0]), "tape-ops");
+    assert!(grants_resource(lease[0], "leases"));
+    let lease_bindings = of_kind(&docs, "RoleBinding")
+        .into_iter()
+        .filter(|d| name(d) == "tape-operator-lease" && namespace(d) == "tape-ops")
+        .count();
+    assert_eq!(lease_bindings, 1, "one lease RoleBinding in tape-ops");
+
+    assert!(
+        !text.contains("tape-system"),
+        "scoped render with --namespace tape-ops still names tape-system"
+    );
+
+    // --monitoring adds the monitoring rule to each children Role, not to the
+    // watch ClusterRole.
+    let mon_text = stdout(&[
+        "k8s",
+        "operator",
+        "render",
+        "--namespace",
+        "tape-ops",
+        "--scoped-namespace",
+        "team-a",
+        "--monitoring",
+    ]);
+    let mon = parse_yaml_docs("operator render --scoped-namespace --monitoring", &mon_text);
+    let mon_child = of_kind(&mon, "Role")
+        .into_iter()
+        .find(|d| name(d) == "tape-operator-children")
+        .expect("children Role is rendered");
+    let mon_rules = rules(mon_child)
+        .into_iter()
+        .filter(|r| strings(&r["apiGroups"]).contains(&"monitoring.coreos.com"))
+        .count();
+    assert_eq!(mon_rules, 1, "children Role gains one monitoring rule");
+    let watch = of_kind(&mon, "ClusterRole")
+        .into_iter()
+        .find(|d| name(d) == "tape-operator-watch")
+        .expect("watch ClusterRole is rendered");
+    assert!(
+        !rules(watch)
+            .iter()
+            .any(|r| strings(&r["apiGroups"]).contains(&"monitoring.coreos.com")),
+        "watch ClusterRole must not grant monitoring.coreos.com"
+    );
+}
+
+/// #239: without `--scoped-namespace` the render keeps the cluster-wide
+/// ClusterRole, with no Role and no watch-only ClusterRole.
+#[test]
+fn default_operator_render_keeps_the_cluster_wide_role() {
+    let docs = parse_yaml_docs(
+        "operator render",
+        &stdout(&["k8s", "operator", "render", "--namespace", "tape-ops"]),
+    );
+    let cluster_role = docs
+        .iter()
+        .find(|d| d["kind"] == "ClusterRole" && d["metadata"]["name"] == "tape-operator")
+        .expect("default render has ClusterRole tape-operator");
+    let statefulsets = cluster_role["rules"]
+        .as_sequence()
+        .expect("ClusterRole has rules")
+        .iter()
+        .any(|r| {
+            r["resources"]
+                .as_sequence()
+                .is_some_and(|rs| rs.iter().any(|x| x == "statefulsets"))
+        });
+    assert!(statefulsets, "default ClusterRole grants statefulsets");
+    assert!(
+        !docs
+            .iter()
+            .any(|d| d["kind"] == "Role" || d["kind"] == "RoleBinding"),
+        "default render emits Role or RoleBinding objects"
+    );
+    assert!(
+        !docs
+            .iter()
+            .any(|d| d["metadata"]["name"] == "tape-operator-watch"),
+        "default render emits the scoped watch ClusterRole"
+    );
+}
+
 /// R1: `--variant source` reproduces the committed `Dockerfile`
 /// byte-for-byte, `--variant release` the committed `Dockerfile.release`, and
 /// an explicit `--version` flows into the ARG + tag lines.

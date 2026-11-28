@@ -1,0 +1,14 @@
+# Leader-election Lease in the operator namespace (#239, scoped mode).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tape-operator-lease
+  namespace: tape-system
+  labels:
+    app.kubernetes.io/name: tape-operator
+    app.kubernetes.io/part-of: tape
+rules:
+  # Leader-election Lease (HA: only the holder reconciles).
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]

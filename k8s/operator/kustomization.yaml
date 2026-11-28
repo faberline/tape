@@ -7,6 +7,7 @@ kind: Kustomization
 #   namespace   the tape-system Namespace (opt-in; skip it when the Namespace is owned elsewhere)
 #   cluster     the Tape CRD, the ClusterRole and the ClusterRoleBinding (cluster-scoped)
 #   namespaced  the ServiceAccount, the operator Deployment, its Service and PodDisruptionBudget
+#   scoped   opt-in scoped RBAC, applied instead of cluster (see k8s/operator/scoped)
 #
 # Apply order:
 #   1. cluster     (cluster-scoped identity), with namespace first if you want it

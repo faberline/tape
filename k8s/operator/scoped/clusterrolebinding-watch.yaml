@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tape-operator-watch
+  labels:
+    app.kubernetes.io/name: tape-operator
+    app.kubernetes.io/part-of: tape
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tape-operator-watch
+subjects:
+  - kind: ServiceAccount
+    name: tape-operator
+    namespace: tape-system
