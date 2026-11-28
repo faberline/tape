@@ -25,6 +25,25 @@ const ONE_TOKEN_SOURCE_MESSAGE: &str =
      spec.tokensSecretProviderClass (a Secret Manager CSI projection); with both set there is no \
      way to tell which registry is actually being served";
 
+/// The CEL rule enforcing that a `peerTls` names at most one peer TLS source
+/// (#243). Presence tests only, for the same reason as [`ONE_TOKEN_SOURCE_RULE`].
+const ONE_PEER_TLS_SOURCE_RULE: &str =
+    "!(has(self.peerTls) && has(self.peerTls.secretName) && has(self.peerTls.secretProviderClass))";
+
+const ONE_PEER_TLS_SOURCE_MESSAGE: &str =
+    "set at most one of spec.peerTls.secretName (a Kubernetes Secret) or \
+     spec.peerTls.secretProviderClass (a Secrets Store CSI projection); with both set there is no \
+     way to tell which peer certificate is being served";
+
+/// The CEL rule requiring a `peerTls` to name one peer TLS source (#243): with
+/// neither set the peer wiring has no files to mount. Presence tests only.
+const PEER_TLS_SOURCE_REQUIRED_RULE: &str =
+    "!has(self.peerTls) || (has(self.peerTls.secretName) != has(self.peerTls.secretProviderClass))";
+
+const PEER_TLS_SOURCE_REQUIRED_MESSAGE: &str =
+    "set exactly one of spec.peerTls.secretName or spec.peerTls.secretProviderClass when \
+     spec.peerTls is set; with neither set there is no Secret or CSI projection to mount";
+
 /// The CEL rule rejecting a backup schedule that can only ever 401: a
 /// `spec.backup` with no `adminTokenSecret` on an instance running
 /// `auth: required` (#3058). Presence tests only, for the same reason as
@@ -64,6 +83,24 @@ pub fn crd_yaml() -> String {
     assert!(
         attached > 0,
         "the backup-admin-token rule must reach the spec schema; the generated CRD changed shape"
+    );
+    let attached = service_k8s::crd::add_spec_validation_rule(
+        &mut crd,
+        ONE_PEER_TLS_SOURCE_RULE,
+        ONE_PEER_TLS_SOURCE_MESSAGE,
+    );
+    assert!(
+        attached > 0,
+        "the one-peer-TLS-source rule (spec.peerTls.secretName, spec.peerTls.secretProviderClass) must reach the spec schema; the generated CRD changed shape"
+    );
+    let attached = service_k8s::crd::add_spec_validation_rule(
+        &mut crd,
+        PEER_TLS_SOURCE_REQUIRED_RULE,
+        PEER_TLS_SOURCE_REQUIRED_MESSAGE,
+    );
+    assert!(
+        attached > 0,
+        "the peer-TLS-source-required rule (spec.peerTls.secretName, spec.peerTls.secretProviderClass) must reach the spec schema; the generated CRD changed shape"
     );
     let yaml = serde_yaml::to_string(&crd).expect("CRD serializes");
     service_k8s::crd::quote_yaml_1_1_boolean_like_strings(&yaml)
