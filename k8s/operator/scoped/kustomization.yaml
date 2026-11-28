@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Scoped RBAC for an operator with no cluster-wide write access (#239).
+# Use it instead of the cluster base. The CRD is NOT in this base: kustomize
+# refuses files outside a base. Apply the CRD first with the cluster-scoped
+# identity: `tape k8s crd render | kubectl apply -f -`.
+#
+# One Role and RoleBinding per watched namespace: copy role-children.yaml and
+# rolebinding-children.yaml for each namespace and change metadata.namespace.
+# The example below lists the one for namespace tape.
+
+resources:
+  - ../namespace
+  - ../namespaced
+  - clusterrole-watch.yaml
+  - clusterrolebinding-watch.yaml
+  - role-lease.yaml
+  - rolebinding-lease.yaml
+  - role-children.yaml
+  - rolebinding-children.yaml

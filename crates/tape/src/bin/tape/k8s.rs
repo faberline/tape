@@ -67,6 +67,9 @@ pub(crate) struct K8sOperatorRenderArgs {
     /// the ClusterRole.
     #[arg(long)]
     pub(crate) monitoring: bool,
+    /// Render scoped RBAC for this watched namespace instead of the ClusterRole and ClusterRoleBinding. Repeatable.
+    #[arg(long = "scoped-namespace")]
+    pub(crate) scoped_namespace: Vec<String>,
     /// Write to this path instead of stdout. A directory receives
     /// `operator.yaml`.
     #[arg(long)]
@@ -137,7 +140,7 @@ pub(crate) async fn k8s(args: K8sArgs) -> Result<()> {
         K8sCmd::Operator(a) => match a.cmd.unwrap_or(K8sOperatorCmd::Run) {
             K8sOperatorCmd::Run => run_operator().await,
             K8sOperatorCmd::Render(a) => {
-                let yaml = render_operator_yaml(&a.namespace, a.monitoring);
+                let yaml = render_operator_yaml(&a.namespace, a.monitoring, &a.scoped_namespace);
                 write_or_print(a.out.as_deref(), "operator.yaml", &yaml)
             }
         },
@@ -185,7 +188,14 @@ pub(crate) fn crd_yaml() -> String {
 /// then) -- with the namespace substituted, from the
 /// checked-in fixtures. Same set, same order as the bases under
 /// `k8s/operator/` (see `k8s/operator/kustomization.yaml`).
-pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String {
+///
+/// With `scoped_namespaces` (#239), the ClusterRole and its binding are
+/// replaced by the scoped RBAC set (see `render_scoped_rbac`).
+pub(crate) fn render_operator_yaml(
+    namespace: &str,
+    monitoring: bool,
+    scoped_namespaces: &[String],
+) -> String {
     let mut out = String::new();
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
         include_str!("../../../../../k8s/operator/namespace/namespace.yaml"),
@@ -199,26 +209,33 @@ pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String 
         namespace,
     ));
     out.push_str("\n---\n");
-    let mut role = cli_std::artifact::replace_kubernetes_namespace(
-        include_str!("../../../../../k8s/operator/cluster/clusterrole.yaml"),
-        "tape-system",
-        namespace,
-    );
-    // The monitoring rule is the last item of `rules:`, so it is appended
-    // after the base file's last rule.
-    if monitoring {
-        if !role.ends_with('\n') {
-            role.push('\n');
+    let rbac = if scoped_namespaces.is_empty() {
+        let mut role = cli_std::artifact::replace_kubernetes_namespace(
+            include_str!("../../../../../k8s/operator/cluster/clusterrole.yaml"),
+            "tape-system",
+            namespace,
+        );
+        // The monitoring rule is the last item of `rules:`, so it is appended
+        // after the base file's last rule.
+        if monitoring {
+            if !role.ends_with('\n') {
+                role.push('\n');
+            }
+            role.push_str(&monitoring_clusterrole_rule());
         }
-        role.push_str(&monitoring_clusterrole_rule());
-    }
-    out.push_str(&role);
-    out.push_str("\n---\n");
-    out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
-        include_str!("../../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
-        "tape-system",
-        namespace,
-    ));
+        vec![
+            role,
+            cli_std::artifact::replace_kubernetes_namespace(
+                include_str!("../../../../../k8s/operator/cluster/clusterrolebinding.yaml"),
+                "tape-system",
+                namespace,
+            ),
+        ]
+    } else {
+        render_scoped_rbac(namespace, monitoring, scoped_namespaces)
+    };
+    // Same separators as before: each RBAC document, then the Deployment.
+    out.push_str(&rbac.join("\n---\n"));
     out.push_str("\n---\n");
     out.push_str(&cli_std::artifact::replace_kubernetes_namespace(
         include_str!("../../../../../k8s/operator/namespaced/deployment.yaml"),
@@ -265,6 +282,72 @@ pub(crate) fn render_operator_yaml(namespace: &str, monitoring: bool) -> String 
         }
     }
     cli_std::artifact::ensure_trailing_newline(&out)
+}
+
+/// The RBAC documents of the scoped mode (#239), in order: the watch-only
+/// ClusterRole and its binding, the lease Role and its binding in the operator
+/// namespace, then a children Role and binding for each watched namespace.
+/// Each file's `tape-system` is the operator namespace.
+fn render_scoped_rbac(
+    namespace: &str,
+    monitoring: bool,
+    scoped_namespaces: &[String],
+) -> Vec<String> {
+    let operator = |text: &str| {
+        cli_std::artifact::replace_kubernetes_namespace(text, "tape-system", namespace)
+    };
+    let mut docs = vec![
+        operator(include_str!(
+            "../../../../../k8s/operator/scoped/clusterrole-watch.yaml"
+        )),
+        operator(include_str!(
+            "../../../../../k8s/operator/scoped/clusterrolebinding-watch.yaml"
+        )),
+        operator(include_str!(
+            "../../../../../k8s/operator/scoped/role-lease.yaml"
+        )),
+        operator(include_str!(
+            "../../../../../k8s/operator/scoped/rolebinding-lease.yaml"
+        )),
+    ];
+    for watched in scoped_namespaces {
+        let mut role = render_children(
+            include_str!("../../../../../k8s/operator/scoped/role-children.yaml"),
+            namespace,
+            watched,
+        );
+        // The monitoring rule goes on the children Role only, where the
+        // workloads it watches live. Not on the lease Role or the watch ClusterRole.
+        if monitoring {
+            if !role.ends_with('\n') {
+                role.push('\n');
+            }
+            role.push_str(&monitoring_clusterrole_rule());
+        }
+        docs.push(role);
+        docs.push(render_children(
+            include_str!("../../../../../k8s/operator/scoped/rolebinding-children.yaml"),
+            namespace,
+            watched,
+        ));
+    }
+    docs
+}
+
+/// Set the namespace of one per-namespace children file (#239): the Role or
+/// RoleBinding `metadata.namespace` becomes `watched`, and the ServiceAccount
+/// subject becomes the operator namespace. The indent-specific patterns keep
+/// the two apart, even when the operator runs in `tape`.
+fn render_children(manifest: &str, operator_namespace: &str, watched: &str) -> String {
+    manifest
+        .replace(
+            "\n  namespace: tape\n",
+            &format!("\n  namespace: {watched}\n"),
+        )
+        .replace(
+            "\n    namespace: tape-system\n",
+            &format!("\n    namespace: {operator_namespace}\n"),
+        )
 }
 
 /// The `monitoring.coreos.com` rule of the `operator-monitoring` component
