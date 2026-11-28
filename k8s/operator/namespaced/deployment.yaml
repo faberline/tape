@@ -1,4 +1,4 @@
-# The tape operator: a controller that watches Tape objects cluster-wide.
+# The tape operator: a controller that watches Tape objects cluster-wide by default (see TAPE_OPERATOR_WATCH_NAMESPACES below).
 # Ships in the same `tape` image (run as `tape k8s operator run`, built with
 # --features operator). Two replicas run behind a coordination.k8s.io Lease,
 # which elects one active reconciler and keeps the other as a warm standby.
@@ -75,6 +75,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            # Optional: watch Tape objects only in these namespaces (comma
+            # separated). Empty or unset watches cluster-wide. Needs a Role and
+            # RoleBinding in each listed namespace (see #239), not a ClusterRole.
+            # - name: TAPE_OPERATOR_WATCH_NAMESPACES
+            #   value: "team-a,team-b"
           resources:
             requests:
               cpu: 100m
