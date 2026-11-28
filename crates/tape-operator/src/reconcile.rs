@@ -11,7 +11,9 @@
 use kube::{Api, Client, ResourceExt};
 use serde_json::json;
 use service_k8s::service::ReconcilePlan;
-use service_k8s::{ConditionFact, ConditionStatus, ManagedService, ReadinessTarget, ReadyFacts};
+use service_k8s::{
+    ConditionFact, ConditionStatus, ManagedService, ReadinessTarget, ReadyFacts, WatchScope,
+};
 
 use super::crd::Tape;
 use super::render;
@@ -350,8 +352,78 @@ pub fn backup_run_fact(configured: bool, observed: Option<&CronJobStatusFacts>) 
     )
 }
 
+/// The env var that limits the watch to a comma-separated list of namespaces.
+pub const WATCH_NAMESPACES_ENV: &str = "TAPE_OPERATOR_WATCH_NAMESPACES";
+
+/// Parse the watch namespace list: trim each item, drop empty items and
+/// repeats, and keep the first order.
+pub fn parse_watch_namespaces(raw: Option<&str>) -> Vec<String> {
+    let mut namespaces: Vec<String> = Vec::new();
+    for item in raw.unwrap_or_default().split(',') {
+        let item = item.trim();
+        if !item.is_empty() && !namespaces.iter().any(|ns| ns == item) {
+            namespaces.push(item.to_owned());
+        }
+    }
+    namespaces
+}
+
+/// The watch scope for a raw env value: an empty list watches cluster-wide.
+pub fn watch_scope(raw: Option<&str>) -> WatchScope {
+    let list = parse_watch_namespaces(raw);
+    if list.is_empty() {
+        WatchScope::AllNamespaces
+    } else {
+        WatchScope::Namespaces(list)
+    }
+}
+
 /// `tape k8s operator run` — run the reconcile controller on the shared
 /// `core/crates/service-k8s` host (leader-gated; safe at `replicas > 1`).
+/// The env var `TAPE_OPERATOR_WATCH_NAMESPACES` limits the watch; unset keeps
+/// it cluster-wide.
 pub async fn run() -> anyhow::Result<()> {
-    service_k8s::run::<Tape>().await
+    let raw = std::env::var(WATCH_NAMESPACES_ENV).ok();
+    match watch_scope(raw.as_deref()) {
+        WatchScope::AllNamespaces => service_k8s::run::<Tape>().await,
+        scope => service_k8s::run_in_namespaces::<Tape>(scope).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_watch_namespaces_unset_is_empty() {
+        assert_eq!(parse_watch_namespaces(None), Vec::<String>::new());
+    }
+
+    #[test]
+    fn parse_watch_namespaces_trims_drops_empty_and_dedupes() {
+        assert_eq!(
+            parse_watch_namespaces(Some("a, b,,a")),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(parse_watch_namespaces(Some(" , ")), Vec::<String>::new());
+        assert_eq!(
+            parse_watch_namespaces(Some("b,a,b")),
+            vec!["b".to_string(), "a".to_string()]
+        );
+    }
+
+    #[test]
+    fn watch_scope_unset_or_empty_is_all_namespaces() {
+        assert_eq!(watch_scope(None), WatchScope::AllNamespaces);
+        assert_eq!(watch_scope(Some("")), WatchScope::AllNamespaces);
+        assert_eq!(watch_scope(Some(" , ")), WatchScope::AllNamespaces);
+    }
+
+    #[test]
+    fn watch_scope_with_a_list_is_namespaces() {
+        assert_eq!(
+            watch_scope(Some("team-a, team-b")),
+            WatchScope::Namespaces(vec!["team-a".to_string(), "team-b".to_string()])
+        );
+    }
 }
