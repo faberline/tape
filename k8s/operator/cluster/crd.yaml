@@ -186,20 +186,35 @@ spec:
                 type: boolean
               peerTls:
                 description: |-
-                  Optional raft peer mTLS. When set, the Secret named by `secretName`
-                  is mounted read-only and the serving process runs peer mTLS
-                  (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and
-                  `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
+                  Optional raft peer mTLS. When set, the files come from the Secret
+                  named by `secretName` or the SecretProviderClass named by
+                  `secretProviderClass`, mounted read-only, and the serving process runs
+                  peer mTLS (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt`
+                  and `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
                   renders no peer TLS wiring.
                 nullable: true
                 properties:
+                  csiDriver:
+                    description: |-
+                      CSI driver name for the `secretProviderClass` projection. Defaults to
+                      the community `secrets-store.csi.k8s.io`; GKE's managed add-on
+                      registers `secrets-store-gke.csi.k8s.io`.
+                    nullable: true
+                    type: string
                   secretName:
                     description: |-
                       Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and
-                      `tls.key`. Mounted read-only into the workload pods.
+                      `tls.key`. Mounted read-only into the workload pods. Exactly one of
+                      `secretName` and `secretProviderClass` is set (CRD rule).
+                    nullable: true
                     type: string
-                required:
-                - secretName
+                  secretProviderClass:
+                    description: |-
+                      Name of a SecretProviderClass in the same namespace that projects the
+                      same three files (`ca.crt`, `tls.crt`, `tls.key`) by a Secrets Store CSI
+                      volume. Exactly one of `secretName` and `secretProviderClass` is set.
+                    nullable: true
+                    type: string
                 type: object
               placement:
                 description: |-
@@ -378,6 +393,10 @@ spec:
               message: set at most one of spec.tokensSecret (a Kubernetes Secret) or spec.tokensSecretProviderClass (a Secret Manager CSI projection); with both set there is no way to tell which registry is actually being served
             - rule: '!(has(self.backup) && self.auth == ''required'' && !has(self.backup.adminTokenSecret))'
               message: set spec.backup.adminTokenSecret when spec.auth is required, or the scheduled backup runs authenticate with no token and every run fails 401 while the instance keeps reporting Ready
+            - rule: '!(has(self.peerTls) && has(self.peerTls.secretName) && has(self.peerTls.secretProviderClass))'
+              message: set at most one of spec.peerTls.secretName (a Kubernetes Secret) or spec.peerTls.secretProviderClass (a Secrets Store CSI projection); with both set there is no way to tell which peer certificate is being served
+            - rule: '!has(self.peerTls) || (has(self.peerTls.secretName) != has(self.peerTls.secretProviderClass))'
+              message: set exactly one of spec.peerTls.secretName or spec.peerTls.secretProviderClass when spec.peerTls is set; with neither set there is no Secret or CSI projection to mount
           status:
             description: Status subresource, written back by the reconcile loop.
             nullable: true

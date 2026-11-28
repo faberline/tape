@@ -274,11 +274,11 @@ fn log_format_serde_default_and_validation() {
     assert!(typo.is_err(), "an unknown logFormat value must be rejected");
 }
 
-/// #3058 E1: CRD spec validation rules array contains exactly two rules in
-/// stable order: the one-token-source rule first, and the backup-admin-token
-/// rule second.
+/// #3058 E1 (extended by #243): CRD spec validation rules array contains
+/// exactly four rules in stable order: the one-token-source rule first, the
+/// backup-admin-token rule second, then the two peer TLS source rules.
 #[test]
-fn crd_has_two_spec_validation_rules_in_order() {
+fn crd_has_four_spec_validation_rules_in_order() {
     let yaml = crd_yaml();
     let doc: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("CRD parses as YAML");
     let rules = doc["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
@@ -287,8 +287,8 @@ fn crd_has_two_spec_validation_rules_in_order() {
         .expect("spec carries validation rules");
     assert_eq!(
         rules.len(),
-        2,
-        "spec schema must carry exactly two validation rules"
+        4,
+        "spec schema must carry exactly four validation rules"
     );
     assert_eq!(
         rules[0]["rule"],
@@ -297,6 +297,14 @@ fn crd_has_two_spec_validation_rules_in_order() {
     assert_eq!(
         rules[1]["rule"],
         "!(has(self.backup) && self.auth == 'required' && !has(self.backup.adminTokenSecret))"
+    );
+    assert_eq!(
+        rules[2]["rule"],
+        "!(has(self.peerTls) && has(self.peerTls.secretName) && has(self.peerTls.secretProviderClass))"
+    );
+    assert_eq!(
+        rules[3]["rule"],
+        "!has(self.peerTls) || (has(self.peerTls.secretName) != has(self.peerTls.secretProviderClass))"
     );
 }
 

@@ -7,12 +7,38 @@ use service_k8s::stateful::{
     resource_request_or_default, DEFAULT_CPU_REQUEST, DEFAULT_MEMORY_REQUEST,
 };
 
-use super::super::crd::Tape;
+use super::super::crd::{Tape, TapePeerTls};
 use super::placement::{placement_node_selector, placement_tolerations, set_image_pull_secrets};
 use super::{
-    token_registry_source, CLIENT_PORT, COMPONENT, PEER_TLS_MOUNT_DIR, PEER_TLS_VOLUME, RAFT_PORT,
-    TERMINATION_SLACK_SECS, TOKEN_REGISTRY_FILE, TOKEN_REGISTRY_MOUNT_DIR, TOKEN_REGISTRY_VOLUME,
+    token_registry_source, CLIENT_PORT, COMPONENT, PEER_TLS_DEFAULT_CSI_DRIVER, PEER_TLS_MOUNT_DIR,
+    PEER_TLS_VOLUME, RAFT_PORT, TERMINATION_SLACK_SECS, TOKEN_REGISTRY_FILE,
+    TOKEN_REGISTRY_MOUNT_DIR, TOKEN_REGISTRY_VOLUME,
 };
+
+/// The pod volume that holds the raft peer TLS files (#242, #243).
+///
+/// Exactly one source gives a volume: a Secret (`secretName`, read as
+/// `defaultMode` 0o440 so the pod's `fsGroup` can read it) or a Secrets Store
+/// CSI projection (`secretProviderClass`). Both or neither gives none: the
+/// CRD rejects such a spec at apply, and the render never guesses which
+/// source to serve.
+fn peer_tls_pod_volume(peer_tls: &TapePeerTls) -> Option<Value> {
+    match (&peer_tls.secret_name, &peer_tls.secret_provider_class) {
+        (Some(secret_name), None) => Some(json!({
+            "name": PEER_TLS_VOLUME,
+            "secret": { "secretName": secret_name, "defaultMode": 288 }
+        })),
+        (None, Some(provider_class)) => Some(json!({
+            "name": PEER_TLS_VOLUME,
+            "csi": {
+                "driver": peer_tls.csi_driver.as_deref().unwrap_or(PEER_TLS_DEFAULT_CSI_DRIVER),
+                "readOnly": true,
+                "volumeAttributes": { "secretProviderClass": provider_class },
+            }
+        })),
+        _ => None,
+    }
+}
 
 /// Container resources for tape's workload: requests for both CPU and memory,
 /// plus a memory limit matching the request (#3051).
@@ -102,7 +128,8 @@ pub(super) fn statefulset(
     if let Some(seed_uri) = &s.bootstrap_seed_uri {
         extra_env.push(json!({ "name": "TAPE_BOOTSTRAP_SEED_URI", "value": seed_uri }));
     }
-    if s.peer_tls.is_some() {
+    let peer_tls_pod_volume = s.peer_tls.as_ref().and_then(peer_tls_pod_volume);
+    if peer_tls_pod_volume.is_some() {
         extra_env.push(json!({ "name": "TAPE_PEER_MTLS", "value": "on" }));
         extra_env.push(json!({ "name": "TAPE_PEER_TLS_CERT", "value": format!("{PEER_TLS_MOUNT_DIR}/tls.crt") }));
         extra_env.push(json!({ "name": "TAPE_PEER_TLS_KEY", "value": format!("{PEER_TLS_MOUNT_DIR}/tls.key") }));
@@ -129,11 +156,8 @@ pub(super) fn statefulset(
         volumes.push(render::token_registry_volume(&projection));
         volume_mounts.push(render::token_registry_mount(&projection));
     }
-    if let Some(peer_tls) = &s.peer_tls {
-        volumes.push(json!({
-            "name": PEER_TLS_VOLUME,
-            "secret": { "secretName": peer_tls.secret_name, "defaultMode": 288 }
-        }));
+    if let Some(peer_volume) = peer_tls_pod_volume {
+        volumes.push(peer_volume);
         volume_mounts.push(json!({
             "name": PEER_TLS_VOLUME,
             "mountPath": PEER_TLS_MOUNT_DIR,
@@ -265,7 +289,9 @@ mod tests {
     #[test]
     fn peer_tls_renders_env_volume_and_read_only_mount() {
         let sts = statefulset_of(Some(TapePeerTls {
-            secret_name: "tape-peer".into(),
+            secret_name: Some("tape-peer".into()),
+            secret_provider_class: None,
+            csi_driver: None,
         }));
 
         assert_eq!(env_value(&sts, "TAPE_PEER_MTLS").as_deref(), Some("on"));

@@ -185,10 +185,11 @@ pub struct TapeSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backup: Option<TapeBackupSpec>,
 
-    /// Optional raft peer mTLS. When set, the Secret named by `secretName`
-    /// is mounted read-only and the serving process runs peer mTLS
-    /// (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt` and
-    /// `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
+    /// Optional raft peer mTLS. When set, the files come from the Secret
+    /// named by `secretName` or the SecretProviderClass named by
+    /// `secretProviderClass`, mounted read-only, and the serving process runs
+    /// peer mTLS (`TAPE_PEER_MTLS=on`). The Secret holds `ca.crt`, `tls.crt`
+    /// and `tls.key`, the keys that a cert-manager `Certificate` writes. Unset
     /// renders no peer TLS wiring.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peer_tls: Option<TapePeerTls>,
@@ -244,14 +245,29 @@ pub struct TapeBackupSpec {
     pub admin_token_secret: Option<String>,
 }
 
-/// Raft peer mTLS projection (#242): the Secret that holds the peer
-/// certificate, its key and the CA.
+/// Raft peer mTLS projection (#242, #243): the source of the peer certificate,
+/// its key and the CA. Name exactly one source: a Kubernetes Secret
+/// (`secretName`) or a Secrets Store CSI projection (`secretProviderClass`).
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TapePeerTls {
     /// Name of a Secret in the same namespace with `ca.crt`, `tls.crt` and
-    /// `tls.key`. Mounted read-only into the workload pods.
-    pub secret_name: String,
+    /// `tls.key`. Mounted read-only into the workload pods. Exactly one of
+    /// `secretName` and `secretProviderClass` is set (CRD rule).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_name: Option<String>,
+
+    /// Name of a SecretProviderClass in the same namespace that projects the
+    /// same three files (`ca.crt`, `tls.crt`, `tls.key`) by a Secrets Store CSI
+    /// volume. Exactly one of `secretName` and `secretProviderClass` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_provider_class: Option<String>,
+
+    /// CSI driver name for the `secretProviderClass` projection. Defaults to
+    /// the community `secrets-store.csi.k8s.io`; GKE's managed add-on
+    /// registers `secrets-store-gke.csi.k8s.io`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub csi_driver: Option<String>,
 }
 
 impl std::ops::Deref for TapeBackupSpec {

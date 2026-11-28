@@ -53,6 +53,9 @@ const TOKEN_REGISTRY_MOUNT_DIR: &str = "/var/run/secrets/tape";
 const TOKEN_REGISTRY_FILE: &str = "/var/run/secrets/tape/token-registry.json";
 const PEER_TLS_VOLUME: &str = "tape-peer-tls";
 const PEER_TLS_MOUNT_DIR: &str = "/var/run/secrets/tape-peer-tls";
+/// The community CSI driver for a `spec.peerTls.secretProviderClass` projection
+/// (#243). GKE overrides it with `spec.peerTls.csiDriver`.
+const PEER_TLS_DEFAULT_CSI_DRIVER: &str = "secrets-store.csi.k8s.io";
 
 /// Resolve the instance name (defaults to `tape` only when metadata is
 /// absent, which never happens for a real CR).

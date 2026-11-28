@@ -681,7 +681,9 @@ fn generated_crd_carries_the_backup_properties() {
 fn peer_tls_secret_renders_env_volume_and_mount() {
     let mut s = spec(3);
     s.peer_tls = Some(TapePeerTls {
-        secret_name: "tape-peer".into(),
+        secret_name: Some("tape-peer".into()),
+        secret_provider_class: None,
+        csi_driver: None,
     });
     let objs = render(&Tape::new("tape", s)).unwrap();
     let sts = of_kind(&objs, "StatefulSet");
@@ -749,5 +751,159 @@ fn no_peer_tls_renders_no_peer_env() {
     assert!(
         mounts.iter().all(|m| m["name"] != "tape-peer-tls"),
         "no peer TLS mount without spec.peerTls"
+    );
+}
+
+/// Issue #243 — `spec.peerTls.secretProviderClass` projects the same three
+/// files by a Secrets Store CSI volume instead of a Secret.
+#[test]
+fn peer_tls_provider_class_renders_csi_volume() {
+    let mut s = spec(3);
+    s.peer_tls = Some(TapePeerTls {
+        secret_name: None,
+        secret_provider_class: Some("tape-peer-spc".into()),
+        csi_driver: None,
+    });
+    let objs = render(&Tape::new("tape", s)).unwrap();
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    assert_eq!(
+        env.iter().find(|(n, _)| *n == "TAPE_PEER_MTLS").unwrap().1["value"],
+        "on"
+    );
+    for (name, file) in [
+        ("TAPE_PEER_TLS_CERT", "tls.crt"),
+        ("TAPE_PEER_TLS_KEY", "tls.key"),
+        ("TAPE_PEER_TLS_CA", "ca.crt"),
+    ] {
+        assert_eq!(
+            env.iter().find(|(n, _)| *n == name).unwrap().1["value"],
+            format!("/var/run/secrets/tape-peer-tls/{file}").as_str(),
+            "{name} must point at the mounted key"
+        );
+    }
+
+    let vols = sts["spec"]["template"]["spec"]["volumes"]
+        .as_array()
+        .unwrap();
+    let vol = vols
+        .iter()
+        .find(|v| v["name"] == "tape-peer-tls")
+        .expect("peer TLS volume");
+    assert!(
+        vol.get("secret").is_none(),
+        "a provider class renders a CSI volume, not a Secret volume"
+    );
+    assert_eq!(vol["csi"]["driver"], "secrets-store.csi.k8s.io");
+    assert_eq!(vol["csi"]["readOnly"], true);
+    assert_eq!(
+        vol["csi"]["volumeAttributes"]["secretProviderClass"],
+        "tape-peer-spc"
+    );
+
+    let mounts = sts["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+        .as_array()
+        .unwrap();
+    let mount = mounts
+        .iter()
+        .find(|m| m["name"] == "tape-peer-tls")
+        .expect("peer TLS mount on the container");
+    assert_eq!(mount["mountPath"], "/var/run/secrets/tape-peer-tls");
+    assert_eq!(mount["readOnly"], true);
+
+    // The CSI driver name is overridable, as for the token registry (GKE).
+    let mut gke = spec(3);
+    gke.peer_tls = Some(TapePeerTls {
+        secret_name: None,
+        secret_provider_class: Some("tape-peer-spc".into()),
+        csi_driver: Some("secrets-store-gke.csi.k8s.io".into()),
+    });
+    let objs = render(&Tape::new("tape", gke)).unwrap();
+    let sts = of_kind(&objs, "StatefulSet");
+    let vol = sts["spec"]["template"]["spec"]["volumes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "tape-peer-tls")
+        .expect("peer TLS volume");
+    assert_eq!(vol["csi"]["driver"], "secrets-store-gke.csi.k8s.io");
+}
+
+/// Issue #243 — a spec that names both peer TLS sources renders no peer
+/// wiring. The CRD rule rejects such a spec at apply; the render never guesses
+/// which source to serve.
+#[test]
+fn peer_tls_both_sources_render_nothing() {
+    let mut s = spec(3);
+    s.peer_tls = Some(TapePeerTls {
+        secret_name: Some("tape-peer".into()),
+        secret_provider_class: Some("tape-peer-spc".into()),
+        csi_driver: None,
+    });
+    let objs = render(&Tape::new("tape", s)).unwrap();
+    let sts = of_kind(&objs, "StatefulSet");
+    let env = env_of(sts);
+
+    assert!(
+        !env.iter()
+            .any(|(n, _)| n.starts_with("TAPE_PEER_TLS") || *n == "TAPE_PEER_MTLS"),
+        "no peer TLS env when both sources are named"
+    );
+    let vols = sts["spec"]["template"]["spec"]["volumes"]
+        .as_array()
+        .unwrap();
+    assert!(
+        vols.iter().all(|v| v["name"] != "tape-peer-tls"),
+        "no peer TLS volume when both sources are named"
+    );
+    let mounts = sts["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+        .as_array()
+        .unwrap();
+    assert!(
+        mounts.iter().all(|m| m["name"] != "tape-peer-tls"),
+        "no peer TLS mount when both sources are named"
+    );
+}
+
+/// Issue #243 — the CRD rejects a `peerTls` that names both sources, with the
+/// rule text and a message that names the remedy. Presence tests only, as for
+/// the token-source rule.
+#[test]
+fn crd_rejects_both_peer_tls_sources() {
+    let yaml = crd_yaml();
+    let doc: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("CRD parses as YAML");
+    let rules = doc["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
+        ["x-kubernetes-validations"]
+        .as_sequence()
+        .expect("spec carries validation rules");
+    let rule = rules
+        .iter()
+        .find(|r| {
+            r["rule"]
+                .as_str()
+                .is_some_and(|s| s.contains("has(self.peerTls.secretProviderClass)"))
+        })
+        .expect("a rule covering the two peer TLS sources");
+    assert_eq!(
+        rule["rule"],
+        "!(has(self.peerTls) && has(self.peerTls.secretName) && has(self.peerTls.secretProviderClass))"
+    );
+    assert!(
+        !rule["rule"].as_str().unwrap().contains("null"),
+        "CEL rules on nullable fields take presence tests only"
+    );
+    assert!(
+        rule["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("at most one")),
+        "the rejection must name the remedy, not just the violation"
+    );
+
+    // A `peerTls` with neither source is rejected too.
+    assert!(
+        rules.iter().any(|r| r["rule"]
+            == "!has(self.peerTls) || (has(self.peerTls.secretName) != has(self.peerTls.secretProviderClass))"),
+        "a `peerTls` must name exactly one peer TLS source"
     );
 }
