@@ -15,6 +15,8 @@ kind: Component
 # cluster. `k8s/operator` itself stays CRD-free and applies anywhere; the
 # Service it now ships (the scrape *target*) is plain core/v1 and is
 # unconditional, so enabling this component later needs no change there.
+# This component also grants the monitoring.coreos.com rule on the
+# tape-operator ClusterRole (clusterrole-patch.yaml); the base grants no such rule.
 #
 # Usage — from a kustomization that installs the operator:
 #
@@ -36,3 +38,11 @@ kind: Component
 resources:
   - servicemonitor.yaml
   - prometheusrule.yaml
+
+patches:
+  - path: clusterrole-patch.yaml
+    target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: tape-operator
